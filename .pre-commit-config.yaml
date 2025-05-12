@@ -1,0 +1,33 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+        - id: trailing-whitespace
+        - id: requirements-txt-fixer
+        - id: end-of-file-fixer
+        - id: name-tests-test
+        - id: check-added-large-files
+          exclude: "^.+h5$"
+        - id: check-yaml
+        - id: check-toml
+        - id: mixed-line-ending
+        - id: check-executables-have-shebangs
+        - id: check-shebang-scripts-are-executable
+
+  - repo: https://github.com/asottile/setup-cfg-fmt
+    rev: v2.8.0
+    hooks:
+        - id: setup-cfg-fmt
+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.19.1
+    hooks:
+        - id: pyupgrade
+          args: [--py312-plus]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.9
+    hooks:
+        - id: ruff
+          args: [--fix, --exit-non-zero-on-fix]
+          types_or: [python, pyi]
