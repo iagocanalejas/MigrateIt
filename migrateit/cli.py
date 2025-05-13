@@ -4,14 +4,14 @@ import os
 import psycopg2
 
 from migrateit.clients import PsqlClient, SqlClient
-from migrateit.files import create_migrations_dir, create_migrations_file, create_new_migration
-from migrateit.models import MigrateItConfig
+from migrateit.files import create_migrations_dir, create_migrations_file, create_new_migration, load_migrations_file
+from migrateit.models import MigrateItConfig, MigrationStatus
 
 DB_URL = PsqlClient.get_environment_url()
 ROOT_DIR = os.getenv("MIGRATIONS_DIR", "db")
 
 
-def cmd_init(client: SqlClient, *args):
+def cmd_init(client: SqlClient, *_):
     print("\tCreating migrations file")
     create_migrations_file(client.migrations_file)
     print("\tCreating migrations folder")
@@ -21,17 +21,36 @@ def cmd_init(client: SqlClient, *args):
 
 
 def cmd_new(client: SqlClient, args):
-    assert client.check_migrations_table_exist(), f"Migrations table={client.table_name} does not exist"
-
+    assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
     create_new_migration(client.config, args.name)
 
 
-def cmd_run(client: SqlClient):
-    assert client.check_migrations_table_exist(), f"Migrations table={client.table_name} does not exist"
+def cmd_run(client: SqlClient, *_):
+    assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
+    changelog = load_migrations_file(client.migrations_file)
+
+    # TODO: validate changelog file before applying migrations
+    # once a migration is not applied, all following migrations shouldn't be applied
+
+    for migration in changelog.migrations:
+        if not client.is_migration_applied(migration):
+            print(f"Applying migration: {migration.name}")
+            client.apply_migration(changelog, migration)
 
 
-def cmd_status(client: SqlClient):
-    assert client.check_migrations_table_exist(), f"Migrations table={client.table_name} does not exist"
+def cmd_status(client: SqlClient, *_):
+    # TODO: prettify output
+    changelog = load_migrations_file(client.migrations_file)
+    migrations = client.retrieve_migrations(changelog)
+    for migration, status in migrations:
+        if status == MigrationStatus.APPLIED:
+            print(f"Migration {migration.name} is applied")
+        elif status == MigrationStatus.NOT_APPLIED:
+            print(f"Migration {migration.name} is not applied")
+        elif status == MigrationStatus.REMOVED:
+            print(f"Migration {migration.name} is removed")
+        elif status == MigrationStatus.CONFLICT:
+            print(f"Migration {migration.name} has a conflict")
 
 
 def main():

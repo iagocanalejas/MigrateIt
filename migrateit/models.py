@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass, field
+from enum import Enum
 
 
 @dataclass
@@ -7,6 +8,13 @@ class MigrateItConfig:
     table_name: str
     migrations_dir: str
     migrations_file: str
+
+
+class MigrationStatus(Enum):
+    APPLIED = "applied"
+    CONFLICT = "conflict"
+    REMOVED = "removed"
+    NOT_APPLIED = "not_applied"
 
 
 @dataclass

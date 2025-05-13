@@ -21,7 +21,7 @@ def create_migrations_file(file_path: str):
 
 def load_migrations_file(file_path: str) -> MigrationsFile:
     assert os.path.exists(file_path), f"File {file_path} does not exist"
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         content = f.read()
         return MigrationsFile.from_json(content)
 

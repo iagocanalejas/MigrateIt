@@ -8,7 +8,7 @@ from migrateit.clients import PsqlClient
 from migrateit.models import MigrateItConfig
 
 
-class TestPsqlClient(unittest.TestCase):
+class TestPsqlClientInit(unittest.TestCase):
     TEST_TABLE = "migrations"
     TEST_MIGRATIONS_DIR = "migrations"
     TEST_MIGRATIONS_FILE = "changelog.json"
@@ -37,11 +37,11 @@ class TestPsqlClient(unittest.TestCase):
         self.connection.commit()
 
     def test_check_migrations_table_exist_false(self):
-        self.assertFalse(self.client.check_migrations_table_exist())
+        self.assertFalse(self.client.is_migrations_table_created())
 
     def test_create_and_check_table(self):
         self.client.create_migrations_table()
-        self.assertTrue(self.client.check_migrations_table_exist())
+        self.assertTrue(self.client.is_migrations_table_created())
 
     def test_create_table_twice_fails(self):
         self.client.create_migrations_table()

@@ -24,11 +24,22 @@ omit = [
 
 [tool.coverage.report]
 exclude_also = [
-    "def __repr__",
+	"pragma: no cover*",
+	"import .*",
+	"def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
     "raise AssertionError",
     "raise NotImplementedError",
+	"raise",
+    "if 0:",
+    "if False:",
     "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
 	"logger.*",
+	"-> ['\"]?NoReturn['\"]?:",
+	"self.fail*",
+	"def __str__",
     ]

@@ -37,9 +37,17 @@ jobs:
       - name: Install requirements
         run: |
           python -m pip install --upgrade pip
-          pip install pytest
+          pip install pytest coverage
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Test with pytest
+      - name: Pytest + code coverage
         run: |
-          export $(cat .env | xargs) && python -m pytest
+            export $(cat .env | xargs) &&
+            coverage run -m pytest &&
+            coverage report -m
+
+      - name: Test coverage
+        run: |
+            export $(cat .env | xargs) &&
+            coverage run --source=tests -m pytest &&
+            coverage report -m --fail-under=100
