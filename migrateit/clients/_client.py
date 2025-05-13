@@ -1,19 +1,12 @@
 from abc import ABC
-from dataclasses import dataclass
 
 from migrateit.clients._protocol import SqlClientProtocol
-
-
-@dataclass
-class SqlClientConfig:
-    table_name: str
-    migrations_dir: str
-    migrations_file: str
+from migrateit.models import MigrateItConfig
 
 
 class SqlClient[T](ABC, SqlClientProtocol):
     connection: T
-    config: SqlClientConfig
+    config: MigrateItConfig
 
     @property
     def table_name(self) -> str:
@@ -27,7 +20,7 @@ class SqlClient[T](ABC, SqlClientProtocol):
     def migrations_file(self) -> str:
         return self.config.migrations_file
 
-    def __init__(self, connection: T, config: SqlClientConfig):
+    def __init__(self, connection: T, config: MigrateItConfig):
         assert connection is not None, "Database connection is required"
 
         self.validate_config(config)
@@ -36,7 +29,7 @@ class SqlClient[T](ABC, SqlClientProtocol):
         self.config = config
 
     @staticmethod
-    def validate_config(config: SqlClientConfig) -> None:
+    def validate_config(config: MigrateItConfig) -> None:
         assert config.table_name, "Table name is required"
         assert isinstance(config.table_name, str), "Table name must be a string"
         assert len(config.table_name) > 0, "Table name cannot be empty"

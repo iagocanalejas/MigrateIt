@@ -3,29 +3,15 @@ import os
 
 import psycopg2
 
-from migrateit.clients import PsqlClient, SqlClient, SqlClientConfig
-from migrateit.files import create_migrations_dir, create_migrations_file
+from migrateit.clients import PsqlClient, SqlClient
+from migrateit.files import create_migrations_dir, create_migrations_file, create_new_migration
+from migrateit.models import MigrateItConfig
 
-
-def _get_db_url():
-    db_url = os.getenv("DB_URL")
-    if not db_url:
-        host = os.getenv("DB_HOST", "localhost")
-        port = os.getenv("DB_PORT", "5432")
-        user = os.getenv("DB_USER", "postgres")
-        password = os.getenv("DB_PASS", "")
-        db_name = os.getenv("DB_NAME", "migrateit")
-        db_url = f"postgresql://{user}{f':{password}' if password else ''}@{host}:{port}/{db_name}"
-    if not db_url:
-        raise ValueError("DB_URL environment variable is not set")
-    return db_url
-
-
-DB_URL = _get_db_url()
+DB_URL = PsqlClient.get_environment_url()
 ROOT_DIR = os.getenv("MIGRATIONS_DIR", "db")
 
 
-def cmd_init(client: SqlClient):
+def cmd_init(client: SqlClient, *args):
     print("\tCreating migrations file")
     create_migrations_file(client.migrations_file)
     print("\tCreating migrations folder")
@@ -34,8 +20,10 @@ def cmd_init(client: SqlClient):
     client.create_migrations_table()
 
 
-def cmd_new(client: SqlClient):
+def cmd_new(client: SqlClient, args):
     assert client.check_migrations_table_exist(), f"Migrations table={client.table_name} does not exist"
+
+    create_new_migration(client.config, args.name)
 
 
 def cmd_run(client: SqlClient):
@@ -67,6 +55,7 @@ def main():
 
     # migrateit init
     parser_init = subparsers.add_parser("newmigration", help="Create a new migration")
+    parser_init.add_argument("name", help="Name of the new migration")
     parser_init.set_defaults(func=cmd_new)
 
     # migrateit run
@@ -80,12 +69,12 @@ def main():
     args = parser.parse_args()
     if hasattr(args, "func"):
         with psycopg2.connect(DB_URL) as conn:
-            config = SqlClientConfig(
+            config = MigrateItConfig(
                 table_name=os.getenv("MIGRATIONS_TABLE", "MI_CHANGELOG"),
                 migrations_dir=os.path.join(ROOT_DIR, "migrations"),
                 migrations_file=os.path.join(ROOT_DIR, "changelog.json"),
             )
             client = PsqlClient(conn, config)
-            args.func(client)
+            args.func(client, args)
     else:
         parser.print_help()

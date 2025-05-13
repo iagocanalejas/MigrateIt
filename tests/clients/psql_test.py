@@ -1,8 +1,11 @@
+import sys
 import unittest
+from io import StringIO
 
 import psycopg2
 
-from migrateit.clients import PsqlClient, SqlClientConfig
+from migrateit.clients import PsqlClient
+from migrateit.models import MigrateItConfig
 
 
 class TestPsqlClient(unittest.TestCase):
@@ -11,8 +14,11 @@ class TestPsqlClient(unittest.TestCase):
     TEST_MIGRATIONS_FILE = "changelog.json"
 
     def setUp(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = StringIO()
+
         self.connection = psycopg2.connect(PsqlClient.get_environment_url())
-        self.config = SqlClientConfig(
+        self.config = MigrateItConfig(
             table_name=self.TEST_TABLE,
             migrations_dir=self.TEST_MIGRATIONS_DIR,
             migrations_file=self.TEST_MIGRATIONS_FILE,
@@ -21,6 +27,7 @@ class TestPsqlClient(unittest.TestCase):
         self._drop_test_table()  # ensure clean state
 
     def tearDown(self):
+        sys.stdout = self._original_stdout
         self._drop_test_table()
         self.connection.close()
 
