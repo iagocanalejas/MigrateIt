@@ -1,46 +1,20 @@
-import sys
-import unittest
-from io import StringIO
 from unittest.mock import patch
 
-import psycopg2
+from tests.clients.psql._base_test import BasePsqlTest
 
 from migrateit.clients import PsqlClient
-from migrateit.models import MigrateItConfig, Migration, MigrationsFile, MigrationStatus
+from migrateit.models import Migration, MigrationsFile, MigrationStatus
 
 
-class TestPsqlClientShowMigrations(unittest.TestCase):
-    TEST_TABLE = "migrations"
-    TEST_MIGRATIONS_DIR = "migrations"
-    TEST_MIGRATIONS_FILE = "changelog.json"
-
+class TestPsqlClientShowMigrations(BasePsqlTest):
     def setUp(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = StringIO()
-
-        self.connection = psycopg2.connect(PsqlClient.get_environment_url())
-        self.config = MigrateItConfig(
-            table_name=self.TEST_TABLE,
-            migrations_dir=self.TEST_MIGRATIONS_DIR,
-            migrations_file=self.TEST_MIGRATIONS_FILE,
-        )
-        self.client = PsqlClient(connection=self.connection, config=self.config)
+        super().setUp()
         self.client.create_migrations_table()
-
-    def tearDown(self):
-        sys.stdout = self._original_stdout
-        self._drop_test_table()
-        self.connection.close()
-
-    def _drop_test_table(self):
-        with self.connection.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_TABLE}")
-        self.connection.commit()
 
     def _insert_migration_row(self, name, hash_value):
         with self.connection.cursor() as cursor:
             cursor.execute(
-                f"INSERT INTO {self.TEST_TABLE} (migration_name, change_hash) VALUES (%s, %s)",
+                f"INSERT INTO {self.TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES (%s, %s)",
                 (name, hash_value),
             )
         self.connection.commit()

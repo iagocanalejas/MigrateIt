@@ -1,53 +1,25 @@
 import os
-import shutil
-import sys
-import tempfile
-import unittest
-from io import StringIO
 
-import psycopg2
+from tests.clients.psql._base_test import BasePsqlTest
 
-from migrateit.clients import PsqlClient
-from migrateit.files import create_migrations_file
-from migrateit.models import MigrateItConfig, Migration, MigrationsFile
+from migrateit.models import Migration, MigrationsFile
 
 
-class TestPsqlClientApplyMigrations(unittest.TestCase):
-    TEST_MIGRATIONS_TABLE = "migrations"
+class TestPsqlClientApplyMigrations(BasePsqlTest):
     TEST_TABLE = "test_entity"
 
     def setUp(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = StringIO()
-
-        self.temp_dir = tempfile.mkdtemp()
-        self.migrations_dir = os.path.join(self.temp_dir, "migrations")
-        self.migrations_file = os.path.join(self.temp_dir, "changelog.json")
+        super().setUp()
 
         os.makedirs(self.migrations_dir)
-        create_migrations_file(self.migrations_file)
-
-        self.connection = psycopg2.connect(PsqlClient.get_environment_url())
-        self.config = MigrateItConfig(
-            table_name=self.TEST_MIGRATIONS_TABLE,
-            migrations_dir=self.migrations_dir,
-            migrations_file=self.migrations_file,
-        )
-        self.client = PsqlClient(connection=self.connection, config=self.config)
-
+        MigrationsFile.create_file(self.migrations_file)
         self.client.create_migrations_table()
 
     def tearDown(self):
-        sys.stdout = self._original_stdout
-        self._drop_test_table()
-        self.connection.close()
-        shutil.rmtree(self.temp_dir)
-
-    def _drop_test_table(self):
         with self.connection.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}")
             cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_TABLE}")
         self.connection.commit()
+        super().tearDown()
 
     def _create_empty_changelog(self) -> MigrationsFile:
         return MigrationsFile(version=1, migrations=[])
@@ -96,8 +68,6 @@ class TestPsqlClientApplyMigrations(unittest.TestCase):
         changelog.migrations.append(migration)
 
         self.client.apply_migration(changelog, migration)
-
-        # Second time should raise assertion
         with self.assertRaises(AssertionError):
             self.client.apply_migration(changelog, migration)
 

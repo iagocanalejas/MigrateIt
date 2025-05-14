@@ -1,4 +1,5 @@
 from abc import ABC
+from pathlib import Path
 
 from migrateit.clients._protocol import SqlClientProtocol
 from migrateit.models import MigrateItConfig
@@ -13,11 +14,11 @@ class SqlClient[T](ABC, SqlClientProtocol):
         return self.config.table_name
 
     @property
-    def migrations_dir(self) -> str:
+    def migrations_dir(self) -> Path:
         return self.config.migrations_dir
 
     @property
-    def migrations_file(self) -> str:
+    def migrations_file(self) -> Path:
         return self.config.migrations_file
 
     def __init__(self, connection: T, config: MigrateItConfig):

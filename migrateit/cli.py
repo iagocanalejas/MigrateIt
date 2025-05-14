@@ -1,56 +1,76 @@
 import argparse
 import os
+from pathlib import Path
 
 import psycopg2
 
 from migrateit.clients import PsqlClient, SqlClient
-from migrateit.files import create_migrations_dir, create_migrations_file, create_new_migration, load_migrations_file
-from migrateit.models import MigrateItConfig, MigrationStatus
+from migrateit.models import MigrateItConfig, Migration, MigrationsFile, MigrationStatus
 
 DB_URL = PsqlClient.get_environment_url()
-ROOT_DIR = os.getenv("MIGRATIONS_DIR", "db")
+ROOT_DIR = os.getenv("MIGRATIONS_DIR", "migrateit")
 
 
-def cmd_init(client: SqlClient, *_):
+def cmd_init(client: "SqlClient", *_):
     print("\tCreating migrations file")
-    create_migrations_file(client.migrations_file)
+    MigrationsFile.create_file(client.migrations_file)
     print("\tCreating migrations folder")
-    create_migrations_dir(client.migrations_dir)
+    Migration.create_directory(client.migrations_dir)
     print("\tInitializing migration database")
     client.create_migrations_table()
 
 
 def cmd_new(client: SqlClient, args):
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    create_new_migration(client.config, args.name)
+    Migration.create_new(client.migrations_dir, client.migrations_file, args.name)
 
 
 def cmd_run(client: SqlClient, *_):
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    changelog = load_migrations_file(client.migrations_file)
-
-    # TODO: validate changelog file before applying migrations
-    # once a migration is not applied, all following migrations shouldn't be applied
+    changelog = MigrationsFile.load_file(client.migrations_file)
 
     for migration in changelog.migrations:
         if not client.is_migration_applied(migration):
             print(f"Applying migration: {migration.name}")
             client.apply_migration(changelog, migration)
+    client.connection.commit()
 
 
 def cmd_status(client: SqlClient, *_):
-    # TODO: prettify output
-    changelog = load_migrations_file(client.migrations_file)
+    changelog = MigrationsFile.load_file(client.migrations_file)
     migrations = client.retrieve_migrations(changelog)
+
+    print("\nMigration Status:\n")
+    print(f"{'Migration File':<40} | {'Status'}")
+    print("-" * 60)
+
+    status_count = {
+        MigrationStatus.APPLIED: 0,
+        MigrationStatus.NOT_APPLIED: 0,
+        MigrationStatus.REMOVED: 0,
+        MigrationStatus.CONFLICT: 0,
+    }
+
     for migration, status in migrations:
-        if status == MigrationStatus.APPLIED:
-            print(f"Migration {migration.name} is applied")
-        elif status == MigrationStatus.NOT_APPLIED:
-            print(f"Migration {migration.name} is not applied")
-        elif status == MigrationStatus.REMOVED:
-            print(f"Migration {migration.name} is removed")
-        elif status == MigrationStatus.CONFLICT:
-            print(f"Migration {migration.name} has a conflict")
+        status_count[status] += 1
+
+        status_str = {
+            MigrationStatus.APPLIED: "Applied",
+            MigrationStatus.NOT_APPLIED: "Not Applied",
+            MigrationStatus.REMOVED: "Removed",
+            MigrationStatus.CONFLICT: "Conflict",
+        }[status]
+
+        print(f"{migration.name:<40} | {status_str}")
+
+    print("\nSummary:")
+    for key, label in {
+        MigrationStatus.APPLIED: "Applied",
+        MigrationStatus.NOT_APPLIED: "Not Applied",
+        MigrationStatus.REMOVED: "Removed",
+        MigrationStatus.CONFLICT: "Conflict",
+    }.items():
+        print(f"  {label:<12}: {status_count[key]}")
 
 
 def main():
@@ -88,10 +108,11 @@ def main():
     args = parser.parse_args()
     if hasattr(args, "func"):
         with psycopg2.connect(DB_URL) as conn:
+            root = Path(ROOT_DIR)
             config = MigrateItConfig(
-                table_name=os.getenv("MIGRATIONS_TABLE", "MI_CHANGELOG"),
-                migrations_dir=os.path.join(ROOT_DIR, "migrations"),
-                migrations_file=os.path.join(ROOT_DIR, "changelog.json"),
+                table_name=os.getenv("MIGRATIONS_TABLE", "MIGRATEIT_CHANGELOG"),
+                migrations_dir=root / "migrations",
+                migrations_file=root / "changelog.json",
             )
             client = PsqlClient(conn, config)
             args.func(client, args)

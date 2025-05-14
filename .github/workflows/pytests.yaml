@@ -1,4 +1,4 @@
-name: migrateit code quality
+name: Code Quality and Testing
 on: [push]
 jobs:
   test:
