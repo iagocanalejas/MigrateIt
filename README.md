@@ -1,10 +1,21 @@
+```
+##########################################
+ __  __ _                 _       ___ _
+|  \/  (_) __ _ _ __ __ _| |_ ___|_ _| |_
+| |\/| | |/ _` | '__/ _` | __/ _ \| || __|
+| |  | | | (_| | | | (_| | ||  __/| || |_
+|_|  |_|_|\__, |_|  \__,_|\__\___|___|\__|
+          |___/
+##########################################
+```
+
 Handle database migrations with ease managing your database changes with simple SQL files.
 Make the migration process easier, more manageable and repeteable.
-
 
 # How does this work
 
 ### Installation
+
 ```sh
 pip install migrateit
 ```
@@ -18,6 +29,8 @@ MIGRATIONS_TABLE=MIGRATEIT_CHANGELOG
 MIGRATIONS_DIR=migrateit
 
 # database configuration
+DB_URL=postgresql://postgres:postgres@localhost:5432/postgres
+# -------- or ----------
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=postgres
@@ -29,9 +42,9 @@ DB_PASS=postgres
 
 ```sh
 # initialize MigrateIt to create:
-# - migrations table
-# - migrations directory
-# - migrations changelog
+# - database table in the configured database
+# - 'migrations' directory inside the MIGRATIONS_DIR
+# - 'changelog.json' file inside the MIGRATIONS_DIR
 migrateit init
 
 # create a new migration file
