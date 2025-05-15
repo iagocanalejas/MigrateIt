@@ -37,6 +37,14 @@ def cmd_run(client: SqlClient, *_):
 
 
 def cmd_status(client: SqlClient, *_):
+    COLORS = {
+        "reset": "\033[0m",
+        "green": "\033[92m",
+        "yellow": "\033[93m",
+        "red": "\033[91m",
+        "blue": "\033[94m",
+    }
+
     changelog = MigrationsFile.load_file(client.migrations_file)
     migrations = client.retrieve_migrations(changelog)
 
@@ -55,10 +63,10 @@ def cmd_status(client: SqlClient, *_):
         status_count[status] += 1
 
         status_str = {
-            MigrationStatus.APPLIED: "Applied",
-            MigrationStatus.NOT_APPLIED: "Not Applied",
-            MigrationStatus.REMOVED: "Removed",
-            MigrationStatus.CONFLICT: "Conflict",
+            MigrationStatus.APPLIED: f"{COLORS['green']}Applied{COLORS['reset']}",
+            MigrationStatus.NOT_APPLIED: f"{COLORS['yellow']}Not Applied{COLORS['reset']}",
+            MigrationStatus.REMOVED: f"{COLORS['blue']}Removed{COLORS['reset']}",
+            MigrationStatus.CONFLICT: f"{COLORS['red']}Conflict{COLORS['reset']}",
         }[status]
 
         print(f"{migration.name:<40} | {status_str}")
@@ -70,7 +78,13 @@ def cmd_status(client: SqlClient, *_):
         MigrationStatus.REMOVED: "Removed",
         MigrationStatus.CONFLICT: "Conflict",
     }.items():
-        print(f"  {label:<12}: {status_count[key]}")
+        color = {
+            MigrationStatus.APPLIED: COLORS["green"],
+            MigrationStatus.NOT_APPLIED: COLORS["yellow"],
+            MigrationStatus.REMOVED: COLORS["blue"],
+            MigrationStatus.CONFLICT: COLORS["red"],
+        }[key]
+        print(f"  {label:<12}: {color}{status_count[key]}{COLORS['reset']}")
 
 
 def main():

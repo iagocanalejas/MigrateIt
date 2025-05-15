@@ -95,7 +95,6 @@ class PsqlClient(SqlClient[Connection]):
 
     @override
     def apply_migration(self, changelog: MigrationsFile, migration: Migration) -> None:
-        # TODO: add migration to migrations table without running the SQL
         path = self.migrations_dir / migration.name
         assert path.exists(), f"Migration file {path.name} does not exist"
         assert path.is_file(), f"Migration file {path.name} is not a file"
