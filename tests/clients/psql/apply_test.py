@@ -2,7 +2,7 @@ import os
 
 from tests.clients.psql._base_test import BasePsqlTest
 
-from migrateit.models import Migration, MigrationsFile
+from migrateit.models import ChangelogFile, Migration
 
 
 class TestPsqlClientApplyMigrations(BasePsqlTest):
@@ -12,7 +12,6 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         super().setUp()
 
         os.makedirs(self.migrations_dir)
-        MigrationsFile.create_file(self.migrations_file)
         self.client.create_migrations_table()
 
     def tearDown(self):
@@ -21,8 +20,8 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         self.connection.commit()
         super().tearDown()
 
-    def _create_empty_changelog(self) -> MigrationsFile:
-        return MigrationsFile(version=1, migrations=[])
+    def _create_empty_changelog(self) -> ChangelogFile:
+        return ChangelogFile(version=1, migrations=[])
 
     def _create_migrations_dir_and_file(self, filename: str, sql: str | None = None):
         path = os.path.join(self.migrations_dir, filename)
@@ -44,8 +43,9 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         changelog = self._create_empty_changelog()
         migration = Migration(name=filename)
         changelog.migrations.append(migration)
+        self.client.config.changelog = changelog
 
-        self.client.apply_migration(changelog, migration)
+        self.client.apply_migration(migration)
 
         # Check it was inserted into the table
         with self.connection.cursor() as cursor:
@@ -54,11 +54,11 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
             self.assertEqual(result[0] if result else None, 1)
 
     def test_apply_migration_file_missing(self):
-        changelog = self._create_empty_changelog()
+        self.client.config.changelog = self._create_empty_changelog()
         migration = Migration(name="not_found.sql")
 
         with self.assertRaises(AssertionError):
-            self.client.apply_migration(changelog, migration)
+            self.client.apply_migration(migration)
 
     def test_apply_migration_already_applied(self):
         filename = "0001_applied.sql"
@@ -67,9 +67,10 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         migration = Migration(name=filename)
         changelog.migrations.append(migration)
 
-        self.client.apply_migration(changelog, migration)
+        self.client.config.changelog = changelog
+        self.client.apply_migration(migration)
         with self.assertRaises(AssertionError):
-            self.client.apply_migration(changelog, migration)
+            self.client.apply_migration(migration)
 
     def test_apply_migration_wrong_extension(self):
         filename = "0002_wrong_ext.txt"
@@ -77,5 +78,6 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         changelog = self._create_empty_changelog()
         migration = Migration(name=filename)
 
+        self.client.config.changelog = changelog
         with self.assertRaises(AssertionError):
-            self.client.apply_migration(changelog, migration)
+            self.client.apply_migration(migration)

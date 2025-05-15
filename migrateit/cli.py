@@ -5,86 +5,89 @@ from pathlib import Path
 import psycopg2
 
 from migrateit.clients import PsqlClient, SqlClient
-from migrateit.models import MigrateItConfig, Migration, MigrationsFile, MigrationStatus
+from migrateit.models import (
+    ChangelogFile,
+    MigrateItConfig,
+    Migration,
+    MigrationStatus,
+    SupportedDatabase,
+)
+from migrateit.utils import STATUS_COLORS, print_dag
 
-DB_URL = PsqlClient.get_environment_url()
 ROOT_DIR = os.getenv("MIGRATIONS_DIR", "migrateit")
 
 
-def cmd_init(client: "SqlClient", *_):
+def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, database: SupportedDatabase) -> None:
     print("\tCreating migrations file")
-    MigrationsFile.create_file(client.migrations_file)
+    changelog = ChangelogFile.create_file(migrations_file, database)
     print("\tCreating migrations folder")
-    Migration.create_directory(client.migrations_dir)
+    Migration.create_directory(migrations_dir)
     print("\tInitializing migration database")
-    client.create_migrations_table()
+    db_url = PsqlClient.get_environment_url()
+    with psycopg2.connect(db_url) as conn:
+        config = MigrateItConfig(
+            table_name=table_name,
+            migrations_dir=migrations_dir,
+            changelog=changelog,
+        )
+        PsqlClient(conn, config).create_migrations_table()
 
 
-def cmd_new(client: SqlClient, args):
+def cmd_new(client: SqlClient, args) -> None:
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    Migration.create_new(client.migrations_dir, client.migrations_file, args.name)
+    Migration.create_new(changelog=client.changelog, migrations_dir=client.migrations_dir, name=args.name)
 
 
-def cmd_run(client: SqlClient, *_):
+def cmd_run(client: SqlClient, *_) -> None:
+    # TODO: allow to run a specific migration
+    # TODO: allow to add migration to migrations table without running the SQL
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    changelog = MigrationsFile.load_file(client.migrations_file)
 
-    for migration in changelog.migrations:
-        if not client.is_migration_applied(migration):
-            print(f"Applying migration: {migration.name}")
-            client.apply_migration(changelog, migration)
+    # validate the changelog before applying
+    _ = client.retrieve_migrations()
+
+    root, tree = client.changelog.graph
+    pending_migrations = [root]
+    while True:
+        if len(pending_migrations) == 0:
+            break
+
+        next_migration = pending_migrations.pop(0)
+        next_migration = next((m for m in client.changelog.migrations if m.name == next_migration), None)
+        assert next_migration, f"Migration {next_migration} not found in changelog"
+
+        if not client.is_migration_applied(next_migration):
+            print(f"Applying migration: {next_migration.name}")
+            client.apply_migration(next_migration)
+
+        pending_migrations.extend(tree.get(next_migration.name, []))
+
     client.connection.commit()
 
 
-def cmd_status(client: SqlClient, *_):
-    COLORS = {
-        "reset": "\033[0m",
-        "green": "\033[92m",
-        "yellow": "\033[93m",
-        "red": "\033[91m",
-        "blue": "\033[94m",
-    }
+def cmd_status(client: SqlClient, *_) -> None:
+    migrations = client.retrieve_migrations()
+    status_count = {status: 0 for status in MigrationStatus}
 
-    changelog = MigrationsFile.load_file(client.migrations_file)
-    migrations = client.retrieve_migrations(changelog)
-
-    print("\nMigration Status:\n")
-    print(f"{'Migration File':<40} | {'Status'}")
-    print("-" * 60)
-
-    status_count = {
-        MigrationStatus.APPLIED: 0,
-        MigrationStatus.NOT_APPLIED: 0,
-        MigrationStatus.REMOVED: 0,
-        MigrationStatus.CONFLICT: 0,
-    }
-
-    for migration, status in migrations:
+    for _, status in migrations.values():
         status_count[status] += 1
 
-        status_str = {
-            MigrationStatus.APPLIED: f"{COLORS['green']}Applied{COLORS['reset']}",
-            MigrationStatus.NOT_APPLIED: f"{COLORS['yellow']}Not Applied{COLORS['reset']}",
-            MigrationStatus.REMOVED: f"{COLORS['blue']}Removed{COLORS['reset']}",
-            MigrationStatus.CONFLICT: f"{COLORS['red']}Conflict{COLORS['reset']}",
-        }[status]
+    root, children = client.changelog.graph
+    status_map = {m.name: status for m, status in migrations.values()}
 
-        print(f"{migration.name:<40} | {status_str}")
+    print("\nMigration Precedence DAG:\n")
+    print(f"{'Migration File':<40} | {'Status'}")
+    print("-" * 60)
+    print_dag(root, children, status_map)
 
     print("\nSummary:")
-    for key, label in {
+    for status, label in {
         MigrationStatus.APPLIED: "Applied",
         MigrationStatus.NOT_APPLIED: "Not Applied",
         MigrationStatus.REMOVED: "Removed",
         MigrationStatus.CONFLICT: "Conflict",
     }.items():
-        color = {
-            MigrationStatus.APPLIED: COLORS["green"],
-            MigrationStatus.NOT_APPLIED: COLORS["yellow"],
-            MigrationStatus.REMOVED: COLORS["blue"],
-            MigrationStatus.CONFLICT: COLORS["red"],
-        }[key]
-        print(f"  {label:<12}: {color}{status_count[key]}{COLORS['reset']}")
+        print(f"  {label:<12}: {STATUS_COLORS[status]}{status_count[status]}{STATUS_COLORS['reset']}")
 
 
 def main():
@@ -104,6 +107,11 @@ def main():
 
     # migrateit init
     parser_init = subparsers.add_parser("init", help="Initialize the migration directory and database")
+    parser_init.add_argument(
+        "database",
+        choices=[db.value for db in SupportedDatabase],
+        help=f"Database to be used for migrations (choices: {', '.join(db.value for db in SupportedDatabase)})",
+    )
     parser_init.set_defaults(func=cmd_init)
 
     # migrateit init
@@ -121,12 +129,23 @@ def main():
 
     args = parser.parse_args()
     if hasattr(args, "func"):
-        with psycopg2.connect(DB_URL) as conn:
+        if args.command == "init":
+            cmd_init(
+                table_name=os.getenv("MIGRATIONS_TABLE", "MIGRATEIT_CHANGELOG"),
+                migrations_dir=Path(ROOT_DIR) / "migrations",
+                migrations_file=Path(ROOT_DIR) / "changelog.json",
+                database=SupportedDatabase(args.database),
+            )
+            return
+
+        # TODO: add support for other databases
+        db_url = PsqlClient.get_environment_url()
+        with psycopg2.connect(db_url) as conn:
             root = Path(ROOT_DIR)
             config = MigrateItConfig(
                 table_name=os.getenv("MIGRATIONS_TABLE", "MIGRATEIT_CHANGELOG"),
                 migrations_dir=root / "migrations",
-                migrations_file=root / "changelog.json",
+                changelog=ChangelogFile.load_file(root / "changelog.json"),
             )
             client = PsqlClient(conn, config)
             args.func(client, args)

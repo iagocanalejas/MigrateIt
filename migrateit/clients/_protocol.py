@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from migrateit.models import Migration, MigrationsFile, MigrationStatus
+from migrateit.models import Migration, MigrationStatus
 
 
 class SqlClientProtocol(Protocol):
@@ -29,7 +29,7 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def retrieve_migrations(self, changelog: MigrationsFile) -> list[tuple[Migration, MigrationStatus]]:
+    def retrieve_migrations(self) -> dict[str, tuple[Migration, MigrationStatus]]:
         """
         Validate the changelog file.
 
@@ -37,7 +37,7 @@ class SqlClientProtocol(Protocol):
             changelog: The changelog object to validate.
 
         Returns:
-            A list of tuples containing the migration object and a boolean indicating if it has been applied.
+            A dictionary mapping migration names to tuples of Migration and MigrationStatus.
         """
         ...
 
@@ -53,7 +53,7 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def apply_migration(self, changelog: MigrationsFile, migration: Migration) -> None:
+    def apply_migration(self, migration: Migration) -> None:
         """
         Apply a migration to the database.
 
