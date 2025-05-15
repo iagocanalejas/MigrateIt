@@ -38,30 +38,25 @@ def cmd_new(client: SqlClient, args) -> None:
     Migration.create_new(changelog=client.changelog, migrations_dir=client.migrations_dir, name=args.name)
 
 
-def cmd_run(client: SqlClient, *_) -> None:
-    # TODO: allow to run a specific migration
+def cmd_run(client: SqlClient, args) -> None:
     # TODO: allow to add migration to migrations table without running the SQL
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
 
-    # validate the changelog before applying
+    # validate the changelog before doing anything
     _ = client.retrieve_migrations()
 
-    root, tree = client.changelog.graph
-    pending_migrations = [root]
-    while True:
-        if len(pending_migrations) == 0:
-            break
+    target_migration = client.changelog.get_migration_by_name(args.name) if args.name else None
+    migration_plan = client.changelog.build_migration_plan(target_migration)
 
-        next_migration = pending_migrations.pop(0)
-        next_migration = next((m for m in client.changelog.migrations if m.name == next_migration), None)
-        assert next_migration, f"Migration {next_migration} not found in changelog"
+    if not migration_plan:
+        print("No migrations to apply.")
+        return
+    assert migration_plan[0].initial, "Initial migration not found in migration plan"
 
-        if not client.is_migration_applied(next_migration):
-            print(f"Applying migration: {next_migration.name}")
-            client.apply_migration(next_migration)
-
-        pending_migrations.extend(tree.get(next_migration.name, []))
-
+    for migration in migration_plan:
+        if not client.is_migration_applied(migration):
+            print(f"Applying migration: {migration.name}")
+            client.apply_migration(migration)
     client.connection.commit()
 
 
@@ -121,6 +116,7 @@ def main():
 
     # migrateit run
     parser_run = subparsers.add_parser("migrate", help="Run migrations")
+    parser_run.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
     parser_run.set_defaults(func=cmd_run)
 
     # migrateit status

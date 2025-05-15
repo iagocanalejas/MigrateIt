@@ -1,6 +1,7 @@
 import json
+import os
 import re
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -180,3 +181,61 @@ class ChangelogFile:
         assert self.path.exists(), f"File {self.path.name} does not exist"
         self.path.write_text(self.to_json())
         print("\tMigrations file updated:", self.path)
+
+    def get_migration_by_name(self, name: str) -> Migration | None:
+        if os.path.isabs(name):
+            name = os.path.basename(name)
+        name = name.split("_")[0]  # get the migration number
+        for migration in self.migrations:
+            if migration.name.startswith(name):
+                return migration
+
+    def build_migration_plan(self, migration: Migration | None = None) -> list[Migration]:
+        if migration:
+            return self._build_bottom_up_migration_plan(migration)
+        return self._build_top_down_migration_plan()
+
+    def _build_bottom_up_migration_plan(self, migration: Migration) -> list[Migration]:
+        plan: list[Migration] = []
+        visited: set[str] = set()
+        queue: deque[Migration] = deque([migration])
+
+        while queue:
+            current = queue.popleft()
+            if current.name in visited:
+                continue
+            visited.add(current.name)
+            plan.append(current)
+
+            for parent_name in current.parents:
+                parent = self.get_migration_by_name(parent_name)
+                if parent and parent.name not in visited:
+                    queue.append(parent)
+
+        return list(reversed(plan))
+
+    def _build_top_down_migration_plan(self) -> list[Migration]:
+        root, tree = self.graph
+        root = self.get_migration_by_name(root)
+        assert root, f"Migration {root} not found in changelog"
+
+        plan: list[Migration] = []
+        visited: set[str] = set()
+        queue: deque[Migration] = deque([root])
+
+        while queue:
+            current = queue.popleft()
+            if current.name in visited:
+                continue
+
+            if not all(p in visited for p in current.parents):
+                queue.append(current)  # requeue
+                continue
+
+            visited.add(current.name)
+            plan.append(current)
+            for child_name in tree.get(current.name, []):
+                child = self.get_migration_by_name(child_name)
+                if child and child.name not in visited:
+                    queue.append(child)
+        return plan
