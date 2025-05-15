@@ -39,7 +39,6 @@ def cmd_new(client: SqlClient, args) -> None:
 
 
 def cmd_run(client: SqlClient, args) -> None:
-    # TODO: allow to add migration to migrations table without running the SQL
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
 
     # validate the changelog before doing anything
@@ -56,7 +55,7 @@ def cmd_run(client: SqlClient, args) -> None:
     for migration in migration_plan:
         if not client.is_migration_applied(migration):
             print(f"Applying migration: {migration.name}")
-            client.apply_migration(migration)
+            client.apply_migration(migration, fake=args.fake)
     client.connection.commit()
 
 
@@ -117,6 +116,7 @@ def main():
     # migrateit run
     parser_run = subparsers.add_parser("migrate", help="Run migrations")
     parser_run.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
+    parser_run.add_argument("--fake", action="store_true", default=False, help="Fakes the migration marking it as ran.")
     parser_run.set_defaults(func=cmd_run)
 
     # migrateit status

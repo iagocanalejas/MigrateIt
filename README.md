@@ -58,4 +58,10 @@ migrateit showmigrations
 
 # run the migrations
 migrateit migrate
+
+# run a given migration
+migrateit migrate 0001
+
+# fake a migration (will save the migration as applied without running it)
+migrateit 0001 --fake
 ```

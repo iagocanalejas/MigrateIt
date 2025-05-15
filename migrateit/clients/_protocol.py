@@ -53,7 +53,7 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def apply_migration(self, migration: Migration) -> None:
+    def apply_migration(self, migration: Migration, fake: bool) -> None:
         """
         Apply a migration to the database.
 

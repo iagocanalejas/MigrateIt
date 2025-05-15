@@ -95,7 +95,7 @@ class PsqlClient(SqlClient[Connection]):
             return result[0] if result else False
 
     @override
-    def apply_migration(self, migration: Migration) -> None:
+    def apply_migration(self, migration: Migration, fake: bool) -> None:
         path = self.migrations_dir / migration.name
         assert path.exists(), f"Migration file {path.name} does not exist"
         assert path.is_file(), f"Migration file {path.name} is not a file"
@@ -107,7 +107,8 @@ class PsqlClient(SqlClient[Connection]):
 
         try:
             with self.connection.cursor() as cursor:
-                cursor.execute(content)
+                if not fake:
+                    cursor.execute(content)
                 cursor.execute(
                     sql.SQL("""
                         INSERT INTO {} (migration_name, change_hash)
