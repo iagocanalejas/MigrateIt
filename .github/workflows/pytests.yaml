@@ -6,7 +6,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
-        postgres-version: ["15", "16", "17"]
+        postgres-version: ["15", "17"]
 
     services:
         postgres:

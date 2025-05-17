@@ -25,8 +25,18 @@ Configurations can be changed as environment variables.
 
 ```sh
 # basic configuration
-MIGRATIONS_TABLE=MIGRATEIT_CHANGELOG
-MIGRATIONS_DIR=migrateit
+MIGRATEIT_DATABASE=postgresql
+MIGRATEIT_MIGRATIONS_TABLE=MIGRATEIT_CHANGELOG
+MIGRATEIT_MIGRATIONS_DIR=migrateit
+
+# change the database connection variables
+VARNAME_DB_URL=DB_URL
+VARNAME_DB_HOST=DB_HOST
+VARNAME_DB_PORT=DB_PORT
+VARNAME_DB_USER=DB_USER
+VARNAME_DB_PASS=DB_PASS
+VARNAME_DB_NAME=DB_NAME
+
 
 # database configuration
 DB_URL=postgresql://postgres:postgres@localhost:5432/postgres

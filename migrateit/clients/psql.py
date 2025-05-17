@@ -14,13 +14,13 @@ class PsqlClient(SqlClient[Connection]):
     @override
     @classmethod
     def get_environment_url(cls) -> str:
-        db_url = os.getenv("DB_URL")
+        db_url = os.getenv(cls.VARNAME_DB_URL)
         if not db_url:
-            host = os.getenv("DB_HOST", "localhost")
-            port = os.getenv("DB_PORT", "5432")
-            user = os.getenv("DB_USER", "postgres")
-            password = os.getenv("DB_PASS", "")
-            db_name = os.getenv("DB_NAME", "migrateit")
+            host = os.getenv(cls.VARNAME_DB_HOST, "localhost")
+            port = os.getenv(cls.VARNAME_DB_PORT, "5432")
+            user = os.getenv(cls.VARNAME_DB_USER, "postgres")
+            password = os.getenv(cls.VARNAME_DB_PASS, "")
+            db_name = os.getenv(cls.VARNAME_DB_NAME, "migrateit")
             db_url = f"postgresql://{user}{f':{password}' if password else ''}@{host}:{port}/{db_name}"
         if not db_url:
             raise ValueError("DB_URL environment variable is not set")

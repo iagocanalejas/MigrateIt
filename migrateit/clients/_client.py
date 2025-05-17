@@ -1,3 +1,4 @@
+import os
 from abc import ABC
 from pathlib import Path
 
@@ -6,6 +7,13 @@ from migrateit.models import ChangelogFile, MigrateItConfig
 
 
 class SqlClient[T](ABC, SqlClientProtocol):
+    VARNAME_DB_URL = os.getenv("VARNAME_DB_URL", "DB_URL")
+    VARNAME_DB_HOST = os.getenv("VARNAME_DB_HOST", "DB_HOST")
+    VARNAME_DB_PORT = os.getenv("VARNAME_DB_PORT", "DB_PORT")
+    VARNAME_DB_USER = os.getenv("VARNAME_DB_USER", "DB_USER")
+    VARNAME_DB_PASS = os.getenv("VARNAME_DB_PASS", "DB_PASS")
+    VARNAME_DB_NAME = os.getenv("VARNAME_DB_NAME", "DB_NAME")
+
     connection: T
     config: MigrateItConfig
 

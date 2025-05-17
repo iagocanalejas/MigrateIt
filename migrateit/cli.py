@@ -19,10 +19,11 @@ from migrateit.tree import (
 )
 from migrateit.utils import STATUS_COLORS, print_dag
 
-ROOT_DIR = os.getenv("MIGRATIONS_DIR", "migrateit")
+ROOT_DIR = os.getenv("MIGRATEIT_MIGRATIONS_DIR", "migrateit")
+DATABASE = os.getenv("MIGRATEIT_DATABASE")
 
-# TODO: allow to put the configuration in pyproject.toml
-# TODO: allow to configure the varnames for the database connection variables
+# TODO: allow to forze update the hash of a migration in the database
+
 
 def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, database: SupportedDatabase) -> None:
     print("\tCreating migrations file")
@@ -91,6 +92,16 @@ def cmd_status(client: SqlClient, *_) -> None:
         print(f"  {label:<12}: {STATUS_COLORS[status]}{status_count[status]}{STATUS_COLORS['reset']}")
 
 
+# TODO: add support for other databases
+def _get_connection():
+    match DATABASE:
+        case SupportedDatabase.POSTGRES.value:
+            db_url = PsqlClient.get_environment_url()
+            return psycopg2.connect(db_url)
+        case _:
+            raise NotImplementedError(f"Database {DATABASE} is not supported")
+
+
 def main():
     print(r"""
 ##########################################
@@ -103,16 +114,15 @@ def main():
 ##########################################
           """)
 
+    assert DATABASE in [db.value for db in SupportedDatabase], (
+        f"Database {DATABASE} is not supported. Supported databases are: {[db.value for db in SupportedDatabase]}"
+    )
+
     parser = argparse.ArgumentParser(prog="migrateit", description="Migration tool")
     subparsers = parser.add_subparsers(dest="command")
 
     # migrateit init
     parser_init = subparsers.add_parser("init", help="Initialize the migration directory and database")
-    parser_init.add_argument(
-        "database",
-        choices=[db.value for db in SupportedDatabase],
-        help=f"Database to be used for migrations (choices: {', '.join(db.value for db in SupportedDatabase)})",
-    )
     parser_init.set_defaults(func=cmd_init)
 
     # migrateit init
@@ -134,22 +144,21 @@ def main():
     if hasattr(args, "func"):
         if args.command == "init":
             cmd_init(
-                table_name=os.getenv("MIGRATIONS_TABLE", "MIGRATEIT_CHANGELOG"),
+                table_name=os.getenv("MIGRATEIT_MIGRATIONS_TABLE", "MIGRATEIT_CHANGELOG"),
                 migrations_dir=Path(ROOT_DIR) / "migrations",
                 migrations_file=Path(ROOT_DIR) / "changelog.json",
-                database=SupportedDatabase(args.database),
+                database=SupportedDatabase(DATABASE),
             )
             return
 
-        # TODO: add support for other databases
-        db_url = PsqlClient.get_environment_url()
-        with psycopg2.connect(db_url) as conn:
-            root = Path(ROOT_DIR)
-            config = MigrateItConfig(
-                table_name=os.getenv("MIGRATIONS_TABLE", "MIGRATEIT_CHANGELOG"),
-                migrations_dir=root / "migrations",
-                changelog=load_changelog_file(root / "changelog.json"),
-            )
+        root = Path(ROOT_DIR)
+        config = MigrateItConfig(
+            table_name=os.getenv("MIGRATIONS_TABLE", "MIGRATEIT_CHANGELOG"),
+            migrations_dir=root / "migrations",
+            changelog=load_changelog_file(root / "changelog.json"),
+        )
+
+        with _get_connection() as conn:
             client = PsqlClient(conn, config)
             args.func(client, args)
     else:
