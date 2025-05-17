@@ -8,7 +8,8 @@ from pathlib import Path
 import psycopg2
 
 from migrateit.clients import PsqlClient
-from migrateit.models import ChangelogFile, MigrateItConfig, SupportedDatabase
+from migrateit.models import MigrateItConfig, SupportedDatabase
+from migrateit.tree import create_changelog_file
 
 
 class BasePsqlTest(unittest.TestCase):
@@ -21,7 +22,7 @@ class BasePsqlTest(unittest.TestCase):
         self.connection = psycopg2.connect(PsqlClient.get_environment_url())
         self.temp_dir = Path(tempfile.mkdtemp())
         self.migrations_dir = self.temp_dir / "migrations"
-        self.changelog = ChangelogFile.create_file(self.temp_dir / "changelog.json", SupportedDatabase.POSTGRES)
+        self.changelog = create_changelog_file(self.temp_dir / "changelog.json", SupportedDatabase.POSTGRES)
 
         self.config = MigrateItConfig(
             table_name=self.TEST_MIGRATIONS_TABLE,

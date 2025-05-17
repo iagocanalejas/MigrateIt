@@ -6,22 +6,29 @@ import psycopg2
 
 from migrateit.clients import PsqlClient, SqlClient
 from migrateit.models import (
-    ChangelogFile,
     MigrateItConfig,
-    Migration,
     MigrationStatus,
     SupportedDatabase,
+)
+from migrateit.tree import (
+    build_migration_plan,
+    create_changelog_file,
+    create_migration_directory,
+    create_new_migration,
+    load_changelog_file,
 )
 from migrateit.utils import STATUS_COLORS, print_dag
 
 ROOT_DIR = os.getenv("MIGRATIONS_DIR", "migrateit")
 
+# TODO: allow to put the configuration in pyproject.toml
+# TODO: allow to configure the varnames for the database connection variables
 
 def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, database: SupportedDatabase) -> None:
     print("\tCreating migrations file")
-    changelog = ChangelogFile.create_file(migrations_file, database)
+    changelog = create_changelog_file(migrations_file, database)
     print("\tCreating migrations folder")
-    Migration.create_directory(migrations_dir)
+    create_migration_directory(migrations_dir)
     print("\tInitializing migration database")
     db_url = PsqlClient.get_environment_url()
     with psycopg2.connect(db_url) as conn:
@@ -35,7 +42,7 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
 
 def cmd_new(client: SqlClient, args) -> None:
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    Migration.create_new(changelog=client.changelog, migrations_dir=client.migrations_dir, name=args.name)
+    create_new_migration(changelog=client.changelog, migrations_dir=client.migrations_dir, name=args.name)
 
 
 def cmd_run(client: SqlClient, args) -> None:
@@ -45,7 +52,7 @@ def cmd_run(client: SqlClient, args) -> None:
     _ = client.retrieve_migrations()
 
     target_migration = client.changelog.get_migration_by_name(args.name) if args.name else None
-    migration_plan = client.changelog.build_migration_plan(target_migration)
+    migration_plan = build_migration_plan(client.changelog, target_migration)
 
     if not migration_plan:
         print("No migrations to apply.")
@@ -141,7 +148,7 @@ def main():
             config = MigrateItConfig(
                 table_name=os.getenv("MIGRATIONS_TABLE", "MIGRATEIT_CHANGELOG"),
                 migrations_dir=root / "migrations",
-                changelog=ChangelogFile.load_file(root / "changelog.json"),
+                changelog=load_changelog_file(root / "changelog.json"),
             )
             client = PsqlClient(conn, config)
             args.func(client, args)
