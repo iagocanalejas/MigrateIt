@@ -15,6 +15,9 @@ def create_migration_directory(migrations_dir: Path) -> None:
     migrations_dir.mkdir(parents=True, exist_ok=True)
 
 
+ROLLBACK_SPLIT_TAG = "-- Rollback migration"
+
+
 def create_new_migration(changelog: ChangelogFile, migrations_dir: Path, name: str) -> Migration:
     """
     Create a new migration file in the given directory.
@@ -32,7 +35,8 @@ def create_new_migration(changelog: ChangelogFile, migrations_dir: Path, name: s
 
     new_filepath = migrations_dir / f"{len(migration_files):04d}_{name}.sql"
     assert not new_filepath.exists(), f"File {new_filepath.name} already exists"
-    new_filepath.write_text(f"-- Migration {new_filepath.name}\n-- Created on {datetime.now().isoformat()}")
+    content = f"-- Migration {new_filepath.name}\n-- Created on {datetime.now().isoformat()}\n\n\n{ROLLBACK_SPLIT_TAG}"
+    new_filepath.write_text(content)
 
     is_initial = len(migration_files) == 0
     new_migration = Migration(

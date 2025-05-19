@@ -24,7 +24,7 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
         migration_applied = Migration(name="001_init.sql")
         migration_not_applied = Migration(name="002_more.sql")
 
-        mock_get_content_hash.return_value = ("dummy_path", "hash1")
+        mock_get_content_hash.return_value = ("dummy_content", "dummy_reverse_content", "hash1")
         self._insert_migration_row("001_init.sql", "hash1")
 
         changelog = ChangelogFile(version=1, migrations=[migration_applied, migration_not_applied])
@@ -40,7 +40,7 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
 
     @patch.object(PsqlClient, "_get_content_hash")
     def test_show_migrations_conflict_and_removed(self, mock_get_content_hash):
-        mock_get_content_hash.return_value = ("dummy_path", "expected_hash")
+        mock_get_content_hash.return_value = ("dummy_content", "dummy_reverse_content", "expected_hash")
 
         self._insert_migration_row("001_init.sql", "different_hash")  # mismatch
         self._insert_migration_row("ghost.sql", "ghost_hash")
@@ -56,8 +56,8 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
     @patch.object(PsqlClient, "_get_content_hash")
     def test_show_migrations_order_error(self, mock_get_content_hash):
         mock_get_content_hash.side_effect = [
-            ("dummy_path", "hash2"),  # for 002_second.sql
-            ("dummy_path", "hash1"),  # for 001_second.sql
+            ("dummy_content", "dummy_reverse_content", "hash2"),  # for 002_second.sql
+            ("dummy_content", "dummy_reverse_content", "hash1"),  # for 001_second.sql
         ]
         self._insert_migration_row("002_second.sql", "hash2")
         changelog = ChangelogFile(

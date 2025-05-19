@@ -8,6 +8,7 @@ from psycopg2.extensions import connection as Connection
 
 from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
+from migrateit.tree import ROLLBACK_SPLIT_TAG
 
 
 class PsqlClient(SqlClient[Connection]):
@@ -95,27 +96,38 @@ class PsqlClient(SqlClient[Connection]):
             return result[0] if result else False
 
     @override
-    def apply_migration(self, migration: Migration, fake: bool) -> None:
+    def apply_migration(self, migration: Migration, fake: bool = False, rollback: bool = False) -> None:
         path = self.migrations_dir / migration.name
         assert path.exists(), f"Migration file {path.name} does not exist"
         assert path.is_file(), f"Migration file {path.name} is not a file"
         assert path.name.endswith(".sql"), f"Migration file {path.name} must be a SQL file"
-        assert not self.is_migration_applied(migration), f"Migration {path.name} has already been applied"
+        assert self.is_migration_applied(migration) == rollback, (
+            f"Migration {path.name} is already applied, cannot apply it again" if not rollback else
+            f"Migration {path.name} is not applied, cannot undo it"
+        )
 
-        content, migration_hash = self._get_content_hash(path)
-        assert content, f"Migration file {path.name} is empty"
+        migration_code, reverse_migration_code, migration_hash = self._get_content_hash(path)
+        assert migration, f"Migration file {path.name} is empty"
 
         try:
             with self.connection.cursor() as cursor:
                 if not fake:
-                    cursor.execute(content)
-                cursor.execute(
-                    sql.SQL("""
-                        INSERT INTO {} (migration_name, change_hash)
-                        VALUES (%s, %s);
-                    """).format(sql.Identifier(self.table_name)),
-                    (os.path.basename(path), migration_hash),
-                )
+                    cursor.execute(migration_code if not rollback else reverse_migration_code)
+                if rollback:
+                    cursor.execute(
+                        sql.SQL("""
+                            DELETE FROM {} where migration_name = %s and change_hash = %s;
+                        """).format(sql.Identifier(self.table_name)),
+                        (os.path.basename(path), migration_hash),
+                    )
+                else:
+                    cursor.execute(
+                        sql.SQL("""
+                            INSERT INTO {} (migration_name, change_hash)
+                            VALUES (%s, %s);
+                        """).format(sql.Identifier(self.table_name)),
+                        (os.path.basename(path), migration_hash),
+                    )
         except (DatabaseError, ProgrammingError) as e:
             self.connection.rollback()
             raise e
@@ -132,7 +144,7 @@ class PsqlClient(SqlClient[Connection]):
             migration_name, change_hash = row
             migration = next((m for m in self.changelog.migrations if m.name == migration_name), None)
             if migration:
-                _, migration_hash = self._get_content_hash(self.migrations_dir / migration.name)
+                _, _, migration_hash = self._get_content_hash(self.migrations_dir / migration.name)
                 status = MigrationStatus.APPLIED if migration_hash == change_hash else MigrationStatus.CONFLICT
                 # migration applied or conflict
                 migrations[migration.name] = (migration, status)
@@ -152,6 +164,7 @@ class PsqlClient(SqlClient[Connection]):
                     f"Migration {m.name} has parents that are not applied: {[p[0].name for p in parents]}"
                 )
 
-    def _get_content_hash(self, path: Path) -> tuple[str, str]:
+    def _get_content_hash(self, path: Path) -> tuple[str, str, str]:
         content = path.read_text()
-        return content, hashlib.sha256(content.encode("utf-8")).hexdigest()
+        migration, reverse_migration = content.split(ROLLBACK_SPLIT_TAG, 1)
+        return migration, reverse_migration, hashlib.sha256(content.encode("utf-8")).hexdigest()

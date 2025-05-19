@@ -73,5 +73,8 @@ migrateit migrate
 migrateit migrate 0001
 
 # fake a migration (will save the migration as applied without running it)
-migrateit 0001 --fake
+migrateit migrate 0001 --fake
+
+# rollback migrations
+migrateit migrate 0001 --rollback
 ```

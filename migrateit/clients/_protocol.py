@@ -33,9 +33,6 @@ class SqlClientProtocol(Protocol):
         """
         Validate the changelog file.
 
-        Args:
-            changelog: The changelog object to validate.
-
         Returns:
             A dictionary mapping migration names to tuples of Migration and MigrationStatus.
         """
@@ -53,12 +50,13 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def apply_migration(self, migration: Migration, fake: bool) -> None:
+    def apply_migration(self, migration: Migration, fake: bool = False, rollback: bool = False) -> None:
         """
         Apply a migration to the database.
 
         Args:
-            changelog: The changelog object containing the migration.
             migration: The migration object to apply.
+            fake: If True, apply the migration without executing it.
+            undo: If True, apply the reverse of the migration.
         """
         ...
