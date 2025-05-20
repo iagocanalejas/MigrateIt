@@ -143,6 +143,23 @@ class PsqlClient(SqlClient[Connection]):
             self.connection.rollback()
             raise e
 
+    def update_migration_hash(self, migration: Migration) -> None:
+        path = self.migrations_dir / migration.name
+        assert path.exists(), f"Migration file {path.name} does not exist"
+        assert path.is_file(), f"Migration file {path.name} is not a file"
+        assert path.name.endswith(".sql"), f"Migration file {path.name} must be a SQL file"
+
+        _, _, migration_hash = self._get_content_hash(path)
+
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("""
+                    UPDATE {} SET change_hash = %s WHERE migration_name = %s;
+                """).format(sql.Identifier(self.table_name)),
+                (migration_hash, os.path.basename(path)),
+            )
+            self.connection.commit()
+
     @override
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
         if len(self.changelog.migrations) == 0:

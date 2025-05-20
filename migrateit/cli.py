@@ -23,8 +23,6 @@ from migrateit.utils import STATUS_COLORS, print_dag
 ROOT_DIR = os.getenv("MIGRATEIT_MIGRATIONS_DIR", "migrateit")
 DATABASE = os.getenv("MIGRATEIT_DATABASE")
 
-# TODO: allow to forze update the hash of a migration in the database
-
 
 def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, database: SupportedDatabase) -> None:
     print("\tCreating migrations file")
@@ -49,10 +47,16 @@ def cmd_new(client: SqlClient, args) -> None:
 
 def cmd_run(client: SqlClient, args) -> None:
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    is_fake, is_rollback = args.fake, args.rollback
+    is_fake, is_rollback, is_hash_update = args.fake, args.rollback, args.update_hash
+    target_migration = client.changelog.get_migration_by_name(args.name) if args.name else None
+
+    if is_hash_update:
+        assert target_migration, "Hash update requires a target migration"
+        print(f"Updating hash for migration: {target_migration.name}")
+        client.update_migration_hash(target_migration)
+        return
 
     statuses = client.retrieve_migration_statuses()
-    target_migration = client.changelog.get_migration_by_name(args.name) if args.name else None
     if is_fake:
         # we don't validate fake migrations
         assert target_migration, "Fake migration requires a target migration"
@@ -149,10 +153,13 @@ def main():
     parser_run.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
     parser_run.add_argument("--fake", action="store_true", default=False, help="Fakes the migration marking it as ran.")
     parser_run.add_argument(
+        "--update-hash", action="store_true", default=False, help="Update the hash of the migration."
+    )
+    parser_run.add_argument(
         "--rollback",
         action="store_true",
         default=False,
-        help="Undo the given migration if no childs are applied.",
+        help="Undo the given migration and all its applied childs.",
     )
     parser_run.set_defaults(func=cmd_run)
 

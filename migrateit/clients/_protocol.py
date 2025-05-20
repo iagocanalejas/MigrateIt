@@ -60,6 +60,15 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
+    def update_migration_hash(self, migration: Migration) -> None:
+        """
+        Update the hash of a migration in the database.
+
+        Args:
+            migration: The migration object to update.
+        """
+        ...
+
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
         """
         Validate the migrations in the database.

@@ -71,10 +71,19 @@ migrateit migrate
 
 # run a given migration
 migrateit migrate 0001
+```
 
-# fake a migration (will save the migration as applied without running it)
-migrateit migrate 0001 --fake
+# HELP
 
-# rollback migrations
-migrateit migrate 0001 --rollback
+```sh
+usage: migrateit migrate [-h] [--fake] [--update-hash] [--rollback] [name]
+
+positional arguments:
+  name           Name of the migration to run
+
+options:
+  -h, --help     show this help message and exit
+  --fake         Fakes the migration marking it as ran.
+  --update-hash  Update the hash of the migration.
+  --rollback     Undo the given migration and all its applied childs.
 ```
