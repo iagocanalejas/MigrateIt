@@ -47,7 +47,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         changelog.migrations.append(migration)
         self.client.config.changelog = changelog
 
-        self.client.apply_migration(migration, fake=False)
+        self.client.apply_migration(migration, is_fake=False)
 
         # Check it was inserted into the table
         with self.connection.cursor() as cursor:
@@ -77,7 +77,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         changelog.migrations.append(migration)
         self.client.config.changelog = changelog
 
-        self.client.apply_migration(migration, fake=True)
+        self.client.apply_migration(migration, is_fake=True)
 
         # Check it was inserted into the table
         with self.connection.cursor() as cursor:
@@ -96,7 +96,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         migration = Migration(name="not_found.sql")
 
         with self.assertRaises(AssertionError):
-            self.client.apply_migration(migration, fake=False)
+            self.client.apply_migration(migration, is_fake=False)
 
     def test_apply_migration_already_applied(self):
         filename = "0001_applied.sql"
@@ -106,9 +106,9 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         changelog.migrations.append(migration)
 
         self.client.config.changelog = changelog
-        self.client.apply_migration(migration, fake=False)
+        self.client.apply_migration(migration, is_fake=False)
         with self.assertRaises(AssertionError):
-            self.client.apply_migration(migration, fake=False)
+            self.client.apply_migration(migration, is_fake=False)
 
     def test_apply_migration_wrong_extension(self):
         filename = "0002_wrong_ext.txt"
@@ -118,7 +118,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
 
         self.client.config.changelog = changelog
         with self.assertRaises(AssertionError):
-            self.client.apply_migration(migration, fake=False)
+            self.client.apply_migration(migration, is_fake=False)
 
     def test_apply_migration_undo_success(self):
         filename = "0003_undoable.sql"
@@ -135,8 +135,8 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         changelog.migrations.append(migration)
         self.client.config.changelog = changelog
 
-        self.client.apply_migration(migration, fake=False)
-        self.client.apply_migration(migration, fake=False, rollback=True)
+        self.client.apply_migration(migration, is_fake=False)
+        self.client.apply_migration(migration, is_fake=False, is_rollback=True)
 
         with self.connection.cursor() as cursor:
             cursor.execute(
@@ -162,8 +162,8 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         changelog.migrations.append(migration)
         self.client.config.changelog = changelog
 
-        self.client.apply_migration(migration, fake=False)
-        self.client.apply_migration(migration, fake=True, rollback=True)
+        self.client.apply_migration(migration, is_fake=False)
+        self.client.apply_migration(migration, is_fake=True, is_rollback=True)
 
         with self.connection.cursor() as cursor:
             cursor.execute(f"SELECT COUNT(*) FROM {self.TEST_MIGRATIONS_TABLE} WHERE migration_name = %s", (filename,))
@@ -182,7 +182,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         self.client.config.changelog = changelog
 
         with self.assertRaises(ValueError):
-            self.client.apply_migration(migration, fake=False)
+            self.client.apply_migration(migration, is_fake=False)
 
     def test_apply_migration_undo_not_applied(self):
         filename = "0006_not_applied.sql"
@@ -200,7 +200,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         self.client.config.changelog = changelog
 
         with self.assertRaises(AssertionError):
-            self.client.apply_migration(migration, fake=False, rollback=True)
+            self.client.apply_migration(migration, is_fake=False, is_rollback=True)
 
     def test_apply_migration_fake_and_undo_combination(self):
         filename = "0007_fake_undo.sql"
@@ -217,8 +217,8 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         changelog.migrations.append(migration)
         self.client.config.changelog = changelog
 
-        self.client.apply_migration(migration, fake=True)
-        self.client.apply_migration(migration, fake=True, rollback=True)
+        self.client.apply_migration(migration, is_fake=True)
+        self.client.apply_migration(migration, is_fake=True, is_rollback=True)
 
         with self.connection.cursor() as cursor:
             cursor.execute(f"SELECT COUNT(*) FROM {self.TEST_MIGRATIONS_TABLE} WHERE migration_name = %s", (filename,))

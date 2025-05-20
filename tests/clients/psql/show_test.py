@@ -30,11 +30,11 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
         changelog = ChangelogFile(version=1, migrations=[migration_applied, migration_not_applied])
         self.client.config.changelog = changelog
 
-        result = self.client.retrieve_migrations()
+        result = self.client.retrieve_migration_statuses()
 
         expected = {
-            migration_applied.name: (migration_applied, MigrationStatus.APPLIED),
-            migration_not_applied.name: (migration_not_applied, MigrationStatus.NOT_APPLIED),
+            migration_applied.name: MigrationStatus.APPLIED,
+            migration_not_applied.name: MigrationStatus.NOT_APPLIED,
         }
         self.assertEqual(result, expected)
 
@@ -48,10 +48,10 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
         changelog = ChangelogFile(version=1, migrations=[Migration(name="001_init.sql")])
         self.client.config.changelog = changelog
 
-        result = self.client.retrieve_migrations()
+        result = self.client.retrieve_migration_statuses()
 
-        self.assertEqual(result["001_init.sql"][1], MigrationStatus.CONFLICT)
-        self.assertEqual(result["ghost.sql"][1], MigrationStatus.REMOVED)
+        self.assertEqual(result["001_init.sql"], MigrationStatus.CONFLICT)
+        self.assertEqual(result["ghost.sql"], MigrationStatus.REMOVED)
 
     @patch.object(PsqlClient, "_get_content_hash")
     def test_show_migrations_order_error(self, mock_get_content_hash):
@@ -69,7 +69,7 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
         )
         self.client.config.changelog = changelog
 
-        # Act & Assert
-        with self.assertRaises(AssertionError) as cm:
-            self.client.retrieve_migrations()
-        self.assertIn("parents that are not applied", str(cm.exception))
+        statuses = self.client.retrieve_migration_statuses()
+        with self.assertRaises(ValueError) as cm:
+            self.client.validate_migrations(statuses)
+        self.assertIn("is applied before", str(cm.exception))

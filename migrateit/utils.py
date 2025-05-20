@@ -1,4 +1,5 @@
 from migrateit.models import MigrationStatus
+from migrateit.models.migration import Migration
 
 STATUS_COLORS = {
     "reset": "\033[0m",
@@ -11,14 +12,11 @@ STATUS_COLORS = {
 
 def print_dag(
     name: str,
-    children: dict[str, list[str]],
+    children: dict[str, list[Migration]],
     status_map: dict[str, MigrationStatus],
     level: int = 0,
-    seen: set[str] | None = None,
+    seen: set[str] = set(),
 ) -> None:
-    if seen is None:
-        seen = set()
-
     indent = "  " * level + ("└─ " if level > 0 else "")
     status = status_map[name]
     status_str = f"{STATUS_COLORS[status]}{status.name.replace('_', ' ').title()}{STATUS_COLORS['reset']}"
@@ -32,4 +30,4 @@ def print_dag(
     seen.add(name)
 
     for child in children.get(name, []):
-        print_dag(child, children, status_map, level + 1, seen)
+        print_dag(child.name, children, status_map, level + 1, seen)

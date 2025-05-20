@@ -23,21 +23,6 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def create_migrations_table(self) -> None:
-        """
-        Create the migrations table in the database.
-        """
-        ...
-
-    def retrieve_migrations(self) -> dict[str, tuple[Migration, MigrationStatus]]:
-        """
-        Validate the changelog file.
-
-        Returns:
-            A dictionary mapping migration names to tuples of Migration and MigrationStatus.
-        """
-        ...
-
     def is_migration_applied(self, migration: Migration) -> bool:
         """
         Check if a migration has already been applied.
@@ -50,7 +35,21 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def apply_migration(self, migration: Migration, fake: bool = False, rollback: bool = False) -> None:
+    def create_migrations_table(self) -> None:
+        """
+        Create the migrations table in the database.
+        """
+        ...
+
+    def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
+        """
+        Retrieve the migrations from the database.
+        Returns:
+            A dictionary mapping migration names to their statuses.
+        """
+        ...
+
+    def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
         """
         Apply a migration to the database.
 
@@ -58,5 +57,17 @@ class SqlClientProtocol(Protocol):
             migration: The migration object to apply.
             fake: If True, apply the migration without executing it.
             undo: If True, apply the reverse of the migration.
+        """
+        ...
+
+    def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
+        """
+        Validate the migrations in the database.
+
+        Args:
+            status_map: A dictionary mapping migration names to their statuses.
+
+        Raises:
+            ValueError: If there are any inconsistencies in the migration statuses.
         """
         ...

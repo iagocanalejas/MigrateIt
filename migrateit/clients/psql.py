@@ -8,7 +8,7 @@ from psycopg2.extensions import connection as Connection
 
 from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
-from migrateit.tree import ROLLBACK_SPLIT_TAG
+from migrateit.tree import ROLLBACK_SPLIT_TAG, build_migrations_tree
 
 
 class PsqlClient(SqlClient[Connection]):
@@ -44,6 +44,22 @@ class PsqlClient(SqlClient[Connection]):
             return result[0] if result else False
 
     @override
+    def is_migration_applied(self, migration: Migration) -> bool:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM {}
+                        WHERE migration_name = %s
+                    );
+                """).format(sql.Identifier(self.table_name)),
+                (os.path.basename(migration.name),),
+            )
+            result = cursor.fetchone()
+            return result[0] if result else False
+
+    @override
     def create_migrations_table(self) -> None:
         assert not self.is_migrations_table_created(), f"Migrations table={self.table_name} already exists"
 
@@ -65,55 +81,50 @@ class PsqlClient(SqlClient[Connection]):
             raise e
 
     @override
-    def retrieve_migrations(self) -> dict[str, tuple[Migration, MigrationStatus]]:
+    def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
         assert self.is_migrations_table_created(), f"Migrations table={self.table_name} does not exist"
 
-        migrations = self._retrieve_applied_migrations()
+        migrations = {k: MigrationStatus.NOT_APPLIED for k, _ in build_migrations_tree(self.changelog).items()}
 
-        # add migrations that are in the changelog but not in the database
-        for migration in self.changelog.migrations:
-            if migration.name in migrations:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("""SELECT migration_name, change_hash FROM {}""").format(sql.Identifier(self.table_name))
+            )
+            rows = cursor.fetchall()
+
+        for row in rows:
+            migration_name, change_hash = row
+            migration = next((m for m in self.changelog.migrations if m.name == migration_name), None)
+            if not migration:
+                # migration applied not in changelog
+                migrations[migration_name] = MigrationStatus.REMOVED
                 continue
-            migrations[migration.name] = (migration, MigrationStatus.NOT_APPLIED)
 
-        self._verify_migrations(migrations)
+            _, _, migration_hash = self._get_content_hash(self.migrations_dir / migration.name)
+            status = MigrationStatus.APPLIED if migration_hash == change_hash else MigrationStatus.CONFLICT
+            migrations[migration.name] = status
+
         return migrations
 
     @override
-    def is_migration_applied(self, migration: Migration) -> bool:
-        with self.connection.cursor() as cursor:
-            cursor.execute(
-                sql.SQL("""
-                    SELECT EXISTS (
-                        SELECT 1
-                        FROM {}
-                        WHERE migration_name = %s
-                    );
-                """).format(sql.Identifier(self.table_name)),
-                (os.path.basename(migration.name),),
-            )
-            result = cursor.fetchone()
-            return result[0] if result else False
-
-    @override
-    def apply_migration(self, migration: Migration, fake: bool = False, rollback: bool = False) -> None:
+    def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
         path = self.migrations_dir / migration.name
         assert path.exists(), f"Migration file {path.name} does not exist"
         assert path.is_file(), f"Migration file {path.name} is not a file"
         assert path.name.endswith(".sql"), f"Migration file {path.name} must be a SQL file"
-        assert self.is_migration_applied(migration) == rollback, (
-            f"Migration {path.name} is already applied, cannot apply it again" if not rollback else
-            f"Migration {path.name} is not applied, cannot undo it"
+        assert self.is_migration_applied(migration) == is_rollback, (
+            f"Migration {path.name} is already applied, cannot apply it again"
+            if not is_rollback
+            else f"Migration {path.name} is not applied, cannot undo it"
         )
 
         migration_code, reverse_migration_code, migration_hash = self._get_content_hash(path)
-        assert migration, f"Migration file {path.name} is empty"
 
         try:
             with self.connection.cursor() as cursor:
-                if not fake:
-                    cursor.execute(migration_code if not rollback else reverse_migration_code)
-                if rollback:
+                if not is_fake:
+                    cursor.execute(migration_code if not is_rollback else reverse_migration_code)
+                if is_rollback:
                     cursor.execute(
                         sql.SQL("""
                             DELETE FROM {} where migration_name = %s and change_hash = %s;
@@ -132,37 +143,51 @@ class PsqlClient(SqlClient[Connection]):
             self.connection.rollback()
             raise e
 
-    def _retrieve_applied_migrations(self) -> dict[str, tuple[Migration, MigrationStatus]]:
+    @override
+    def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
+        if len(self.changelog.migrations) == 0:
+            return
+
+        assert self.changelog.migrations[0].initial, "Initial migration not found in changelog"
+        assert len([m for m in self.changelog.migrations if m.initial]) == 1, (
+            "Multiple initial migrations found in changelog"
+        )
+
+        # check removed migrations
+        removed_migrations = [m for m, s in status_map.items() if s == MigrationStatus.REMOVED]
+        if removed_migrations:
+            raise ValueError(f"Removed migrations found in the database: {removed_migrations}. ")
+
+        # check conflict migrations
+        conflict_migrations = [m for m, s in status_map.items() if s == MigrationStatus.CONFLICT]
+        if conflict_migrations:
+            for conflict_migration in conflict_migrations:
+                path = self.migrations_dir / conflict_migration
+                _, _, migration_hash = self._get_content_hash(path)
+                raise ValueError(
+                    f"Migration {conflict_migration} has a different hash in the database: "
+                    f"found={migration_hash} existing={self._get_database_hash(conflict_migration)}"
+                )
+
+        # check for each migration all the parents are applied
+        for migration in self.changelog.migrations:
+            if status_map[migration.name] != MigrationStatus.APPLIED:
+                continue
+            for parent in migration.parents:
+                if status_map[parent] != MigrationStatus.APPLIED:
+                    raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
+
+    def _get_database_hash(self, migration_name: str) -> str:
         with self.connection.cursor() as cursor:
             cursor.execute(
-                sql.SQL("""SELECT migration_name, change_hash FROM {}""").format(sql.Identifier(self.table_name))
+                sql.SQL("""
+                    SELECT change_hash FROM {} WHERE migration_name = %s
+                """).format(sql.Identifier(self.table_name)),
+                (migration_name,),
             )
-            rows = cursor.fetchall()
-
-        migrations = {}
-        for row in rows:
-            migration_name, change_hash = row
-            migration = next((m for m in self.changelog.migrations if m.name == migration_name), None)
-            if migration:
-                _, _, migration_hash = self._get_content_hash(self.migrations_dir / migration.name)
-                status = MigrationStatus.APPLIED if migration_hash == change_hash else MigrationStatus.CONFLICT
-                # migration applied or conflict
-                migrations[migration.name] = (migration, status)
-            else:
-                # migration applied not in changelog
-                migrations[migration_name] = (Migration(name=migration_name), MigrationStatus.REMOVED)
-        return migrations
-
-    def _verify_migrations(self, migrations: dict[str, tuple[Migration, MigrationStatus]]) -> None:
-        for m, s in migrations.values():
-            if s == MigrationStatus.REMOVED:
-                continue
-
-            if s == MigrationStatus.APPLIED:
-                parents = [migrations[p] for p in m.parents]
-                assert all(s1 == MigrationStatus.APPLIED for _, s1 in parents), (
-                    f"Migration {m.name} has parents that are not applied: {[p[0].name for p in parents]}"
-                )
+            result = cursor.fetchone()
+            assert result and result[0], f"Migration {migration_name} not found in the database"
+            return result[0]
 
     def _get_content_hash(self, path: Path) -> tuple[str, str, str]:
         content = path.read_text()

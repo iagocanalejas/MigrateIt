@@ -12,6 +12,7 @@ from migrateit.models import (
 )
 from migrateit.tree import (
     build_migration_plan,
+    build_migrations_tree,
     create_changelog_file,
     create_migration_directory,
     create_new_migration,
@@ -48,40 +49,52 @@ def cmd_new(client: SqlClient, args) -> None:
 
 def cmd_run(client: SqlClient, args) -> None:
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    fake, rollback = args.fake, args.rollback
+    is_fake, is_rollback = args.fake, args.rollback
 
-    # validate the changelog before doing anything
-    _ = client.retrieve_migrations()
-
+    statuses = client.retrieve_migration_statuses()
     target_migration = client.changelog.get_migration_by_name(args.name) if args.name else None
-    migration_plan = build_migration_plan(client.changelog, migration=target_migration)
+    if is_fake:
+        # we don't validate fake migrations
+        assert target_migration, "Fake migration requires a target migration"
+        print(f"{'Applying' if not is_rollback else 'Rollback'} migration: {target_migration.name}")
+        client.apply_migration(target_migration, is_fake=is_fake, is_rollback=is_rollback)
+        client.connection.commit()
+        return
+
+    assert not is_rollback or target_migration, "Rollback requires a target migration"
+    client.validate_migrations(statuses)
+
+    migration_plan = build_migration_plan(
+        client.changelog,
+        migration_tree=build_migrations_tree(client.changelog),
+        statuses_map=statuses,
+        target_migration=target_migration,
+        is_rollback=is_rollback,
+    )
 
     if not migration_plan:
-        print("No migrations to apply.")
+        print("Nothing to apply.")
         return
-    assert migration_plan[0].initial, "Initial migration not found in migration plan"
 
     for migration in migration_plan:
-        if not client.is_migration_applied(migration):
-            print(f"Applying migration: {migration.name}")
-            client.apply_migration(migration, fake=fake, rollback=rollback)
+        print(f"{'Applying' if not is_rollback else 'Rollback'} migration: {migration.name}")
+        client.apply_migration(migration, is_rollback=is_rollback)
+
     client.connection.commit()
 
 
 def cmd_status(client: SqlClient, *_) -> None:
-    migrations = client.retrieve_migrations()
+    migrations = build_migrations_tree(client.changelog)
+    status_map = client.retrieve_migration_statuses()
     status_count = {status: 0 for status in MigrationStatus}
 
-    for _, status in migrations.values():
+    for status in status_map.values():
         status_count[status] += 1
-
-    root, children = client.changelog.graph
-    status_map = {m.name: status for m, status in migrations.values()}
 
     print("\nMigration Precedence DAG:\n")
     print(f"{'Migration File':<40} | {'Status'}")
     print("-" * 60)
-    print_dag(root, children, status_map)
+    print_dag(next(iter(migrations)), migrations, status_map)
 
     print("\nSummary:")
     for status, label in {
