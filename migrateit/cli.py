@@ -18,7 +18,7 @@ from migrateit.tree import (
     create_new_migration,
     load_changelog_file,
 )
-from migrateit.utils import STATUS_COLORS, print_dag
+from migrateit.utils import STATUS_COLORS, pretty_print_sql_error, print_dag
 
 ROOT_DIR = os.getenv("MIGRATEIT_MIGRATIONS_DIR", "migrateit")
 DATABASE = os.getenv("MIGRATEIT_DATABASE")
@@ -87,7 +87,9 @@ def cmd_run(client: SqlClient, args) -> None:
     client.connection.commit()
 
 
-def cmd_status(client: SqlClient, *_) -> None:
+def cmd_status(client: SqlClient, args) -> None:
+    validate_sql = args.validate_sql
+
     migrations = build_migrations_tree(client.changelog)
     status_map = client.retrieve_migration_statuses()
     status_count = {status: 0 for status in MigrationStatus}
@@ -108,6 +110,16 @@ def cmd_status(client: SqlClient, *_) -> None:
         MigrationStatus.CONFLICT: "Conflict",
     }.items():
         print(f"  {label:<12}: {STATUS_COLORS[status]}{status_count[status]}{STATUS_COLORS['reset']}")
+
+    if validate_sql:
+        print("\nValidating SQL migrations...")
+        msg = "SQL validation passed. No errors found."
+        for migration in client.changelog.migrations:
+            err = client.validate_sql_sintax(migration)
+            if err:
+                msg = "\nSQL validation failed. Please fix the errors above."
+                pretty_print_sql_error(err[0], err[1])
+        print(msg)
 
 
 # TODO: add support for other databases
@@ -165,6 +177,12 @@ def main():
 
     # migrateit status
     parser_status = subparsers.add_parser("showmigrations", help="Show migration status")
+    parser_status.add_argument(
+        "--validate-sql",
+        action="store_true",
+        default=False,
+        help="Validate SQL migration sintax.",
+    )
     parser_status.set_defaults(func=cmd_status)
 
     args = parser.parse_args()

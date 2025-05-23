@@ -61,7 +61,7 @@ migrateit init
 migrateit newmigration first_migration
 
 # add your sql commands to the migration file
-echo "CREATE TABLE test (id SERIAL PRIMARY KEY, name VARCHAR(50));" > migrateit/0001_first_migration.sql
+echo "CREATE TABLE test (id SERIAL PRIMARY KEY, name VARCHAR(50));" > migrateit/migrations/0000_first_migration.sql
 
 # show pending migrations
 migrateit showmigrations
@@ -69,11 +69,21 @@ migrateit showmigrations
 # run the migrations
 migrateit migrate
 
-# run a given migration
-migrateit migrate 0001
+# or run a given migration
+migrateit migrate 0000
 ```
 
 # HELP
+
+```sh
+usage: migrateit newmigration [-h] name
+
+positional arguments:
+  name        Name of the new migration
+
+options:
+  -h, --help  show this help message and exit
+```
 
 ```sh
 usage: migrateit migrate [-h] [--fake] [--update-hash] [--rollback] [name]
@@ -86,4 +96,12 @@ options:
   --fake         Fakes the migration marking it as ran.
   --update-hash  Update the hash of the migration.
   --rollback     Undo the given migration and all its applied childs.
+```
+
+```sh
+usage: migrateit showmigrations [-h] [--validate-sql]
+
+options:
+  -h, --help      show this help message and exit
+  --validate-sql  Validate SQL migration sintax.
 ```

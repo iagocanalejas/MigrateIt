@@ -1,3 +1,7 @@
+import re
+
+from psycopg2 import ProgrammingError
+
 from migrateit.models import MigrationStatus
 from migrateit.models.migration import Migration
 
@@ -31,3 +35,20 @@ def print_dag(
 
     for child in children.get(name, []):
         print_dag(child.name, children, status_map, level + 1, seen)
+
+
+def pretty_print_sql_error(error: ProgrammingError, sql_query: str):
+    error_message = error.pgerror or str(error)
+
+    print("❌ SQL Syntax Error:")
+    print("-" * 80)
+    print(error_message.strip())
+    print("-" * 80)
+
+    # Extract error position if available
+    match = re.search(r"POSITION: (\d+)", error_message)
+    if match:
+        position = int(match.group(1))
+        print("→ Error near here:")
+        print(sql_query)
+        print(" " * (position - 1) + "^")

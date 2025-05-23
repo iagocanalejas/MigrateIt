@@ -143,6 +143,7 @@ class PsqlClient(SqlClient[Connection]):
             self.connection.rollback()
             raise e
 
+    @override
     def update_migration_hash(self, migration: Migration) -> None:
         path = self.migrations_dir / migration.name
         assert path.exists(), f"Migration file {path.name} does not exist"
@@ -193,6 +194,31 @@ class PsqlClient(SqlClient[Connection]):
             for parent in migration.parents:
                 if status_map[parent] != MigrationStatus.APPLIED:
                     raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
+
+    @override
+    def validate_sql_sintax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
+        path = self.migrations_dir / migration.name
+        assert path.exists(), f"Migration file {path.name} does not exist"
+        assert path.is_file(), f"Migration file {path.name} is not a file"
+        assert path.name.endswith(".sql"), f"Migration file {path.name} must be a SQL file"
+
+        migration_code, reverse_migration_code, _ = self._get_content_hash(path)
+        with self.connection.cursor() as cursor:
+            try:
+                cursor.execute(f"PREPARE stmt AS {migration_code}")
+                cursor.execute("DEALLOCATE stmt")
+            except ProgrammingError as e:
+                return e, migration_code
+            finally:
+                self.connection.rollback()
+            try:
+                cursor.execute(f"PREPARE rev_stmt AS {reverse_migration_code}")
+                cursor.execute("DEALLOCATE rev_stmt")
+            except ProgrammingError as e:
+                return e, reverse_migration_code
+            finally:
+                self.connection.rollback()
+        return None
 
     def _get_database_hash(self, migration_name: str) -> str:
         with self.connection.cursor() as cursor:

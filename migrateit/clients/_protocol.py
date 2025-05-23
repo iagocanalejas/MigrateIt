@@ -1,5 +1,7 @@
 from typing import Protocol
 
+from psycopg2 import ProgrammingError
+
 from migrateit.models import Migration, MigrationStatus
 
 
@@ -78,5 +80,17 @@ class SqlClientProtocol(Protocol):
 
         Raises:
             ValueError: If there are any inconsistencies in the migration statuses.
+        """
+        ...
+
+    def validate_sql_sintax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
+        """
+        Validate the SQL syntax of a migration.
+
+        Args:
+            migration: The migration object to validate.
+
+        Returns:
+            A tuple containing the error and the SQL query if there is a syntax error, None otherwise.
         """
         ...
