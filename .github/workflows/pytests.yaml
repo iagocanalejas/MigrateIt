@@ -40,6 +40,10 @@ jobs:
           pip install pytest coverage
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
+      - name: Install migrateit
+        run: |
+          pip install -e .
+
       - name: Pytest + code coverage
         run: |
             export $(cat .env | xargs) &&

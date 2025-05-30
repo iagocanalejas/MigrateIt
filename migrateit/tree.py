@@ -5,6 +5,7 @@ from pathlib import Path
 from migrateit.models import ChangelogFile, Migration
 from migrateit.models.changelog import SupportedDatabase
 from migrateit.models.migration import MigrationStatus
+from migrateit.reporters import write_line
 
 
 def create_migration_directory(migrations_dir: Path) -> None:
@@ -47,7 +48,7 @@ def create_new_migration(changelog: ChangelogFile, migrations_dir: Path, name: s
     )
     changelog.migrations.append(new_migration)
     save_changelog_file(changelog)
-    print("\tNew migration file created:", new_filepath.name)
+    write_line(f"\tMigration {new_migration.name} created successfully")
     return new_migration
 
 
@@ -95,7 +96,7 @@ def save_changelog_file(changelog: ChangelogFile) -> None:
     """
     assert changelog.path.exists(), f"File {changelog.path.name} does not exist"
     changelog.path.write_text(changelog.to_json())
-    print("\tMigrations file updated:", changelog.path)
+    write_line(f"\tMigrations file updated: {changelog.path}")
 
 
 def build_migrations_tree(changelog: ChangelogFile) -> OrderedDict[str, list[Migration]]:

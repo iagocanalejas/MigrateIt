@@ -1,9 +1,8 @@
 import shutil
-import sys
 import tempfile
 import unittest
-from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 import psycopg2
 
@@ -12,13 +11,11 @@ from migrateit.models import MigrateItConfig, SupportedDatabase
 from migrateit.tree import create_changelog_file
 
 
+@patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 class BasePsqlTest(unittest.TestCase):
     TEST_MIGRATIONS_TABLE = "migrations"
 
     def setUp(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = StringIO()
-
         self.connection = psycopg2.connect(PsqlClient.get_environment_url())
         self.temp_dir = Path(tempfile.mkdtemp())
         self.migrations_dir = self.temp_dir / "migrations"
@@ -33,7 +30,6 @@ class BasePsqlTest(unittest.TestCase):
         self._drop_test_table()  # ensure clean state
 
     def tearDown(self):
-        sys.stdout = self._original_stdout
         self._drop_test_table()
         self.connection.close()
         shutil.rmtree(self.temp_dir)

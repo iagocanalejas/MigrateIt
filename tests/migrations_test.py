@@ -1,10 +1,9 @@
 import os
 import shutil
-import sys
 import tempfile
 import unittest
-from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from migrateit.models import ChangelogFile, SupportedDatabase
 from migrateit.tree import (
@@ -16,17 +15,14 @@ from migrateit.tree import (
 )
 
 
+@patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 class TestMigrationFileUtils(unittest.TestCase):
     def setUp(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = StringIO()
-
         self.temp_dir = Path(tempfile.mkdtemp())
         self.migrations_dir = self.temp_dir / "migrations"
         self.migrations_file_path = self.temp_dir / "changelog.json"
 
     def tearDown(self):
-        sys.stdout = self._original_stdout
         shutil.rmtree(self.temp_dir)
 
     def test_create_migrations_dir_success(self):

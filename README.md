@@ -21,9 +21,10 @@ pip install migrateit
 ```
 
 ### Configuration
+
 Configurations can be changed as environment variables.
 
-```sh
+```ini
 # basic configuration
 MIGRATEIT_DATABASE=postgresql
 MIGRATEIT_MIGRATIONS_TABLE=MIGRATEIT_CHANGELOG
@@ -73,7 +74,27 @@ migrateit migrate
 migrateit migrate 0000
 ```
 
-# HELP
+# Example
+
+```sql
+-- Migration 0000_user.sql
+-- Created on 2025-05-15T19:55:18.711752
+
+CREATE TABLE IF NOT EXISTS users (
+	id SERIAL PRIMARY KEY,
+	email TEXT NOT NULL UNIQUE,
+	given_name TEXT,
+	family_name TEXT,
+	picture TEXT,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Rollback migration
+
+DROP TABLE IF EXISTS users;
+```
+
+# Help
 
 ```sh
 usage: migrateit newmigration [-h] name
