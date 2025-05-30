@@ -16,7 +16,9 @@ def _get_connection():
     match C.DATABASE:
         case SupportedDatabase.POSTGRES.value:
             db_url = PsqlClient.get_environment_url()
-            return psycopg2.connect(db_url)
+            conn = psycopg2.connect(db_url)
+            conn.autocommit = False
+            return conn
         case _:
             raise NotImplementedError(f"Database {C.DATABASE} is not supported")
 

@@ -28,6 +28,7 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     write_line(f"\tCreating migrations table: {table_name}")
     db_url = PsqlClient.get_environment_url()
     with psycopg2.connect(db_url) as conn:
+        conn.autocommit = False
         config = MigrateItConfig(
             table_name=table_name,
             migrations_dir=migrations_dir,

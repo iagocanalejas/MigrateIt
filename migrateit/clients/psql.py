@@ -203,17 +203,16 @@ class PsqlClient(SqlClient[Connection]):
         assert path.name.endswith(".sql"), f"Migration file {path.name} must be a SQL file"
 
         migration_code, reverse_migration_code, _ = self._get_content_hash(path)
+
         with self.connection.cursor() as cursor:
             try:
-                cursor.execute(f"PREPARE stmt AS {migration_code}")
-                cursor.execute("DEALLOCATE stmt")
+                cursor.execute(migration_code)
             except ProgrammingError as e:
                 return e, migration_code
             finally:
                 self.connection.rollback()
             try:
-                cursor.execute(f"PREPARE rev_stmt AS {reverse_migration_code}")
-                cursor.execute("DEALLOCATE rev_stmt")
+                cursor.execute(reverse_migration_code)
             except ProgrammingError as e:
                 return e, reverse_migration_code
             finally:
