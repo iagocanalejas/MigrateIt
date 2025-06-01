@@ -41,7 +41,7 @@ def main() -> int:
     parser_init.set_defaults(func=commands.cmd_init)
 
     # migrateit init
-    parser_init = subparsers.add_parser("newmigration", help="Create a new migration")
+    parser_init = subparsers.add_parser("new", help="Create a new migration")
     parser_init.add_argument("name", help="Name of the new migration")
     parser_init.set_defaults(func=commands.cmd_new)
 
@@ -63,15 +63,21 @@ def main() -> int:
     )
     parser_run.set_defaults(func=commands.cmd_run)
 
-    # migrateit status
-    parser_status = subparsers.add_parser("showmigrations", help="Show migration status")
-    parser_status.add_argument(
+    parser_show = subparsers.add_parser("show", help="Show migration status")
+    parser_show.add_argument(
+        "-l",
+        "--list",
+        action="store_true",
+        default=False,
+        help="Display migrations in a list format.",
+    )
+    parser_show.add_argument(
         "--validate-sql",
         action="store_true",
         default=False,
         help="Validate SQL migration sintax.",
     )
-    parser_status.set_defaults(func=commands.cmd_status)
+    parser_show.set_defaults(func=commands.cmd_show)
 
     args = parser.parse_args()
 
@@ -100,10 +106,14 @@ def main() -> int:
             )
             with _get_connection() as conn:
                 client = PsqlClient(conn, config)
-                if args.command == "newmigration":
+                if args.command == "new":
                     return commands.cmd_new(client, args)
-                elif args.command == "showmigrations":
-                    return commands.cmd_status(client, args)
+                elif args.command == "show":
+                    return commands.cmd_show(
+                        client,
+                        list_mode=args.list,
+                        validate_sql=args.validate_sql,
+                    )
                 elif args.command == "migrate":
                     return commands.cmd_run(client, args)
                 else:

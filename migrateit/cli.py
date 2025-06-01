@@ -9,6 +9,7 @@ from migrateit.models import (
     SupportedDatabase,
 )
 from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, print_dag, write_line
+from migrateit.reporters.output import print_list
 from migrateit.tree import (
     build_migration_plan,
     build_migrations_tree,
@@ -88,9 +89,7 @@ def cmd_run(client: SqlClient, args) -> int:
     return 0
 
 
-def cmd_status(client: SqlClient, args) -> int:
-    validate_sql = args.validate_sql
-
+def cmd_show(client: SqlClient, list_mode: bool = False, validate_sql: bool = False) -> int:
     migrations = build_migrations_tree(client.changelog)
     status_map = client.retrieve_migration_statuses()
     status_count = {status: 0 for status in MigrationStatus}
@@ -101,7 +100,11 @@ def cmd_status(client: SqlClient, args) -> int:
     write_line("\nMigration Precedence DAG:\n")
     write_line(f"{'Migration File':<40} | {'Status'}")
     write_line("-" * 60)
-    print_dag(next(iter(migrations)), migrations, status_map)
+
+    if list_mode:
+        print_list(migrations, status_map)
+    else:
+        print_dag(next(iter(migrations)), migrations, status_map)
 
     write_line("\nSummary:")
     for status, label in {

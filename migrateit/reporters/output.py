@@ -71,7 +71,7 @@ def print_dag(
 
     # indicate repeated visit
     repeat_marker = " (*)" if name in seen else ""
-    write_line(f"{indent}{name:<30} | {status_str}{repeat_marker}")
+    write_line(f"{indent}{name:<40} | {status_str}{repeat_marker}")
 
     if name in seen:
         return
@@ -79,6 +79,13 @@ def print_dag(
 
     for child in children.get(name, []):
         print_dag(child.name, children, status_map, level + 1, seen)
+
+
+def print_list(children: dict[str, list[Migration]], status_map: dict[str, MigrationStatus]) -> None:
+    for name in children.keys():
+        status = status_map[name]
+        status_str = f"{STATUS_COLORS[status]}{status.name.replace('_', ' ').title()}{STATUS_COLORS['reset']}"
+        write_line(f"{name:<40} | {status_str}")
 
 
 def pretty_print_sql_error(error: ProgrammingError, sql_query: str):

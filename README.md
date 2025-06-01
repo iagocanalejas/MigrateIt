@@ -59,13 +59,14 @@ DB_PASS=postgres
 migrateit init
 
 # create a new migration file
-migrateit newmigration first_migration
+migrateit new first_migration
 
 # add your sql commands to the migration file
 echo "CREATE TABLE test (id SERIAL PRIMARY KEY, name VARCHAR(50));" > migrateit/migrations/0000_first_migration.sql
 
 # show pending migrations
-migrateit showmigrations
+migrateit show
+migrateit show -l
 
 # run the migrations
 migrateit migrate
@@ -97,7 +98,7 @@ DROP TABLE IF EXISTS users;
 # Help
 
 ```sh
-usage: migrateit newmigration [-h] name
+usage: migrateit new [-h] name
 
 positional arguments:
   name        Name of the new migration
@@ -120,9 +121,10 @@ options:
 ```
 
 ```sh
-usage: migrateit showmigrations [-h] [--validate-sql]
+usage: migrateit show [-h] [-l] [--validate-sql]
 
 options:
   -h, --help      show this help message and exit
+  -l, --list      Display migrations in a list format.
   --validate-sql  Validate SQL migration sintax.
 ```
