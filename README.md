@@ -26,7 +26,6 @@ Configurations can be changed as environment variables.
 
 ```ini
 # basic configuration
-MIGRATEIT_DATABASE=postgresql
 MIGRATEIT_MIGRATIONS_TABLE=MIGRATEIT_CHANGELOG
 MIGRATEIT_MIGRATIONS_DIR=migrateit
 
@@ -56,7 +55,7 @@ DB_PASS=postgres
 # - database table in the configured database
 # - 'migrations' directory inside the MIGRATIONS_DIR
 # - 'changelog.json' file inside the MIGRATIONS_DIR
-migrateit init
+migrateit init postgres
 
 # create a new migration file
 migrateit new first_migration

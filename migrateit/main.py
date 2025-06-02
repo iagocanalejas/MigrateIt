@@ -32,28 +32,25 @@ def main() -> int:
 
     print_logo()
     with error_handler(), logging_handler(True):
-        if C.DATABASE not in [db.value for db in SupportedDatabase]:
-            raise FatalError(
-                f"Database {C.DATABASE} is not supported."
-                f"Supported databases are: {[db.value for db in SupportedDatabase]}"
-            )
-
         if hasattr(args, "func"):
             if args.command == "init":
+                if args.database not in [db.value for db in SupportedDatabase]:
+                    raise FatalError(f"Unsupported database type: {args.database}.")
                 return commands.cmd_init(
                     table_name=C.MIGRATEIT_MIGRATIONS_TABLE,
                     migrations_dir=Path(C.MIGRATEIT_ROOT_DIR) / "migrations",
                     migrations_file=Path(C.MIGRATEIT_ROOT_DIR) / "changelog.json",
-                    database=SupportedDatabase(C.DATABASE),
+                    database=SupportedDatabase(args.database),
                 )
 
             root = Path(C.MIGRATEIT_ROOT_DIR)
+            changelog = load_changelog_file(root / "changelog.json")
             config = MigrateItConfig(
                 table_name=C.MIGRATEIT_MIGRATIONS_TABLE,
                 migrations_dir=root / "migrations",
-                changelog=load_changelog_file(root / "changelog.json"),
+                changelog=changelog,
             )
-            with _get_connection() as conn:
+            with _get_connection(changelog.database) as conn:
                 client = PsqlClient(conn, config)
                 if args.command == "new":
                     return commands.cmd_new(client, name=args.name)
@@ -86,6 +83,7 @@ def main() -> int:
 
 def _cmd_init(subparsers) -> argparse.ArgumentParser:
     parser = subparsers.add_parser("init", help="Initialize the migration directory and database")
+    parser.add_argument("database", help="Database type to use", choices=[db.value for db in SupportedDatabase])
     parser.set_defaults(func=commands.cmd_init)
     return parser
 
@@ -144,15 +142,15 @@ def _cmd_show(subparsers) -> argparse.ArgumentParser:
 
 
 # TODO: add support for other databases
-def _get_connection():
-    match C.DATABASE:
-        case SupportedDatabase.POSTGRES.value:
+def _get_connection(database: SupportedDatabase):
+    match database:
+        case SupportedDatabase.POSTGRES:
             db_url = PsqlClient.get_environment_url()
             conn = psycopg2.connect(db_url)
             conn.autocommit = False
             return conn
         case _:
-            raise NotImplementedError(f"Database {C.DATABASE} is not supported")
+            raise NotImplementedError(f"Database {database} is not supported")
 
 
 if __name__ == "__main__":
