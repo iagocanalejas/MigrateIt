@@ -11,18 +11,6 @@ from migrateit.reporters import FatalError, error_handler, logging_handler, prin
 from migrateit.tree import load_changelog_file
 
 
-# TODO: add support for other databases
-def _get_connection():
-    match C.DATABASE:
-        case SupportedDatabase.POSTGRES.value:
-            db_url = PsqlClient.get_environment_url()
-            conn = psycopg2.connect(db_url)
-            conn.autocommit = False
-            return conn
-        case _:
-            raise NotImplementedError(f"Database {C.DATABASE} is not supported")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(prog="migrateit", description="Migration tool")
 
@@ -35,50 +23,11 @@ def main() -> int:
     )
 
     subparsers = parser.add_subparsers(dest="command")
-
-    # migrateit init
-    parser_init = subparsers.add_parser("init", help="Initialize the migration directory and database")
-    parser_init.set_defaults(func=commands.cmd_init)
-
-    # migrateit init
-    parser_init = subparsers.add_parser("new", help="Create a new migration")
-    parser_init.add_argument("name", help="Name of the new migration")
-    parser_init.set_defaults(func=commands.cmd_new)
-
-    # migrateit run
-    parser_run = subparsers.add_parser("migrate", help="Run migrations")
-    parser_run.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
-    parser_run.add_argument("--fake", action="store_true", default=False, help="Fakes the migration marking it as ran.")
-    parser_run.add_argument(
-        "--update-hash",
-        action="store_true",
-        default=False,
-        help="Update the hash of the migration.",
-    )
-    parser_run.add_argument(
-        "--rollback",
-        action="store_true",
-        default=False,
-        help="Undo the given migration and all its applied childs.",
-    )
-    parser_run.set_defaults(func=commands.cmd_run)
-
-    parser_show = subparsers.add_parser("show", help="Show migration status")
-    parser_show.add_argument(
-        "-l",
-        "--list",
-        action="store_true",
-        default=False,
-        help="Display migrations in a list format.",
-    )
-    parser_show.add_argument(
-        "--validate-sql",
-        action="store_true",
-        default=False,
-        help="Validate SQL migration sintax.",
-    )
-    parser_show.set_defaults(func=commands.cmd_show)
-
+    _cmd_init(subparsers)
+    _cmd_new(subparsers)
+    _cmd_migrate(subparsers)
+    _cmd_rollback(subparsers)
+    _cmd_show(subparsers)
     args = parser.parse_args()
 
     print_logo()
@@ -107,7 +56,7 @@ def main() -> int:
             with _get_connection() as conn:
                 client = PsqlClient(conn, config)
                 if args.command == "new":
-                    return commands.cmd_new(client, args)
+                    return commands.cmd_new(client, name=args.name)
                 elif args.command == "show":
                     return commands.cmd_show(
                         client,
@@ -115,12 +64,95 @@ def main() -> int:
                         validate_sql=args.validate_sql,
                     )
                 elif args.command == "migrate":
-                    return commands.cmd_run(client, args)
+                    return commands.cmd_run(
+                        client,
+                        args.name,
+                        is_fake=args.fake,
+                        is_hash_update=args.update_hash,
+                    )
+                elif args.command == "rollback":
+                    return commands.cmd_run(
+                        client,
+                        args.name,
+                        is_fake=args.fake,
+                        is_rollback=True,
+                    )
                 else:
                     raise NotImplementedError(f"Command {args.command} not implemented.")
         else:
             parser.print_help()
             return 1
+
+
+def _cmd_init(subparsers) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser("init", help="Initialize the migration directory and database")
+    parser.set_defaults(func=commands.cmd_init)
+    return parser
+
+
+def _cmd_new(subparsers) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser("new", help="Create a new migration")
+    parser.add_argument("name", help="Name of the new migration")
+    parser.set_defaults(func=commands.cmd_new)
+    return parser
+
+
+def _cmd_migrate(subparsers) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser("migrate", help="Run migrations")
+    parser.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
+    parser.add_argument("--fake", action="store_true", default=False, help="Fakes the migration marking it as ran.")
+    parser.add_argument(
+        "--update-hash",
+        action="store_true",
+        default=False,
+        help="Update the hash of the migration.",
+    )
+    parser.set_defaults(func=commands.cmd_run)
+    return parser
+
+
+def _cmd_rollback(subparsers) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser("rollback", help="Rollback migrations")
+    parser.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
+    parser.add_argument(
+        "--fake",
+        action="store_true",
+        default=False,
+        help="Fakes the migration marking it as ran.",
+    )
+    parser.set_defaults(func=commands.cmd_run)
+    return parser
+
+
+def _cmd_show(subparsers) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser("show", help="Show migration status")
+    parser.add_argument(
+        "-l",
+        "--list",
+        action="store_true",
+        default=False,
+        help="Display migrations in a list format.",
+    )
+    parser.add_argument(
+        "--validate-sql",
+        action="store_true",
+        default=False,
+        help="Validate SQL migration syntax.",
+    )
+    parser.set_defaults(func=commands.cmd_show)
+    return parser
+
+
+# TODO: add support for other databases
+def _get_connection():
+    match C.DATABASE:
+        case SupportedDatabase.POSTGRES.value:
+            db_url = PsqlClient.get_environment_url()
+            conn = psycopg2.connect(db_url)
+            conn.autocommit = False
+            return conn
+        case _:
+            raise NotImplementedError(f"Database {C.DATABASE} is not supported")
 
 
 if __name__ == "__main__":

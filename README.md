@@ -73,6 +73,9 @@ migrateit migrate
 
 # or run a given migration
 migrateit migrate 0000
+
+# rollback a migration
+migrateit rollback 0000
 ```
 
 # Example

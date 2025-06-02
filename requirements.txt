@@ -1,2 +1,1 @@
 psycopg2-binary==2.9.10
-pyutils @ git+https://github.com/iagocanalejas/pyutils.git@master

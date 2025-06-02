@@ -40,16 +40,21 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     return 0
 
 
-def cmd_new(client: SqlClient, args) -> int:
+def cmd_new(client: SqlClient, name: str) -> int:
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    create_new_migration(changelog=client.changelog, migrations_dir=client.migrations_dir, name=args.name)
+    create_new_migration(changelog=client.changelog, migrations_dir=client.migrations_dir, name=name)
     return 0
 
 
-def cmd_run(client: SqlClient, args) -> int:
+def cmd_run(
+    client: SqlClient,
+    name: str | None = None,
+    is_fake: bool = False,
+    is_rollback: bool = False,
+    is_hash_update: bool = False,
+) -> int:
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    is_fake, is_rollback, is_hash_update = args.fake, args.rollback, args.update_hash
-    target_migration = client.changelog.get_migration_by_name(args.name) if args.name else None
+    target_migration = client.changelog.get_migration_by_name(name) if name else None
 
     if is_hash_update:
         assert target_migration, "Hash update requires a target migration"
