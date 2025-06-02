@@ -1,16 +1,14 @@
 from pathlib import Path
 
-import psycopg2
-
 from migrateit.clients import PsqlClient, SqlClient
 from migrateit.models import (
-    MigrateItConfig,
     MigrationStatus,
     SupportedDatabase,
 )
 from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, print_dag, write_line
 from migrateit.reporters.output import print_list
 from migrateit.tree import (
+    ROLLBACK_SPLIT_TAG,
     build_migration_plan,
     build_migrations_tree,
     create_changelog_file,
@@ -26,16 +24,32 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     write_line(f"\tCreating migrations directory: {migrations_dir}")
     create_migration_directory(migrations_dir)
 
-    write_line(f"\tCreating migrations table: {table_name}")
-    db_url = PsqlClient.get_environment_url()
-    with psycopg2.connect(db_url) as conn:
-        conn.autocommit = False
-        config = MigrateItConfig(
-            table_name=table_name,
-            migrations_dir=migrations_dir,
-            changelog=changelog,
-        )
-        PsqlClient(conn, config).create_migrations_table()
+    write_line(f"\tCreating migration for table: {table_name}")
+    migration = create_new_migration(changelog=changelog, migrations_dir=migrations_dir, name="migrateit")
+    match database:
+        case SupportedDatabase.POSTGRES:
+            sql, rollback = PsqlClient.create_migrations_table_str(table_name=table_name)
+        case _:
+            raise NotImplementedError(f"Database {database} is not supported yet")
+
+    path = Path(migrations_dir / migration.name)
+    migration_content = path.read_text(encoding="utf-8")
+    if ROLLBACK_SPLIT_TAG not in migration_content:
+        raise ValueError(f"Migration {migration.name} does not contain a rollback section ({ROLLBACK_SPLIT_TAG})")
+
+    parts = migration_content.split(ROLLBACK_SPLIT_TAG, maxsplit=1)
+    new_content = (
+        parts[0].rstrip()
+        + "\n\n"
+        + sql.strip()
+        + "\n\n"
+        + ROLLBACK_SPLIT_TAG
+        + parts[1].rstrip()
+        + "\n\n"
+        + rollback.strip()
+    )
+
+    path.write_text(new_content, encoding="utf-8")
 
     return 0
 
@@ -53,7 +67,6 @@ def cmd_run(
     is_rollback: bool = False,
     is_hash_update: bool = False,
 ) -> int:
-    assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
     target_migration = client.changelog.get_migration_by_name(name) if name else None
 
     if is_hash_update:

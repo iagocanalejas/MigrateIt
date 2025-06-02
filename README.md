@@ -52,9 +52,9 @@ DB_PASS=postgres
 
 ```sh
 # initialize MigrateIt to create:
-# - database table in the configured database
 # - 'migrations' directory inside the MIGRATIONS_DIR
 # - 'changelog.json' file inside the MIGRATIONS_DIR
+# - first migration file with the migrateit table creation and rollback
 migrateit init postgres
 
 # create a new migration file

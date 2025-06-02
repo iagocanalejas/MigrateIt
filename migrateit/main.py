@@ -33,17 +33,17 @@ def main() -> int:
     print_logo()
     with error_handler(), logging_handler(True):
         if hasattr(args, "func"):
+            root = Path(C.MIGRATEIT_ROOT_DIR)
             if args.command == "init":
                 if args.database not in [db.value for db in SupportedDatabase]:
                     raise FatalError(f"Unsupported database type: {args.database}.")
                 return commands.cmd_init(
                     table_name=C.MIGRATEIT_MIGRATIONS_TABLE,
-                    migrations_dir=Path(C.MIGRATEIT_ROOT_DIR) / "migrations",
-                    migrations_file=Path(C.MIGRATEIT_ROOT_DIR) / "changelog.json",
+                    migrations_dir=root / "migrations",
+                    migrations_file=root / "changelog.json",
                     database=SupportedDatabase(args.database),
                 )
 
-            root = Path(C.MIGRATEIT_ROOT_DIR)
             changelog = load_changelog_file(root / "changelog.json")
             config = MigrateItConfig(
                 table_name=C.MIGRATEIT_MIGRATIONS_TABLE,

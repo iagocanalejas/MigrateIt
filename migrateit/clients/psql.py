@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import override
 
-from psycopg2 import DatabaseError, ProgrammingError, sql
+from psycopg2 import DatabaseError, ProgrammingError
 from psycopg2.extensions import connection as Connection
 
 from migrateit.clients._client import SqlClient
@@ -28,17 +28,35 @@ class PsqlClient(SqlClient[Connection]):
         return db_url
 
     @override
+    @classmethod
+    def create_migrations_table_str(cls, table_name: str) -> tuple[str, str]:
+        if not table_name.isidentifier():
+            raise ValueError(f"Unsafe table name: {table_name}")
+        return (
+            f"""
+CREATE TABLE IF NOT EXISTS {table_name} (
+    id SERIAL PRIMARY KEY,
+    migration_name VARCHAR(255) UNIQUE NOT NULL,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    change_hash VARCHAR(64) NOT NULL
+);
+            """,
+            f"""
+DROP TABLE IF EXISTS {table_name};
+            """,
+        )
+
+    @override
     def is_migrations_table_created(self) -> bool:
         with self.connection.cursor() as cursor:
             cursor.execute(
-                """
+                f"""
                 SELECT EXISTS (
                     SELECT 1
                     FROM information_schema.tables
-                    WHERE LOWER(table_name) = LOWER(%s)
+                    WHERE LOWER(table_name) = LOWER('{self.table_name}')
                 );
-                """,
-                (self.table_name,),
+                """
             )
             result = cursor.fetchone()
             return result[0] if result else False
@@ -47,49 +65,21 @@ class PsqlClient(SqlClient[Connection]):
     def is_migration_applied(self, migration: Migration) -> bool:
         with self.connection.cursor() as cursor:
             cursor.execute(
-                sql.SQL("""
-                    SELECT EXISTS (
-                        SELECT 1
-                        FROM {}
-                        WHERE migration_name = %s
-                    );
-                """).format(sql.Identifier(self.table_name)),
+                f"""SELECT EXISTS (SELECT 1 FROM {self.table_name} WHERE migration_name = %s);""",
                 (os.path.basename(migration.name),),
             )
             result = cursor.fetchone()
             return result[0] if result else False
 
     @override
-    def create_migrations_table(self) -> None:
-        assert not self.is_migrations_table_created(), f"Migrations table={self.table_name} already exists"
-
-        try:
-            with self.connection.cursor() as cursor:
-                cursor.execute(
-                    sql.SQL("""
-                        CREATE TABLE {} (
-                            id SERIAL PRIMARY KEY,
-                            migration_name VARCHAR(255) UNIQUE NOT NULL,
-                            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            change_hash VARCHAR(64) NOT NULL
-                        );
-                    """).format(sql.Identifier(self.table_name))
-                )
-                self.connection.commit()
-        except (DatabaseError, ProgrammingError) as e:
-            self.connection.rollback()
-            raise e
-
-    @override
     def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
-        assert self.is_migrations_table_created(), f"Migrations table={self.table_name} does not exist"
-
         migrations = {k: MigrationStatus.NOT_APPLIED for k, _ in build_migrations_tree(self.changelog).items()}
 
+        if not self.is_migrations_table_created():
+            return migrations
+
         with self.connection.cursor() as cursor:
-            cursor.execute(
-                sql.SQL("""SELECT migration_name, change_hash FROM {}""").format(sql.Identifier(self.table_name))
-            )
+            cursor.execute(f"""SELECT migration_name, change_hash FROM {self.table_name}""")
             rows = cursor.fetchall()
 
         for row in rows:
@@ -109,14 +99,12 @@ class PsqlClient(SqlClient[Connection]):
     @override
     def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
         path = self.migrations_dir / migration.name
-        assert path.exists(), f"Migration file {path.name} does not exist"
-        assert path.is_file(), f"Migration file {path.name} is not a file"
-        assert path.name.endswith(".sql"), f"Migration file {path.name} must be a SQL file"
-        assert self.is_migration_applied(migration) == is_rollback, (
-            f"Migration {path.name} is already applied, cannot apply it again"
-            if not is_rollback
-            else f"Migration {path.name} is not applied, cannot undo it"
-        )
+        if not path.exists() or not path.is_file() or not path.name.endswith(".sql"):
+            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
+        if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
+            if is_rollback:
+                raise ValueError(f"Migration {path.name} is not applied, cannot undo it")
+            raise ValueError(f"Migration {path.name} is already applied, cannot apply it again")
 
         migration_code, reverse_migration_code, migration_hash = self._get_content_hash(path)
 
@@ -124,19 +112,16 @@ class PsqlClient(SqlClient[Connection]):
             with self.connection.cursor() as cursor:
                 if not is_fake:
                     cursor.execute(migration_code if not is_rollback else reverse_migration_code)
+                    if migration.initial:
+                        self.connection.commit()
                 if is_rollback:
                     cursor.execute(
-                        sql.SQL("""
-                            DELETE FROM {} where migration_name = %s and change_hash = %s;
-                        """).format(sql.Identifier(self.table_name)),
+                        f"""DELETE FROM {self.table_name} where migration_name = %s and change_hash = %s;""",
                         (os.path.basename(path), migration_hash),
                     )
                 else:
                     cursor.execute(
-                        sql.SQL("""
-                            INSERT INTO {} (migration_name, change_hash)
-                            VALUES (%s, %s);
-                        """).format(sql.Identifier(self.table_name)),
+                        f"""INSERT INTO {self.table_name} (migration_name, change_hash) VALUES (%s, %s);""",
                         (os.path.basename(path), migration_hash),
                     )
         except (DatabaseError, ProgrammingError) as e:
@@ -146,17 +131,14 @@ class PsqlClient(SqlClient[Connection]):
     @override
     def update_migration_hash(self, migration: Migration) -> None:
         path = self.migrations_dir / migration.name
-        assert path.exists(), f"Migration file {path.name} does not exist"
-        assert path.is_file(), f"Migration file {path.name} is not a file"
-        assert path.name.endswith(".sql"), f"Migration file {path.name} must be a SQL file"
+        if not path.exists() or not path.is_file() or not path.name.endswith(".sql"):
+            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
 
         _, _, migration_hash = self._get_content_hash(path)
 
         with self.connection.cursor() as cursor:
             cursor.execute(
-                sql.SQL("""
-                    UPDATE {} SET change_hash = %s WHERE migration_name = %s;
-                """).format(sql.Identifier(self.table_name)),
+                f"""UPDATE {self.table_name} SET change_hash = %s WHERE migration_name = %s;""",
                 (migration_hash, os.path.basename(path)),
             )
             self.connection.commit()
@@ -166,10 +148,10 @@ class PsqlClient(SqlClient[Connection]):
         if len(self.changelog.migrations) == 0:
             return
 
-        assert self.changelog.migrations[0].initial, "Initial migration not found in changelog"
-        assert len([m for m in self.changelog.migrations if m.initial]) == 1, (
-            "Multiple initial migrations found in changelog"
-        )
+        if not self.changelog.migrations[0].initial:
+            raise ValueError("Initial migration is not defined in the changelog")
+        if len([m for m in self.changelog.migrations if m.initial]) > 1:
+            raise ValueError("Multiple initial migrations found in the changelog")
 
         # check removed migrations
         removed_migrations = [m for m, s in status_map.items() if s == MigrationStatus.REMOVED]
@@ -198,9 +180,8 @@ class PsqlClient(SqlClient[Connection]):
     @override
     def validate_sql_sintax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
         path = self.migrations_dir / migration.name
-        assert path.exists(), f"Migration file {path.name} does not exist"
-        assert path.is_file(), f"Migration file {path.name} is not a file"
-        assert path.name.endswith(".sql"), f"Migration file {path.name} must be a SQL file"
+        if not path.exists() or not path.is_file() or not path.name.endswith(".sql"):
+            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
 
         migration_code, reverse_migration_code, _ = self._get_content_hash(path)
 
@@ -222,13 +203,13 @@ class PsqlClient(SqlClient[Connection]):
     def _get_database_hash(self, migration_name: str) -> str:
         with self.connection.cursor() as cursor:
             cursor.execute(
-                sql.SQL("""
-                    SELECT change_hash FROM {} WHERE migration_name = %s
-                """).format(sql.Identifier(self.table_name)),
+                f"""SELECT change_hash FROM {self.table_name} WHERE migration_name = %s""",
                 (migration_name,),
             )
             result = cursor.fetchone()
-            assert result and result[0], f"Migration {migration_name} not found in the database"
+
+            if not result or not result[0]:
+                raise ValueError(f"Migration {migration_name} not found in the database")
             return result[0]
 
     def _get_content_hash(self, path: Path) -> tuple[str, str, str]:

@@ -63,7 +63,7 @@ def create_changelog_file(migrations_file: Path, database: SupportedDatabase) ->
     assert migrations_file.name.endswith(".json"), f"File {migrations_file.name} must be a JSON file"
     changelog = ChangelogFile(version=1, database=database)
     migrations_file.write_text(changelog.to_json())
-    return changelog
+    return load_changelog_file(migrations_file)
 
 
 def load_changelog_file(file_path: Path) -> ChangelogFile:

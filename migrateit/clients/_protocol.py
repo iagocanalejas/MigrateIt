@@ -16,6 +16,19 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
+    @classmethod
+    def create_migrations_table_str(cls, table_name: str) -> tuple[str, str]:
+        """
+        Create the SQL string to create the migrations table.
+
+        Args:
+            table_name: The name of the migrations table.
+
+        Returns:
+            The SQL string to create the migrations table and it's rollback.
+        """
+        ...
+
     def is_migrations_table_created(self) -> bool:
         """
         Check if the migrations table exists in the database.
@@ -34,12 +47,6 @@ class SqlClientProtocol(Protocol):
 
         Returns:
             True if the migration has been applied, False otherwise.
-        """
-        ...
-
-    def create_migrations_table(self) -> None:
-        """
-        Create the migrations table in the database.
         """
         ...
 

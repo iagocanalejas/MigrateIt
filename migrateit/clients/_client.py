@@ -30,7 +30,8 @@ class SqlClient[T](ABC, SqlClientProtocol):
         return self.config.changelog
 
     def __init__(self, connection: T, config: MigrateItConfig):
-        assert connection is not None, "Database connection is required"
+        if connection is None:
+            raise ValueError("Database connection cannot be None")
 
         self.validate_config(config)
 
@@ -39,10 +40,16 @@ class SqlClient[T](ABC, SqlClientProtocol):
 
     @staticmethod
     def validate_config(config: MigrateItConfig) -> None:
-        assert config.table_name, "Table name is required"
-        assert isinstance(config.table_name, str), "Table name must be a string"
-        assert len(config.table_name) > 0, "Table name cannot be empty"
-        assert config.table_name.isidentifier(), "Table name must be a valid identifier"
+        if not config.table_name:
+            raise ValueError("Table name is required")
+        if not isinstance(config.table_name, str):
+            raise TypeError("Table name must be a string")
+        if len(config.table_name) == 0:
+            raise ValueError("Table name cannot be empty")
+        if not config.table_name.isidentifier():
+            raise ValueError("Table name must be a valid identifier")
 
-        assert config.migrations_dir, "Migrations directory is required"
-        assert config.changelog.path, "Migrations file is required"
+        if not config.migrations_dir:
+            raise ValueError("Migrations directory is required")
+        if not config.changelog.path:
+            raise ValueError("Migrations file is required")
