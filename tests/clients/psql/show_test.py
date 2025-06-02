@@ -1,9 +1,8 @@
 from unittest.mock import patch
 
-from tests.clients.psql._base_test import BasePsqlTest
-
 from migrateit.clients import PsqlClient
 from migrateit.models import ChangelogFile, Migration, MigrationStatus
+from tests.clients.psql._base_test import BasePsqlTest
 
 
 class TestPsqlClientShowMigrations(BasePsqlTest):

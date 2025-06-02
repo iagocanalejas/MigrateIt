@@ -16,7 +16,7 @@ from migrateit.tree import (
 
 
 @patch("migrateit.reporters.output.write_line_b", lambda *_: None)
-class TestMigrationFileUtils(unittest.TestCase):
+class TestTreeUtils(unittest.TestCase):
     def setUp(self):
         self.temp_dir = Path(tempfile.mkdtemp())
         self.migrations_dir = self.temp_dir / "migrations"

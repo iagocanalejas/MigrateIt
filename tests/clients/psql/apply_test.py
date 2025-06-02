@@ -1,9 +1,8 @@
 import os
 
-from tests.clients.psql._base_test import BasePsqlTest
-
 from migrateit.models import ChangelogFile, Migration
 from migrateit.tree import ROLLBACK_SPLIT_TAG
+from tests.clients.psql._base_test import BasePsqlTest
 
 
 class TestPsqlClientApplyMigrations(BasePsqlTest):
@@ -18,21 +17,8 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
             cursor.execute(sql)
             self.connection.commit()
 
-    def tearDown(self):
-        with self.connection.cursor() as cursor:
-            cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_TABLE}")
-        self.connection.commit()
-        super().tearDown()
-
     def _create_empty_changelog(self) -> ChangelogFile:
         return ChangelogFile(version=1, migrations=[Migration(name="0000_migrateit.sql")])
-
-    def _create_migrations_file(self, filename: str, sql: str | None = None):
-        path = os.path.join(self.migrations_dir, filename)
-        with open(path, "w") as f:
-            f.write(sql or f"-- Migration {filename}\n")
-            f.write(f"{ROLLBACK_SPLIT_TAG}")
-        return path
 
     def test_apply_migration_success(self):
         filename = "0000_init.sql"

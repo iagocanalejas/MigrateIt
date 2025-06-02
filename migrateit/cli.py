@@ -147,7 +147,7 @@ def cmd_show(client: SqlClient, list_mode: bool = False, validate_sql: bool = Fa
         write_line("\nValidating SQL migrations...")
         msg = "SQL validation passed. No errors found."
         for migration in client.changelog.migrations:
-            err = client.validate_sql_sintax(migration)
+            err = client.validate_sql_syntax(migration)
             if err:
                 msg = "\nSQL validation failed. Please fix the errors above."
                 pretty_print_sql_error(err[0], err[1])

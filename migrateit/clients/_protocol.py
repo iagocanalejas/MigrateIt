@@ -90,7 +90,7 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def validate_sql_sintax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
+    def validate_sql_syntax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
         """
         Validate the SQL syntax of a migration.
 

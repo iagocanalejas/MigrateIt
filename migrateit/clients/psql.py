@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 from pathlib import Path
 from typing import override
 
@@ -99,7 +100,7 @@ DROP TABLE IF EXISTS {table_name};
     @override
     def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
         path = self.migrations_dir / migration.name
-        if not path.exists() or not path.is_file() or not path.name.endswith(".sql"):
+        if not path.is_file() or not path.name.endswith(".sql"):
             raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
         if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
             if is_rollback:
@@ -131,7 +132,7 @@ DROP TABLE IF EXISTS {table_name};
     @override
     def update_migration_hash(self, migration: Migration) -> None:
         path = self.migrations_dir / migration.name
-        if not path.exists() or not path.is_file() or not path.name.endswith(".sql"):
+        if not path.is_file() or not path.name.endswith(".sql"):
             raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
 
         _, _, migration_hash = self._get_content_hash(path)
@@ -178,27 +179,43 @@ DROP TABLE IF EXISTS {table_name};
                     raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
 
     @override
-    def validate_sql_sintax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
+    def validate_sql_syntax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
         path = self.migrations_dir / migration.name
-        if not path.exists() or not path.is_file() or not path.name.endswith(".sql"):
+        if not path.is_file() or not path.name.endswith(".sql"):
             raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
 
         migration_code, reverse_migration_code, _ = self._get_content_hash(path)
 
         with self.connection.cursor() as cursor:
-            try:
-                cursor.execute(migration_code)
-            except ProgrammingError as e:
-                return e, migration_code
-            finally:
-                self.connection.rollback()
-            try:
-                cursor.execute(reverse_migration_code)
-            except ProgrammingError as e:
-                return e, reverse_migration_code
-            finally:
-                self.connection.rollback()
+            for code in (migration_code, reverse_migration_code):
+                code = self._patch_sql_statement(code)
+                if not code:
+                    continue
+                try:
+                    cursor.execute(code)
+                except ProgrammingError as e:
+                    return e, code
+                finally:
+                    self.connection.rollback()
         return None
+
+    def _patch_sql_statement(self, sql: str) -> str:
+        # remove comments
+        sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+        sql = re.sub(r"--.*(?=\n|$)", "", sql).strip()
+
+        if not any(w in sql.upper() for w in ("CREATE", "ALTER", "DROP")):
+            return sql
+        if "CREATE TABLE" in sql.upper() and "IF NOT EXISTS" not in sql.upper():
+            return sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
+        if "DROP TABLE" in sql.upper() and "IF EXISTS" not in sql.upper():
+            return sql.replace("DROP TABLE", "DROP TABLE IF EXISTS")
+        if "ALTER TABLE" in sql.upper():
+            if "ADD COLUMN" in sql.upper() and "IF NOT EXISTS" not in sql.upper():
+                return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS")
+            if "DROP COLUMN" in sql.upper() and "IF EXISTS" not in sql.upper():
+                return sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS")
+        return sql
 
     def _get_database_hash(self, migration_name: str) -> str:
         with self.connection.cursor() as cursor:

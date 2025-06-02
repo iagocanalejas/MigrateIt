@@ -9,7 +9,7 @@ from migrateit.models.migration import Migration, MigrationStatus
 from migrateit.tree import build_migration_plan
 
 
-class TestBuildMigrationPlan(unittest.TestCase):
+class TestMigrationPlanBuilder(unittest.TestCase):
     def setUp(self):
         self.m1 = Migration(name="0001_init.sql", initial=True, parents=[])
         self.m2 = Migration(name="0002_add_users.sql", parents=["0001_init.sql"])
