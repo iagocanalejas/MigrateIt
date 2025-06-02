@@ -1,3 +1,7 @@
+import os
+import platform
+import shlex
+import subprocess
 from pathlib import Path
 
 from migrateit.clients import PsqlClient, SqlClient
@@ -54,10 +58,16 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     return 0
 
 
-def cmd_new(client: SqlClient, name: str) -> int:
+def cmd_new(client: SqlClient, name: str, no_edit: bool = False) -> int:
     assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
-    create_new_migration(changelog=client.changelog, migrations_dir=client.migrations_dir, name=name)
-    return 0
+    migration = create_new_migration(changelog=client.changelog, migrations_dir=client.migrations_dir, name=name)
+
+    if no_edit:
+        return 0
+
+    editor = os.getenv("EDITOR", "notepad.exe" if platform.system() == "Windows" else "vim")
+    cmd = shlex.split(editor) + [str(client.migrations_dir / migration.name)]
+    return subprocess.call(cmd)
 
 
 def cmd_run(

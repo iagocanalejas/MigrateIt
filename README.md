@@ -100,13 +100,14 @@ DROP TABLE IF EXISTS users;
 # Help
 
 ```sh
-usage: migrateit new [-h] name
+usage: migrateit new [-h] [--no-edit] name
 
 positional arguments:
   name        Name of the new migration
 
 options:
   -h, --help  show this help message and exit
+  --no-edit   Avoid opening the migration file in an editor after creation.
 ```
 
 ```sh

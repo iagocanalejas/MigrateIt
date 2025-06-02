@@ -53,7 +53,7 @@ def main() -> int:
             with _get_connection(changelog.database) as conn:
                 client = PsqlClient(conn, config)
                 if args.command == "new":
-                    return commands.cmd_new(client, name=args.name)
+                    return commands.cmd_new(client, name=args.name, no_edit=args.no_edit)
                 elif args.command == "show":
                     return commands.cmd_show(
                         client,
@@ -91,6 +91,12 @@ def _cmd_init(subparsers) -> argparse.ArgumentParser:
 def _cmd_new(subparsers) -> argparse.ArgumentParser:
     parser = subparsers.add_parser("new", help="Create a new migration")
     parser.add_argument("name", help="Name of the new migration")
+    parser.add_argument(
+        "--no-edit",
+        action="store_true",
+        default=False,
+        help="Avoid opening the migration file in an editor after creation.",
+    )
     parser.set_defaults(func=commands.cmd_new)
     return parser
 
