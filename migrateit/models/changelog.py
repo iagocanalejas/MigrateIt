@@ -55,4 +55,5 @@ class ChangelogFile:
         for migration in self.migrations:
             if migration.name.startswith(name):
                 return migration
-        raise ValueError(f"Migration {name} not found in changelog")
+
+        raise ValueError(f"Migration '{name}' not found in changelog")

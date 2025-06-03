@@ -95,8 +95,8 @@ class TestTreeUtils(unittest.TestCase):
         create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
         changelog = load_changelog_file(self.migrations_file_path)
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             create_new_migration(changelog, self.migrations_dir, "123-bad-name")
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             create_new_migration(changelog, self.migrations_dir, "")

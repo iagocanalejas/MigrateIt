@@ -45,6 +45,10 @@ class TestPsqlClientValidation(BasePsqlTest):
         )
         migration = Migration(name=filename, parents=["0000_migrateit.sql"])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
+        with self.connection.cursor() as cursor:
+            with self.assertRaises(ProgrammingError):
+                cursor.execute(f"SELECT * FROM {self.TEST_MIGRATIONS_TABLE}_extra;")
+        self.connection.rollback()
 
     def test_invalid_sql_in_migration_code(self):
         filename = "0003_invalid.sql"
@@ -122,6 +126,10 @@ class TestPsqlClientValidation(BasePsqlTest):
         migration = Migration(name=filename, parents=["0000_migrateit.sql"])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
+        with self.connection.cursor() as cursor:
+            cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}_alter;")
+            self.connection.commit()
+
     def test_validate_alter_table_drop_column(self):
         # First, create the table with the column
         with self.connection.cursor() as cursor:
@@ -134,6 +142,10 @@ class TestPsqlClientValidation(BasePsqlTest):
         )
         migration = Migration(name=filename, parents=["0000_migrateit.sql"])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
+
+        with self.connection.cursor() as cursor:
+            cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}_alter2;")
+            self.connection.commit()
 
     def test_invalid_drop_table_statement(self):
         filename = "0011_invalid_drop.sql"

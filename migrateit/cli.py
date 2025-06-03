@@ -9,8 +9,7 @@ from migrateit.models import (
     MigrationStatus,
     SupportedDatabase,
 )
-from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, print_dag, write_line
-from migrateit.reporters.output import print_list
+from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, print_dag, print_list, write_line
 from migrateit.tree import (
     ROLLBACK_SPLIT_TAG,
     build_migration_plan,
@@ -59,7 +58,9 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
 
 
 def cmd_new(client: SqlClient, name: str, no_edit: bool = False) -> int:
-    assert client.is_migrations_table_created(), f"Migrations table={client.table_name} does not exist"
+    if not client.is_migrations_table_created():
+        raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `migrateit init` first.")
+
     migration = create_new_migration(changelog=client.changelog, migrations_dir=client.migrations_dir, name=name)
 
     if no_edit:
@@ -80,21 +81,27 @@ def cmd_run(
     target_migration = client.changelog.get_migration_by_name(name) if name else None
 
     if is_hash_update:
-        assert target_migration, "Hash update requires a target migration"
+        if not target_migration:
+            raise ValueError("Hash update requires a target migration name")
+        if target_migration.initial:
+            raise ValueError("Cannot update hash for the initial migration")
         write_line(f"Updating hash for migration: {target_migration.name}")
         client.update_migration_hash(target_migration)
         return 0
 
     statuses = client.retrieve_migration_statuses()
     if is_fake:
-        # we don't validate fake migrations
-        assert target_migration, "Fake migration requires a target migration"
+        if not target_migration:
+            raise ValueError("Fake migration requires a target migration name")
+        if target_migration.initial:
+            raise ValueError("Cannot fake the initial migration")
         write_line(f"{'Faking' if not is_rollback else 'Faking rollback for'} migration: {target_migration.name}")
         client.apply_migration(target_migration, is_fake=is_fake, is_rollback=is_rollback)
         client.connection.commit()
         return 0
 
-    assert not is_rollback or target_migration, "Rollback requires a target migration"
+    if is_rollback and not target_migration:
+        raise ValueError("Rollback requires a target migration name")
     client.validate_migrations(statuses)
 
     migration_plan = build_migration_plan(

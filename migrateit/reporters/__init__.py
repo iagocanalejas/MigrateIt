@@ -22,5 +22,6 @@ from .output import (
     write_line_b as write_line_b,
     print_logo as print_logo,
     print_dag as print_dag,
+    print_list as print_list,
     pretty_print_sql_error as pretty_print_sql_error,
 )

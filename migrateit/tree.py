@@ -30,13 +30,14 @@ def create_new_migration(changelog: ChangelogFile, migrations_dir: Path, name: s
     Returns:
         A new Migration instance.
     """
-    assert name, "Migration name cannot be empty"
-    assert name.isidentifier(), f"Migration {name=} is not a valid identifier"
+    if not name.isidentifier():
+        raise ValueError(f"Migration name '{name}' is not a valid identifier")
 
     migration_files = [m.name for m in changelog.migrations]
 
     new_filepath = migrations_dir / f"{len(migration_files):04d}_{name}.sql"
-    assert not new_filepath.exists(), f"File {new_filepath.name} already exists"
+    if new_filepath.exists():
+        raise FileExistsError(f"Migration file {new_filepath.name} already exists")
     content = f"-- Migration {new_filepath.name}\n-- Created on {datetime.now().isoformat()}\n\n\n{ROLLBACK_SPLIT_TAG}"
     new_filepath.write_text(content)
 

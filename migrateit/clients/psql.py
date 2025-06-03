@@ -186,17 +186,17 @@ DROP TABLE IF EXISTS {table_name};
 
         migration_code, reverse_migration_code, _ = self._get_content_hash(path)
 
-        with self.connection.cursor() as cursor:
-            for code in (migration_code, reverse_migration_code):
-                code = self._patch_sql_statement(code)
-                if not code:
-                    continue
-                try:
+        for code in (migration_code, reverse_migration_code):
+            try:
+                with self.connection.cursor() as cursor:
+                    code = self._patch_sql_statement(code)
+                    if not code:
+                        continue
                     cursor.execute(code)
-                except ProgrammingError as e:
-                    return e, code
-                finally:
-                    self.connection.rollback()
+            except ProgrammingError as e:
+                return e, code
+            finally:
+                self.connection.rollback()
         return None
 
     def _patch_sql_statement(self, sql: str) -> str:
