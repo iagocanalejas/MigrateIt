@@ -57,11 +57,21 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     return 0
 
 
-def cmd_new(client: SqlClient, name: str, no_edit: bool = False) -> int:
+def cmd_new(
+    client: SqlClient,
+    name: str,
+    dependencies: list[str] | None = None,
+    no_edit: bool = False,
+) -> int:
     if not client.is_migrations_table_created():
-        raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `migrateit init` first.")
+        raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
 
-    migration = create_new_migration(changelog=client.changelog, migrations_dir=client.migrations_dir, name=name)
+    migration = create_new_migration(
+        changelog=client.changelog,
+        migrations_dir=client.migrations_dir,
+        name=name,
+        dependencies=dependencies,
+    )
 
     if no_edit:
         return 0

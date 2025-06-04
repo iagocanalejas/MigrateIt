@@ -126,7 +126,7 @@ class TestMigrationPlanBuilder(unittest.TestCase):
             "0001_init.sql": MigrationStatus.APPLIED,
         }
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             build_migration_plan(
                 self.changelog,
                 self.migration_tree,

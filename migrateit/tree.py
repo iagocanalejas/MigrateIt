@@ -20,13 +20,19 @@ def create_migration_directory(migrations_dir: Path) -> None:
 ROLLBACK_SPLIT_TAG = "-- Rollback migration"
 
 
-def create_new_migration(changelog: ChangelogFile, migrations_dir: Path, name: str) -> Migration:
+def create_new_migration(
+    changelog: ChangelogFile,
+    migrations_dir: Path,
+    name: str,
+    dependencies: list[str] | None = None,
+) -> Migration:
     """
     Create a new migration file in the given directory.
     Args:
         changelog: The changelog file to update.
         migrations_dir: Path to the migrations directory.
         name: The name of the new migration (must be a valid identifier).
+        dependencies: List of migration names that this migration depends on.
     Returns:
         A new Migration instance.
     """
@@ -35,21 +41,35 @@ def create_new_migration(changelog: ChangelogFile, migrations_dir: Path, name: s
 
     migration_files = [m.name for m in changelog.migrations]
 
+    # check if the name already exists and retrieve the full name
+    if dependencies and not all(changelog.exist_migration_by_name(dep) for dep in dependencies):
+        raise ValueError(f"Some dependencies {dependencies} do not exist in the changelog")
+    dependencies = [changelog.get_migration_by_name(dep).name for dep in dependencies] if dependencies else None
+
+    # check if this is the initial migration
+    is_initial = len(migration_files) == 0
+    if is_initial and dependencies:
+        raise ValueError("Initial migration cannot have dependencies")
+
+    # check if the name already exists (only can happen if a file was manually created)
     new_filepath = migrations_dir / f"{len(migration_files):04d}_{name}.sql"
     if new_filepath.exists():
         raise FileExistsError(f"Migration file {new_filepath.name} already exists")
+
+    # create the new migration file with a header and rollback tag
     content = f"-- Migration {new_filepath.name}\n-- Created on {datetime.now().isoformat()}\n\n\n{ROLLBACK_SPLIT_TAG}"
     new_filepath.write_text(content)
 
-    is_initial = len(migration_files) == 0
     new_migration = Migration(
         name=new_filepath.name,
         initial=is_initial,
-        parents=[] if is_initial else [migration_files[-1]],
+        parents=[] if is_initial else (dependencies or [migration_files[-1]]),
     )
     changelog.migrations.append(new_migration)
     save_changelog_file(changelog)
     write_line(f"\tMigration {new_migration.name} created successfully")
+    if dependencies:
+        write_line(f"\tAdded dependencies to: {', '.join(dependencies)}")
     return new_migration
 
 
@@ -60,8 +80,10 @@ def create_changelog_file(migrations_file: Path, database: SupportedDatabase) ->
         migrations_file: The path to the migrations file.
         database: The database type.
     """
-    assert not migrations_file.exists(), f"File {migrations_file.name} already exists"
-    assert migrations_file.name.endswith(".json"), f"File {migrations_file.name} must be a JSON file"
+    if migrations_file.exists():
+        raise ValueError(f"File {migrations_file.name} already exists")
+    if not migrations_file.name.endswith(".json"):
+        raise ValueError(f"File {migrations_file.name} must be a JSON file")
     changelog = ChangelogFile(version=1, database=database)
     migrations_file.write_text(changelog.to_json())
     return load_changelog_file(migrations_file)
@@ -75,16 +97,20 @@ def load_changelog_file(file_path: Path) -> ChangelogFile:
     Returns:
         ChangelogFile: The loaded migrations file.
     """
-    assert file_path.exists(), f"File {file_path.name} does not exist"
+    if not file_path.exists():
+        raise FileNotFoundError(f"File {file_path.name} does not exist")
     changelog = ChangelogFile.from_json(file_path.read_text(), file_path)
     if not changelog.migrations:
         return changelog
 
     # Check if the migrations are valid
-    assert len([m for m in changelog.migrations if m.initial]) <= 1, "Only one initial migration is allowed"
+    if len([m for m in changelog.migrations if m.initial]) > 1:
+        raise ValueError("Changelog must have exactly one initial migration")
     for m in changelog.migrations:
-        assert not m.initial or len(m.parents) == 0, f"Initial migration {m.name} cannot have parents"
-        assert m.initial or len(m.parents) > 0, f"Migration {m.name} must have parents"
+        if m.initial and len(m.parents) > 0:
+            raise ValueError(f"Initial migration {m.name} cannot have parents")
+        if not m.initial and len(m.parents) == 0:
+            raise ValueError(f"Migration {m.name} must have parents")
 
     return changelog
 
@@ -95,7 +121,8 @@ def save_changelog_file(changelog: ChangelogFile) -> None:
     Args:
         changelog: The changelog file to save.
     """
-    assert changelog.path.exists(), f"File {changelog.path.name} does not exist"
+    if not changelog.path.exists():
+        raise FileNotFoundError(f"File {changelog.path.name} does not exist")
     changelog.path.write_text(changelog.to_json())
     write_line(f"\tMigrations file updated: {changelog.path}")
 
@@ -126,7 +153,8 @@ def build_migration_plan(
     is_bottom_up = target_migration is not None and not is_rollback
 
     if is_rollback:
-        assert target_migration, "Target migration is required for rollback plan"
+        if not target_migration:
+            raise ValueError("Target migration is required for rollback plan")
         queue = deque([target_migration])
 
     def get_neighbors(m: Migration) -> list[str]:
@@ -134,7 +162,8 @@ def build_migration_plan(
         return [m.name for m in migration_tree.get(m.name, [])]
 
     if is_bottom_up:
-        assert target_migration, "Target migration is required for bottom-up plan"
+        if not target_migration:
+            raise ValueError("Target migration is required for bottom-up plan")
         queue = deque([target_migration])
 
         def get_neighbors(m: Migration) -> list[str]:

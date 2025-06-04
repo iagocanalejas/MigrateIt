@@ -40,12 +40,12 @@ class TestTreeUtils(unittest.TestCase):
 
     def test_create_migrations_file_already_exists(self):
         Path(self.migrations_file_path).touch()
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
 
     def test_create_migrations_file_invalid_extension(self):
         bad_path = self.temp_dir / "migrations.txt"
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             create_changelog_file(bad_path, SupportedDatabase.POSTGRES)
 
     def test_load_migrations_file_success(self):
@@ -58,7 +58,7 @@ class TestTreeUtils(unittest.TestCase):
         self.assertEqual(loaded.version, 1)
 
     def test_load_migrations_file_not_exists(self):
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(FileNotFoundError):
             load_changelog_file(self.migrations_file_path)
 
     def test_save_migrations_file_success(self):
@@ -72,7 +72,7 @@ class TestTreeUtils(unittest.TestCase):
 
     def test_save_migrations_file_not_exists(self):
         file = ChangelogFile(version=1, path=self.migrations_file_path)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(FileNotFoundError):
             save_changelog_file(file)
 
     def test_create_new_migration_success(self):
@@ -89,6 +89,24 @@ class TestTreeUtils(unittest.TestCase):
         migrations = load_changelog_file(self.migrations_file_path)
         self.assertEqual(len(migrations.migrations), 1)
         self.assertTrue(migrations.migrations[0].name.endswith("init.sql"))
+
+    def test_create_new_migration_with_dependencies(self):
+        os.makedirs(self.migrations_dir)
+        create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
+        changelog = load_changelog_file(self.migrations_file_path)
+
+        create_new_migration(changelog, self.migrations_dir, "init")
+        create_new_migration(changelog, self.migrations_dir, "add_users", dependencies=["0000"])
+        created_files = os.listdir(self.migrations_dir)
+
+        self.assertEqual(len(created_files), 2)
+        self.assertRegex(created_files[1], r"0000_init\.sql")
+        self.assertRegex(created_files[0], r"0001_add_users\.sql")
+
+        migrations = load_changelog_file(self.migrations_file_path)
+        self.assertEqual(len(migrations.migrations), 2)
+        self.assertTrue(migrations.migrations[1].name.endswith("add_users.sql"))
+        self.assertIn("init", migrations.migrations[1].parents[0])
 
     def test_create_new_migration_invalid_name(self):
         os.makedirs(self.migrations_dir)

@@ -48,6 +48,11 @@ class ChangelogFile:
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=4)
 
+    def exist_migration_by_name(self, name: str) -> bool:
+        name = os.path.basename(name) if os.path.isabs(name) else name
+        prefix = name.split("_", 1)[0]
+        return any(m.name.startswith(prefix) for m in self.migrations)
+
     def get_migration_by_name(self, name: str) -> Migration:
         if os.path.isabs(name):
             name = os.path.basename(name)

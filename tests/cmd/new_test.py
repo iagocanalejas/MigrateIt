@@ -55,3 +55,23 @@ class CliNewTest(BaseCmdTest):
             )
 
         self.assertIn("already exists", str(ctx.exception))
+
+    def test_cmd_new_with_dependencies(self):
+        cmd_new(
+            client=self.client,
+            name="test_migration",
+            no_edit=True,
+        )
+        cmd_new(
+            client=self.client,
+            name="test_migration",
+            dependencies=["0000", "0001"],
+            no_edit=True,
+        )
+
+        self.assertTrue(os.path.exists(self.migrations_dir / "0002_test_migration.sql"))
+
+        changelog = load_changelog_file(self.temp_dir / "changelog.json")
+        self.assertEqual(len(changelog.migrations), 3)
+        self.assertEqual(changelog.migrations[2].name, "0002_test_migration.sql")
+        self.assertEqual(changelog.migrations[2].parents, ["0000_migrateit.sql", "0001_test_migration.sql"])
