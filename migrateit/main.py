@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 from pathlib import Path
 
 import psycopg2
@@ -95,7 +96,13 @@ def _cmd_init(subparsers) -> argparse.ArgumentParser:
 
 def _cmd_new(subparsers) -> argparse.ArgumentParser:
     parser = subparsers.add_parser("new", help="Create a new migration")
-    parser.add_argument("name", help="Name of the new migration")
+    parser.add_argument(
+        "name",
+        type=str,
+        nargs="?",
+        default=f"auto_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        help="Name of the new migration",
+    )
     parser.add_argument(
         "-d",
         "--dependecies",

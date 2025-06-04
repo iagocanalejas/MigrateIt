@@ -100,7 +100,7 @@ DROP TABLE IF EXISTS users;
 # Help
 
 ```sh
-usage: migrateit new [-h] [-d [DEPENDECIES ...]] [--no-edit] name
+usage: migrateit new [-h] [-d [DEPENDECIES ...]] [--no-edit] [name]
 
 positional arguments:
   name                  Name of the new migration
