@@ -98,10 +98,11 @@ class TestTreeUtils(unittest.TestCase):
         create_new_migration(changelog, self.migrations_dir, "init")
         create_new_migration(changelog, self.migrations_dir, "add_users", dependencies=["0000"])
         created_files = os.listdir(self.migrations_dir)
+        created_files.sort()
 
         self.assertEqual(len(created_files), 2)
-        self.assertRegex(created_files[1], r"0000_init\.sql")
-        self.assertRegex(created_files[0], r"0001_add_users\.sql")
+        self.assertRegex(created_files[0], r"0000_init\.sql")
+        self.assertRegex(created_files[1], r"0001_add_users\.sql")
 
         migrations = load_changelog_file(self.migrations_file_path)
         self.assertEqual(len(migrations.migrations), 2)
