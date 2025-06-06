@@ -19,7 +19,7 @@ class TestPsqlClientValidation(BasePsqlTest):
     def test_validate_simple_select_syntax(self):
         filename = "0001_init.sql"
         self._create_migrations_file(filename, sql=f"SELECT * FROM {self.TEST_MIGRATIONS_TABLE};")
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
     def test_validate_simple_select_with_rollback(self):
@@ -29,7 +29,7 @@ class TestPsqlClientValidation(BasePsqlTest):
             sql=f"SELECT * FROM {self.TEST_MIGRATIONS_TABLE};",
             rollback_sql="SELECT 1;",
         )
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
     def test_validate_create_table_syntax(self):
@@ -43,7 +43,7 @@ class TestPsqlClientValidation(BasePsqlTest):
             );
         """,
         )
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
         with self.connection.cursor() as cursor:
             with self.assertRaises(ProgrammingError):
@@ -53,7 +53,7 @@ class TestPsqlClientValidation(BasePsqlTest):
     def test_invalid_sql_in_migration_code(self):
         filename = "0003_invalid.sql"
         self._create_migrations_file(filename, sql="SELEKT * FRM non_existing_table;")
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         error_result = self.client.validate_sql_syntax(migration)
         self.assertIsInstance(error_result, tuple)
         assert isinstance(error_result, tuple)
@@ -68,7 +68,7 @@ class TestPsqlClientValidation(BasePsqlTest):
             sql=f"SELECT * FROM {self.TEST_MIGRATIONS_TABLE};",
             rollback_sql="ROLLBAK;",
         )
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         error_result = self.client.validate_sql_syntax(migration)
         self.assertIsInstance(error_result, tuple)
         assert isinstance(error_result, tuple)
@@ -79,11 +79,11 @@ class TestPsqlClientValidation(BasePsqlTest):
     def test_empty_sql_file_is_skipped(self):
         filename = "0005_empty.sql"
         self._create_migrations_file(filename, sql="")
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
     def test_file_not_found_raises_error(self):
-        migration = Migration(name="not_exist.sql", parents=["0000_migrateit.sql"])
+        migration = Migration(name="not_exist.sql", parents=[self.INIT_MIGRATION])
         with self.assertRaises(FileNotFoundError):
             self.client.validate_sql_syntax(migration)
 
@@ -91,7 +91,7 @@ class TestPsqlClientValidation(BasePsqlTest):
         filename = "0006_script.txt"
         path = self.migrations_dir / filename
         path.write_text("SELECT 1;")
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         with self.assertRaises(FileNotFoundError):
             self.client.validate_sql_syntax(migration)
 
@@ -104,13 +104,13 @@ class TestPsqlClientValidation(BasePsqlTest):
             INSERT INTO {self.TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES ('2', 'hash2');
         """,
         )
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
     def test_validate_drop_table_statement(self):
         filename = "0008_drop_table.sql"
         self._create_migrations_file(filename, sql=f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}_to_drop;")
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
     def test_validate_alter_table_add_column(self):
@@ -123,7 +123,7 @@ class TestPsqlClientValidation(BasePsqlTest):
         self._create_migrations_file(
             filename, sql=f"ALTER TABLE {self.TEST_MIGRATIONS_TABLE}_alter ADD COLUMN new_col TEXT;"
         )
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
         with self.connection.cursor() as cursor:
@@ -140,7 +140,7 @@ class TestPsqlClientValidation(BasePsqlTest):
         self._create_migrations_file(
             filename, sql=f"ALTER TABLE {self.TEST_MIGRATIONS_TABLE}_alter2 DROP COLUMN to_remove;"
         )
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
         with self.connection.cursor() as cursor:
@@ -150,7 +150,7 @@ class TestPsqlClientValidation(BasePsqlTest):
     def test_invalid_drop_table_statement(self):
         filename = "0011_invalid_drop.sql"
         self._create_migrations_file(filename, sql="DROP TABL test_table;")
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         error_result = self.client.validate_sql_syntax(migration)
         self.assertIsInstance(error_result, tuple)
         assert isinstance(error_result, tuple)
@@ -161,7 +161,7 @@ class TestPsqlClientValidation(BasePsqlTest):
     def test_invalid_alter_table_statement(self):
         filename = "0012_invalid_alter.sql"
         self._create_migrations_file(filename, sql="ALTER TABLE some_table ADD COLUM typo_col TEXT;")
-        migration = Migration(name=filename, parents=["0000_migrateit.sql"])
+        migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         error_result = self.client.validate_sql_syntax(migration)
         self.assertIsInstance(error_result, tuple)
         assert isinstance(error_result, tuple)

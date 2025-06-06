@@ -28,6 +28,7 @@ def main() -> int:
     _cmd_new(subparsers)
     _cmd_migrate(subparsers)
     _cmd_rollback(subparsers)
+    _cmd_squash(subparsers)
     _cmd_show(subparsers)
     args = parser.parse_args()
 
@@ -79,6 +80,13 @@ def main() -> int:
                         args.name,
                         is_fake=args.fake,
                         is_rollback=True,
+                    )
+                elif args.command == "squash":
+                    return commands.cmd_squash(
+                        client,
+                        start_migration=args.start_migration,
+                        end_migration=args.end_migration,
+                        name=args.name,
                     )
                 else:
                     raise NotImplementedError(f"Command {args.command} not implemented.")
@@ -143,6 +151,29 @@ def _cmd_rollback(subparsers) -> argparse.ArgumentParser:
         help="Fakes the migration marking it as ran.",
     )
     parser.set_defaults(func=commands.cmd_run)
+    return parser
+
+
+def _cmd_squash(subparsers) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser("squash", help="Squash migrations into a single file")
+    parser.add_argument(
+        "start_migration",
+        type=str,
+        help="Name of the first migration to squash from (inclusive).",
+    )
+    parser.add_argument(
+        "end_migration",
+        type=str,
+        nargs="?",
+        help="Name of the last migration to squash to (inclusive). If not provided, the last migration is used.",
+    )
+    parser.add_argument(
+        "-n",
+        "--name",
+        type=str,
+        help="Name of the new squashed migration file. If not provided, a default name will be generated.",
+    )
+    parser.set_defaults(func=commands.cmd_squash)
     return parser
 
 

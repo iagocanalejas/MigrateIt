@@ -9,11 +9,14 @@ import psycopg2
 
 from migrateit.clients import PsqlClient
 from migrateit.models import MigrateItConfig, SupportedDatabase
+from migrateit.models.changelog import ChangelogFile
+from migrateit.models.migration import Migration
 from migrateit.tree import ROLLBACK_SPLIT_TAG, create_changelog_file
 
 
 @patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 class BasePsqlTest(unittest.TestCase):
+    INIT_MIGRATION = "0000_migrateit.sql"
     TEST_MIGRATIONS_TABLE = "migrations"
 
     def setUp(self):
@@ -39,6 +42,9 @@ class BasePsqlTest(unittest.TestCase):
         with self.connection.cursor() as cursor:
             cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}")
         self.connection.commit()
+
+    def _create_empty_changelog(self) -> ChangelogFile:
+        return ChangelogFile(version=1, migrations=[Migration(name=self.INIT_MIGRATION)])
 
     def _create_migrations_file(self, filename: str, sql: str | None = None, rollback_sql: str | None = None) -> str:
         path = os.path.join(self.migrations_dir, filename)

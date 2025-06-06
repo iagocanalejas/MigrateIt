@@ -69,6 +69,16 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
+    def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
+        """
+        Squash multiple migrations into a single migration.
+
+        Args:
+            migrations: A list of migration names to squash.
+            new_migration: The new migration object to create.
+        """
+        ...
+
     def update_migration_hash(self, migration: Migration) -> None:
         """
         Update the hash of a migration in the database.

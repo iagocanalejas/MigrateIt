@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS {table_name} (
     id SERIAL PRIMARY KEY,
     migration_name VARCHAR(255) UNIQUE NOT NULL,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    change_hash VARCHAR(64) NOT NULL
+    change_hash VARCHAR(64) NOT NULL,
+    squashed BOOLEAN DEFAULT FALSE
 );
             """,
             f"""
@@ -113,8 +114,6 @@ DROP TABLE IF EXISTS {table_name};
             with self.connection.cursor() as cursor:
                 if not is_fake:
                     cursor.execute(migration_code if not is_rollback else reverse_migration_code)
-                    if migration.initial:
-                        self.connection.commit()
                 if is_rollback:
                     cursor.execute(
                         f"""DELETE FROM {self.table_name} where migration_name = %s and change_hash = %s;""",
@@ -130,6 +129,14 @@ DROP TABLE IF EXISTS {table_name};
             raise e
 
     @override
+    def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                f"""UPDATE {self.table_name} SET squashed = TRUE WHERE migration_name IN %s;""", (tuple(migrations),)
+            )
+        self.apply_migration(new_migration, is_fake=True)
+
+    @override
     def update_migration_hash(self, migration: Migration) -> None:
         path = self.migrations_dir / migration.name
         if not path.is_file() or not path.name.endswith(".sql"):
@@ -142,7 +149,6 @@ DROP TABLE IF EXISTS {table_name};
                 f"""UPDATE {self.table_name} SET change_hash = %s WHERE migration_name = %s;""",
                 (migration_hash, os.path.basename(path)),
             )
-            self.connection.commit()
 
     @override
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:

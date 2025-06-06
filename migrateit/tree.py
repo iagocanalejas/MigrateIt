@@ -1,3 +1,4 @@
+import re
 from collections import OrderedDict, deque
 from datetime import datetime
 from pathlib import Path
@@ -71,6 +72,66 @@ def create_new_migration(
     if dependencies:
         write_line(f"\tAdded dependencies to: {', '.join(dependencies)}")
     return new_migration
+
+
+def write_into_migration_file(migration_file: Path, sql: str | None, rollback: str | None) -> None:
+    """
+    Write SQL and rollback SQL into a migration file.
+    Args:
+        migration_file: The path to the migration file.
+        sql: The SQL to write into the migration file.
+        rollback: The rollback SQL to write into the migration file.
+    """
+    if (sql is None or not sql.strip()) and (rollback is None or not rollback.strip()):
+        raise ValueError("At least one of sql or rollback must be provided")
+
+    migration_content = migration_file.read_text(encoding="utf-8")
+    if ROLLBACK_SPLIT_TAG not in migration_content:
+        raise ValueError(f"{migration_file=} does not contain a rollback section ({ROLLBACK_SPLIT_TAG})")
+
+    parts = migration_content.split(ROLLBACK_SPLIT_TAG, maxsplit=1)
+    new_content = (
+        parts[0].rstrip()
+        + "\n\n"
+        + (sql.strip() if sql else "")
+        + "\n\n"
+        + ROLLBACK_SPLIT_TAG
+        + parts[1].rstrip()
+        + "\n\n"
+        + (rollback.strip() if rollback else "")
+    )
+    new_content = re.sub(r"\n{3,}", "\n\n", new_content)
+
+    migration_file.write_text(new_content, encoding="utf-8")
+
+
+def retrieve_migration_sqls(migration_file: Path) -> tuple[str | None, str | None]:
+    """
+    Retrieve the SQL and rollback SQL from a migration file.
+    Args:
+        migration_file: The path to the migration file.
+    Returns:
+        A tuple of (SQL, rollback SQL).
+    """
+
+    def remove_description_comments(content: str) -> str:
+        return "\n".join(
+            [
+                w
+                for w in content.splitlines()
+                if not w.strip().startswith("-- Migration") and not w.strip().startswith("-- Created on")
+            ]
+        )
+
+    if not migration_file.is_file() or not migration_file.name.endswith(".sql"):
+        raise ValueError(f"Migration {migration_file.name} is not a valid SQL file")
+
+    content = migration_file.read_text(encoding="utf-8")
+    if ROLLBACK_SPLIT_TAG not in content:
+        return remove_description_comments(content).strip(), None
+
+    sql, rollback_sql = content.split(ROLLBACK_SPLIT_TAG, maxsplit=1)
+    return remove_description_comments(sql).strip(), rollback_sql.strip()
 
 
 def create_changelog_file(migrations_file: Path, database: SupportedDatabase) -> ChangelogFile:
@@ -147,6 +208,17 @@ def build_migration_plan(
     target_migration: Migration | None = None,
     is_rollback: bool = False,
 ) -> list[Migration]:
+    """
+    Build a migration plan based on the changelog and migration tree.
+    Args:
+        changelog: The changelog file containing migrations.
+        migration_tree: An ordered dictionary representing the migration tree.
+        statuses_map: A map of migration names to their statuses.
+        target_migration: The target migration to apply or rollback to.
+        is_rollback: Whether the plan is for a rollback operation.
+    Returns:
+        A list of migrations to apply or rollback, in the correct order.
+    """
     plan: list[Migration] = []
     visited: set[str] = set()
     queue: deque[Migration] = deque([changelog.migrations[0]])
@@ -190,3 +262,24 @@ def build_migration_plan(
     if is_rollback:
         return [p for p in plan if statuses_map[p.name] == MigrationStatus.APPLIED]
     return [p for p in plan if statuses_map[p.name] != MigrationStatus.APPLIED]
+
+
+def find_path(tree: OrderedDict[str, list[Migration]], parent: str, child: str, path: list[str] = []) -> list[str]:
+    """
+    Find a path from parent to child in the migration tree.
+    Args:
+        tree: The migration tree as an OrderedDict.
+        parent: The starting migration name.
+        child: The target migration name.
+    Returns:
+        A list of migration names representing the path from parent to child, or an empty list if no path exists.
+    """
+    path.append(parent)
+    if parent == child:
+        return path
+    for next_child in tree.get(parent, []):
+        result = find_path(tree, next_child.name, child, path)
+        if result:
+            return result
+    path.pop()
+    return []

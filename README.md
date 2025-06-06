@@ -133,3 +133,15 @@ options:
   -l, --list      Display migrations in a list format.
   --validate-sql  Validate SQL migration sintax.
 ```
+
+```sh
+usage: migrateit squash [-h] [-n NAME] start_migration [end_migration]
+
+positional arguments:
+  start_migration  Name of the first migration to squash from (inclusive).
+  end_migration    Name of the last migration to squash to (inclusive). If not provided, the last migration is used.
+
+options:
+  -h, --help       show this help message and exit
+  -n, --name NAME  Name of the new squashed migration file. If not provided, a default name will be generated.
+```
