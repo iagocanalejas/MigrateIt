@@ -5,6 +5,7 @@ from migrateit.models import ChangelogFile, Migration, MigrationStatus
 from tests.clients.psql._base_test import BasePsqlTest
 
 
+@patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 class TestPsqlClientShowMigrations(BasePsqlTest):
     def setUp(self):
         super().setUp()

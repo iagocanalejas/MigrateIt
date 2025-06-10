@@ -9,6 +9,7 @@ from psycopg2.extensions import connection as Connection
 
 from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
+from migrateit.reporters import write_line
 from migrateit.tree import ROLLBACK_SPLIT_TAG, build_migrations_tree
 
 
@@ -93,7 +94,14 @@ DROP TABLE IF EXISTS {table_name};
                 continue
 
             _, _, migration_hash = self._get_content_hash(self.migrations_dir / migration.name)
-            status = MigrationStatus.APPLIED if migration_hash == change_hash else MigrationStatus.CONFLICT
+            status = MigrationStatus.APPLIED
+            if migration_hash != change_hash:
+                status = MigrationStatus.CONFLICT
+                write_line(
+                    f"Missmatch for migration {migration_name}. "
+                    f"Migration hash is '{migration_hash}' but '{change_hash}' was found."
+                )
+
             migrations[migration.name] = status
 
         return migrations
