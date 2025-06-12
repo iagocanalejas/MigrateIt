@@ -122,16 +122,16 @@ DROP TABLE IF EXISTS {table_name};
             with self.connection.cursor() as cursor:
                 if not is_fake:
                     cursor.execute(migration_code if not is_rollback else reverse_migration_code)
-                if is_rollback:
+                if is_rollback and not migration.initial:
                     cursor.execute(
                         f"""DELETE FROM {self.table_name} where migration_name = %s and change_hash = %s;""",
                         (os.path.basename(path), migration_hash),
                     )
-                else:
-                    cursor.execute(
-                        f"""INSERT INTO {self.table_name} (migration_name, change_hash) VALUES (%s, %s);""",
-                        (os.path.basename(path), migration_hash),
-                    )
+                    return
+                cursor.execute(
+                    f"""INSERT INTO {self.table_name} (migration_name, change_hash) VALUES (%s, %s);""",
+                    (os.path.basename(path), migration_hash),
+                )
         except (DatabaseError, ProgrammingError) as e:
             self.connection.rollback()
             raise e
