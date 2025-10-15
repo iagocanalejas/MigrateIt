@@ -5,25 +5,25 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
-        postgres-version: ["15", "17"]
+        python-version: ["3.13", "3.14"]
+        postgres-version: ["17", "18"]
 
     services:
-        postgres:
-            image: postgres:${{ matrix.postgres-version }}
-            env:
-                POSTGRES_USER: postgres
-                POSTGRES_PASSWORD: postgres
-                POSTGRES_DB: postgres
-            ports:
-                - 5432:5432
-            options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:${{ matrix.postgres-version }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -32,7 +32,7 @@ jobs:
 
       - name: Copy environment variables (CI requires .env file)
         run: |
-            cat .testenv > .env
+          cat .testenv > .env
 
       - name: Install requirements
         run: |
@@ -46,12 +46,12 @@ jobs:
 
       - name: Pytest + code coverage
         run: |
-            export $(cat .env | xargs) &&
-            coverage run -m pytest &&
-            coverage report -m
+          export $(cat .env | xargs) &&
+          coverage run -m pytest &&
+          coverage report -m
 
       - name: Test coverage
         run: |
-            export $(cat .env | xargs) &&
-            coverage run --source=tests -m pytest &&
-            coverage report -m --fail-under=100
+          export $(cat .env | xargs) &&
+          coverage run --source=tests -m pytest &&
+          coverage report -m --fail-under=100
