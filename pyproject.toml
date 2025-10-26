@@ -2,6 +2,29 @@
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "migrateit"
+version = "0.6.0"
+description = "Handle database migrations with ease managing your database changes with simple SQL files."
+readme = "README.md"
+license = { file = "LICENSE.md" }
+authors = [{ name = "Iago Santos" }]
+requires-python = ">=3.12"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only"
+]
+dependencies = [
+  "psycopg2-binary",
+]
+
+[project.scripts]
+autocana = "migrateit.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["migrateit*"]
+
 [tool.pyright]
 strictListInference = true
 strictDictionaryInference = true
