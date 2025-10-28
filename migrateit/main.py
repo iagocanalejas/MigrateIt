@@ -25,12 +25,17 @@ def main() -> int:
     )
 
     subparsers = parser.add_subparsers(dest="command")
-    _cmd_init(subparsers)
-    _cmd_new(subparsers)
-    _cmd_migrate(subparsers)
-    _cmd_rollback(subparsers)
-    _cmd_squash(subparsers)
-    _cmd_show(subparsers)
+
+    def _add_cmd(name: str, *, help: str) -> argparse.ArgumentParser:
+        parser = subparsers.add_parser(name, help=help)
+        return parser
+
+    _cmd_init(_add_cmd("init", help="Initialize the migration directory and database"))
+    _cmd_new(_add_cmd("new", help="Create a new migration"))
+    _cmd_migrate(_add_cmd("migrate", help="Run migrations"))
+    _cmd_rollback(_add_cmd("rollback", help="Rollback migrations"))
+    _cmd_squash(_add_cmd("squash", help="Squash migrations into a single file"))
+    _cmd_show(_add_cmd("show", help="Show migration status"))
     args = parser.parse_args()
 
     print_logo()
@@ -96,15 +101,13 @@ def main() -> int:
             return 1
 
 
-def _cmd_init(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("init", help="Initialize the migration directory and database")
+def _cmd_init(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("database", help="Database type to use", choices=[db.value for db in SupportedDatabase])
     parser.set_defaults(func=commands.cmd_init)
     return parser
 
 
-def _cmd_new(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("new", help="Create a new migration")
+def _cmd_new(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument(
         "name",
         type=str,
@@ -128,8 +131,7 @@ def _cmd_new(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     return parser
 
 
-def _cmd_migrate(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("migrate", help="Run migrations")
+def _cmd_migrate(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
     parser.add_argument("--fake", action="store_true", default=False, help="Fakes the migration marking it as ran.")
     parser.add_argument(
@@ -142,8 +144,7 @@ def _cmd_migrate(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     return parser
 
 
-def _cmd_rollback(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("rollback", help="Rollback migrations")
+def _cmd_rollback(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
     parser.add_argument(
         "--fake",
@@ -155,8 +156,7 @@ def _cmd_rollback(subparsers: argparse._SubParsersAction[argparse.ArgumentParser
     return parser
 
 
-def _cmd_squash(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("squash", help="Squash migrations into a single file")
+def _cmd_squash(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument(
         "start_migration",
         type=str,
@@ -178,8 +178,7 @@ def _cmd_squash(subparsers: argparse._SubParsersAction[argparse.ArgumentParser])
     return parser
 
 
-def _cmd_show(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser("show", help="Show migration status")
+def _cmd_show(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument(
         "-l",
         "--list",
