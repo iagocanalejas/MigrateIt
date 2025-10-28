@@ -10,7 +10,7 @@ from tests.cmd._base_test import BaseCmdTest
 
 # TODO: check how to test show command
 class CliShowTest(BaseCmdTest):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
 
         with patch("migrateit.reporters.output.write_line_b", lambda *_: None):
@@ -29,5 +29,5 @@ class CliShowTest(BaseCmdTest):
         )
         self.client = PsqlClient(connection=self.connection, config=self.config)
 
-    def test_cmd_show(self):
+    def test_cmd_show(self) -> None:
         pass

@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from migrateit.clients import PsqlClient
 from migrateit.models import ChangelogFile, Migration, MigrationStatus
@@ -7,14 +7,14 @@ from tests.clients.psql._base_test import BasePsqlTest
 
 @patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 class TestPsqlClientShowMigrations(BasePsqlTest):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         sql, _ = self.client.create_migrations_table_str(self.TEST_MIGRATIONS_TABLE)
         with self.connection.cursor() as cursor:
             cursor.execute(sql)
             self.connection.commit()
 
-    def _insert_migration_row(self, name, hash_value):
+    def _insert_migration_row(self, name: str, hash_value: str) -> None:
         with self.connection.cursor() as cursor:
             cursor.execute(
                 f"INSERT INTO {self.TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES (%s, %s)",
@@ -23,7 +23,7 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
         self.connection.commit()
 
     @patch.object(PsqlClient, "_get_content_hash")
-    def test_show_migrations_applied_and_not_applied(self, mock_get_content_hash):
+    def test_show_migrations_applied_and_not_applied(self, mock_get_content_hash: MagicMock) -> None:
         migration_applied = Migration(name="001_init.sql")
         migration_not_applied = Migration(name="002_more.sql")
 
@@ -42,7 +42,7 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
         self.assertEqual(result, expected)
 
     @patch.object(PsqlClient, "_get_content_hash")
-    def test_show_migrations_conflict_and_removed(self, mock_get_content_hash):
+    def test_show_migrations_conflict_and_removed(self, mock_get_content_hash: MagicMock) -> None:
         mock_get_content_hash.return_value = ("dummy_content", "dummy_reverse_content", "expected_hash")
 
         self._insert_migration_row("001_init.sql", "different_hash")  # mismatch
@@ -57,7 +57,7 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
         self.assertEqual(result["ghost.sql"], MigrationStatus.REMOVED)
 
     @patch.object(PsqlClient, "_get_content_hash")
-    def test_show_migrations_order_error(self, mock_get_content_hash):
+    def test_show_migrations_order_error(self, mock_get_content_hash: MagicMock) -> None:
         mock_get_content_hash.side_effect = [
             ("dummy_content", "dummy_reverse_content", "hash2"),  # for 002_second.sql
             ("dummy_content", "dummy_reverse_content", "hash1"),  # for 001_second.sql

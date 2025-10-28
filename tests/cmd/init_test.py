@@ -10,7 +10,7 @@ from tests.cmd._base_test import BaseCmdTest
 @patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 @patch("migrateit.clients.psql.PsqlClient.create_migrations_table_str", lambda **_: ("-- create", "-- drop"))
 class CliInitTest(BaseCmdTest):
-    def test_cmd_init(self):
+    def test_cmd_init(self) -> None:
         cmd_init(
             table_name=self.TEST_MIGRATIONS_TABLE,
             migrations_dir=self.migrations_dir,
@@ -27,7 +27,7 @@ class CliInitTest(BaseCmdTest):
         self.assertIn("-- drop", content)
         self.assertIn(ROLLBACK_SPLIT_TAG, content)
 
-    def test_cmd_init_missing_rollback_tag(self):
+    def test_cmd_init_missing_rollback_tag(self) -> None:
         # Write invalid migration content before calling
         path = self.migrations_dir / "0000_migrateit.sql"
         os.makedirs(self.migrations_dir, exist_ok=True)

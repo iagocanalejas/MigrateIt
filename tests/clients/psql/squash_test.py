@@ -7,7 +7,7 @@ from tests.clients.psql._base_test import BasePsqlTest
 class TestPsqlClientSquashMigrations(BasePsqlTest):
     TEST_TABLE = "test_entity"
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
 
         os.makedirs(self.migrations_dir)
@@ -18,7 +18,7 @@ class TestPsqlClientSquashMigrations(BasePsqlTest):
             cursor.execute(sql)
             self.connection.commit()
 
-    def test_squash_migrations_marks_old_as_squashed_and_applies_new_fake(self):
+    def test_squash_migrations_marks_old_as_squashed_and_applies_new_fake(self) -> None:
         old_migrations = ["0010_one.sql", "0011_two.sql"]
         new_migration_name = "0012_squashed.sql"
 

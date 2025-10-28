@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 import psycopg2
+from psycopg2.extensions import connection as Connection
 
 import migrateit.constants as C
 from migrateit import cli as commands
@@ -95,14 +96,14 @@ def main() -> int:
             return 1
 
 
-def _cmd_init(subparsers) -> argparse.ArgumentParser:
+def _cmd_init(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
     parser = subparsers.add_parser("init", help="Initialize the migration directory and database")
     parser.add_argument("database", help="Database type to use", choices=[db.value for db in SupportedDatabase])
     parser.set_defaults(func=commands.cmd_init)
     return parser
 
 
-def _cmd_new(subparsers) -> argparse.ArgumentParser:
+def _cmd_new(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
     parser = subparsers.add_parser("new", help="Create a new migration")
     parser.add_argument(
         "name",
@@ -127,7 +128,7 @@ def _cmd_new(subparsers) -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_migrate(subparsers) -> argparse.ArgumentParser:
+def _cmd_migrate(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
     parser = subparsers.add_parser("migrate", help="Run migrations")
     parser.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
     parser.add_argument("--fake", action="store_true", default=False, help="Fakes the migration marking it as ran.")
@@ -141,7 +142,7 @@ def _cmd_migrate(subparsers) -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_rollback(subparsers) -> argparse.ArgumentParser:
+def _cmd_rollback(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
     parser = subparsers.add_parser("rollback", help="Rollback migrations")
     parser.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
     parser.add_argument(
@@ -154,7 +155,7 @@ def _cmd_rollback(subparsers) -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_squash(subparsers) -> argparse.ArgumentParser:
+def _cmd_squash(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
     parser = subparsers.add_parser("squash", help="Squash migrations into a single file")
     parser.add_argument(
         "start_migration",
@@ -177,7 +178,7 @@ def _cmd_squash(subparsers) -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_show(subparsers) -> argparse.ArgumentParser:
+def _cmd_show(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> argparse.ArgumentParser:
     parser = subparsers.add_parser("show", help="Show migration status")
     parser.add_argument(
         "-l",
@@ -197,7 +198,7 @@ def _cmd_show(subparsers) -> argparse.ArgumentParser:
 
 
 # TODO: add support for other databases
-def _get_connection(database: SupportedDatabase):
+def _get_connection(database: SupportedDatabase) -> Connection:
     match database:
         case SupportedDatabase.POSTGRES:
             db_url = PsqlClient.get_environment_url()

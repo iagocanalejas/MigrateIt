@@ -31,39 +31,49 @@ strictDictionaryInference = true
 strictSetInference = true
 deprecateTypingAliases = true
 exclude = [
-	"**/build",
-	"**/dist",
-	"**/out",
-	"**/venv",
+  "**/build",
+  "**/dist",
+  "**/out",
+  "**/venv",
 ]
 
 [tool.coverage.run]
 branch = true
 source = ["migrateit"]
 omit = [
-	"**/__init__.py",
-	"**/_protocol.py",
-	"main.py",
+  "**/__init__.py",
+  "**/_protocol.py",
+  "main.py",
 ]
 
 [tool.coverage.report]
 exclude_also = [
-	"pragma: no cover*",
-	"import .*",
-	"def __repr__",
-	"if self.debug:",
-	"if settings.DEBUG",
-	"raise AssertionError",
-	"raise NotImplementedError",
-	"raise",
-	"if 0:",
-	"if False:",
-	"if __name__ == .__main__.:",
-	"if TYPE_CHECKING:",
-	"class .*\\bProtocol\\):",
-	"@(abc\\.)?abstractmethod",
-	"logger.*",
-	"-> ['\"]?NoReturn['\"]?:",
-	"self.fail*",
-	"def __str__",
+  "pragma: no cover*",
+  "import .*",
+  "def __repr__",
+  "if self.debug:",
+  "if settings.DEBUG",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "raise",
+  "if 0:",
+  "if False:",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "class .*\\bProtocol\\):",
+  "@(abc\\.)?abstractmethod",
+  "logger.*",
+  "-> ['\"]?NoReturn['\"]?:",
+  "self.fail*",
+  "def __str__",
 ]
+
+[tool.mypy]
+files = "migrateit"
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+exclude = '(^tests/|^tests$)'

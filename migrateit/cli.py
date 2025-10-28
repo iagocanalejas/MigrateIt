@@ -3,6 +3,7 @@ import platform
 import shlex
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from migrateit.clients import PsqlClient, SqlClient
 from migrateit.models import (
@@ -44,7 +45,7 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
 
 
 def cmd_new(
-    client: SqlClient,
+    client: SqlClient[Any],
     name: str,
     dependencies: list[str] | None = None,
     no_edit: bool = False,
@@ -68,7 +69,7 @@ def cmd_new(
 
 
 def cmd_run(
-    client: SqlClient,
+    client: SqlClient[Any],
     name: str | None = None,
     is_fake: bool = False,
     is_rollback: bool = False,
@@ -122,7 +123,7 @@ def cmd_run(
 
 
 def cmd_squash(
-    client: SqlClient,
+    client: SqlClient[Any],
     start_migration: str,
     end_migration: str | None = None,
     name: str | None = None,
@@ -173,7 +174,7 @@ def cmd_squash(
     return 0
 
 
-def cmd_show(client: SqlClient, list_mode: bool = False, validate_sql: bool = False) -> int:
+def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool = False) -> int:
     migrations = build_migrations_tree(client.changelog)
     status_map = client.retrieve_migration_statuses()
     status_count = {status: 0 for status in MigrationStatus}

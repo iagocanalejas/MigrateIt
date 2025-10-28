@@ -12,7 +12,7 @@ from tests.cmd._base_test import BaseCmdTest
 
 @patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 class CliRunTest(BaseCmdTest):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
 
         with patch("migrateit.reporters.output.write_line_b", lambda *_: None):
@@ -31,7 +31,7 @@ class CliRunTest(BaseCmdTest):
         )
         self.client = PsqlClient(connection=self.connection, config=self.config)
 
-    def test_cmd_run_and_rerun(self):
+    def test_cmd_run_and_rerun(self) -> None:
         cmd_new(self.client, name="new", no_edit=True)
         self._create_migrations_file("0001_new.sql", sql="SELECT 1;")
 
@@ -47,7 +47,7 @@ class CliRunTest(BaseCmdTest):
             rows = cursor.fetchall()
             self.assertEqual(len(rows), 2)
 
-    def test_cmd_run_by_name(self):
+    def test_cmd_run_by_name(self) -> None:
         cmd_new(self.client, name="new", no_edit=True)
         self._create_migrations_file("0001_new.sql", sql="SELECT 1;")
 
@@ -57,12 +57,12 @@ class CliRunTest(BaseCmdTest):
             rows = cursor.fetchall()
             self.assertEqual(len(rows), 2)
 
-    def test_cmd_run_by_name_not_found(self):
+    def test_cmd_run_by_name_not_found(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             cmd_run(client=self.client, name="0010")
         self.assertIn("Migration '0010' not found", str(ctx.exception))
 
-    def test_cmd_run_fake(self):
+    def test_cmd_run_fake(self) -> None:
         cmd_new(self.client, name="new", no_edit=True)
         self._create_migrations_file("0001_new.sql", sql="CREATE TABLE test (id serial primary key);")
 
@@ -76,7 +76,7 @@ class CliRunTest(BaseCmdTest):
                 cursor.execute("SELECT * FROM test")
             self.connection.rollback()
 
-    def test_cmd_run_rollback(self):
+    def test_cmd_run_rollback(self) -> None:
         cmd_new(self.client, name="new", no_edit=True)
         self._create_migrations_file(
             "0001_new.sql",

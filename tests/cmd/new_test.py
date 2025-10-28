@@ -11,7 +11,7 @@ from tests.cmd._base_test import BaseCmdTest
 
 @patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 class CliNewTest(BaseCmdTest):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
 
         with patch("migrateit.reporters.output.write_line_b", lambda *_: None):
@@ -30,7 +30,7 @@ class CliNewTest(BaseCmdTest):
         )
         self.client = PsqlClient(connection=self.connection, config=self.config)
 
-    def test_cmd_new(self):
+    def test_cmd_new(self) -> None:
         cmd_new(
             client=self.client,
             name="test_migration",
@@ -43,7 +43,7 @@ class CliNewTest(BaseCmdTest):
         self.assertEqual(len(changelog.migrations), 2)
         self.assertEqual(changelog.migrations[1].name, "0001_test_migration.sql")
 
-    def test_cmd_new_with_existing_migration(self):
+    def test_cmd_new_with_existing_migration(self) -> None:
         with open(self.migrations_dir / "0001_test_migration.sql", "w", encoding="utf-8") as f:
             f.write("Hello, world!\n")
 
@@ -56,7 +56,7 @@ class CliNewTest(BaseCmdTest):
 
         self.assertIn("already exists", str(ctx.exception))
 
-    def test_cmd_new_with_dependencies(self):
+    def test_cmd_new_with_dependencies(self) -> None:
         cmd_new(
             client=self.client,
             name="test_migration",

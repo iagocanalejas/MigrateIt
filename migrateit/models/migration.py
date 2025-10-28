@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 
 class MigrationStatus(Enum):
@@ -25,7 +26,7 @@ class Migration:
     def is_same_migration_name(name1: str, name2: str) -> bool:
         return name1 == name2 or name1.startswith(name2.split("_")[0])
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "initial": self.initial,

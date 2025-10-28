@@ -13,7 +13,7 @@ from migrateit.tree import ROLLBACK_SPLIT_TAG
 class BaseCmdTest(unittest.TestCase):
     TEST_MIGRATIONS_TABLE = "migrations"
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.temp_dir = Path(tempfile.mkdtemp())
         self.migrations_dir = self.temp_dir / "migrations"
 
@@ -23,12 +23,12 @@ class BaseCmdTest(unittest.TestCase):
             cursor.execute(sql)
             self.connection.commit()
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self._drop_test_table()
         self.connection.close()
         shutil.rmtree(self.temp_dir)
 
-    def _drop_test_table(self):
+    def _drop_test_table(self) -> None:
         with self.connection.cursor() as cursor:
             cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}")
         self.connection.commit()

@@ -17,38 +17,38 @@ from migrateit.tree import (
 
 @patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 class TestTreeUtils(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.temp_dir = Path(tempfile.mkdtemp())
         self.migrations_dir = self.temp_dir / "migrations"
         self.migrations_file_path = self.temp_dir / "changelog.json"
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         shutil.rmtree(self.temp_dir)
 
-    def test_create_migrations_dir_success(self):
+    def test_create_migrations_dir_success(self) -> None:
         create_migration_directory(self.migrations_dir)
         self.assertTrue(os.path.exists(self.migrations_dir))
 
-    def test_create_migrations_dir_already_exists(self):
+    def test_create_migrations_dir_already_exists(self) -> None:
         os.makedirs(self.migrations_dir)
         create_migration_directory(self.migrations_dir)
         self.assertTrue(os.path.exists(self.migrations_dir))
 
-    def test_create_migrations_file_success(self):
+    def test_create_migrations_file_success(self) -> None:
         create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
         self.assertTrue(os.path.exists(self.migrations_file_path))
 
-    def test_create_migrations_file_already_exists(self):
+    def test_create_migrations_file_already_exists(self) -> None:
         Path(self.migrations_file_path).touch()
         with self.assertRaises(ValueError):
             create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
 
-    def test_create_migrations_file_invalid_extension(self):
+    def test_create_migrations_file_invalid_extension(self) -> None:
         bad_path = self.temp_dir / "migrations.txt"
         with self.assertRaises(ValueError):
             create_changelog_file(bad_path, SupportedDatabase.POSTGRES)
 
-    def test_load_migrations_file_success(self):
+    def test_load_migrations_file_success(self) -> None:
         file = ChangelogFile(version=1, path=self.migrations_file_path)
         with open(self.migrations_file_path, "w") as f:
             f.write(file.to_json())
@@ -57,11 +57,11 @@ class TestTreeUtils(unittest.TestCase):
         self.assertIsInstance(loaded, ChangelogFile)
         self.assertEqual(loaded.version, 1)
 
-    def test_load_migrations_file_not_exists(self):
+    def test_load_migrations_file_not_exists(self) -> None:
         with self.assertRaises(FileNotFoundError):
             load_changelog_file(self.migrations_file_path)
 
-    def test_save_migrations_file_success(self):
+    def test_save_migrations_file_success(self) -> None:
         file = ChangelogFile(version=2, path=self.migrations_file_path)
         Path(self.migrations_file_path).touch()
         save_changelog_file(file)
@@ -70,12 +70,12 @@ class TestTreeUtils(unittest.TestCase):
             content = f.read()
         self.assertIn('"version": 2', content)
 
-    def test_save_migrations_file_not_exists(self):
+    def test_save_migrations_file_not_exists(self) -> None:
         file = ChangelogFile(version=1, path=self.migrations_file_path)
         with self.assertRaises(FileNotFoundError):
             save_changelog_file(file)
 
-    def test_create_new_migration_success(self):
+    def test_create_new_migration_success(self) -> None:
         os.makedirs(self.migrations_dir)
         create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
         changelog = load_changelog_file(self.migrations_file_path)
@@ -90,7 +90,7 @@ class TestTreeUtils(unittest.TestCase):
         self.assertEqual(len(migrations.migrations), 1)
         self.assertTrue(migrations.migrations[0].name.endswith("init.sql"))
 
-    def test_create_new_migration_with_dependencies(self):
+    def test_create_new_migration_with_dependencies(self) -> None:
         os.makedirs(self.migrations_dir)
         create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
         changelog = load_changelog_file(self.migrations_file_path)
@@ -109,7 +109,7 @@ class TestTreeUtils(unittest.TestCase):
         self.assertTrue(migrations.migrations[1].name.endswith("add_users.sql"))
         self.assertIn("init", migrations.migrations[1].parents[0])
 
-    def test_create_new_migration_invalid_name(self):
+    def test_create_new_migration_invalid_name(self) -> None:
         os.makedirs(self.migrations_dir)
         create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
         changelog = load_changelog_file(self.migrations_file_path)

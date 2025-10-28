@@ -88,7 +88,7 @@ def print_list(children: dict[str, list[Migration]], status_map: dict[str, Migra
         write_line(f"{name:<40} | {status_str}")
 
 
-def pretty_print_sql_error(error: ProgrammingError, sql_query: str):
+def pretty_print_sql_error(error: ProgrammingError, sql_query: str) -> None:
     error_message = error.pgerror or str(error)
 
     write_line("❌ SQL Syntax Error:")

@@ -10,7 +10,7 @@ from tests.cmd._base_test import BaseCmdTest
 
 @patch("migrateit.reporters.output.write_line_b", lambda *_: None)
 class CliSquashTest(BaseCmdTest):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
 
         with patch("migrateit.reporters.output.write_line_b", lambda *_: None):
@@ -29,7 +29,7 @@ class CliSquashTest(BaseCmdTest):
         )
         self.client = PsqlClient(connection=self.connection, config=self.config)
 
-    def test_cmd_squash_applied(self):
+    def test_cmd_squash_applied(self) -> None:
         cmd_new(self.client, name="first", no_edit=True)
         self._create_migrations_file("0001_first.sql", sql="SELECT 1;", rollback_sql="SELECT 1;")
         cmd_new(self.client, name="second", no_edit=True)

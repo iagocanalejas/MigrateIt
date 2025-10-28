@@ -3,6 +3,7 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from .migration import Migration
 
@@ -38,7 +39,7 @@ class ChangelogFile:
         except (KeyError, TypeError, ValueError) as e:
             raise ValueError(f"Invalid JSON for MigrationsFile: {e}")
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
             "database": self.database.value,

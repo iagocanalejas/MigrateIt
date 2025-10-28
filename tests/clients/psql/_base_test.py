@@ -19,7 +19,7 @@ class BasePsqlTest(unittest.TestCase):
     INIT_MIGRATION = "0000_migrateit.sql"
     TEST_MIGRATIONS_TABLE = "migrations"
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.connection = psycopg2.connect(PsqlClient.get_environment_url())
         self.temp_dir = Path(tempfile.mkdtemp())
         self.migrations_dir = self.temp_dir / "migrations"
@@ -33,12 +33,12 @@ class BasePsqlTest(unittest.TestCase):
         self.client = PsqlClient(connection=self.connection, config=self.config)
         self._drop_test_table()  # ensure clean state
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self._drop_test_table()
         self.connection.close()
         shutil.rmtree(self.temp_dir)
 
-    def _drop_test_table(self):
+    def _drop_test_table(self) -> None:
         with self.connection.cursor() as cursor:
             cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}")
         self.connection.commit()

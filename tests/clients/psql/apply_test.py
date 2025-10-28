@@ -8,7 +8,7 @@ from tests.clients.psql._base_test import BasePsqlTest
 class TestPsqlClientApplyMigrations(BasePsqlTest):
     TEST_TABLE = "test_entity"
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
 
         os.makedirs(self.migrations_dir)
@@ -17,7 +17,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
             cursor.execute(sql)
             self.connection.commit()
 
-    def test_apply_migration_success(self):
+    def test_apply_migration_success(self) -> None:
         filename = "0000_init.sql"
         self._create_migrations_file(
             filename,
@@ -47,7 +47,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
             result = cursor.fetchone()
             self.assertTrue(result[0] if result else None)
 
-    def test_apply_migration_fake(self):
+    def test_apply_migration_fake(self) -> None:
         filename = "0000_init.sql"
         self._create_migrations_file(
             filename,
@@ -77,14 +77,14 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
             result = cursor.fetchone()
             self.assertFalse(result[0] if result else None)
 
-    def test_apply_migration_file_missing(self):
+    def test_apply_migration_file_missing(self) -> None:
         self.client.config.changelog = self._create_empty_changelog()
         migration = Migration(name="not_found.sql", parents=[self.INIT_MIGRATION])
 
         with self.assertRaises(FileNotFoundError):
             self.client.apply_migration(migration, is_fake=False)
 
-    def test_apply_migration_already_applied(self):
+    def test_apply_migration_already_applied(self) -> None:
         filename = "0001_applied.sql"
         self._create_migrations_file(filename, sql="SELECT 1;")
         changelog = self._create_empty_changelog()
@@ -96,7 +96,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         with self.assertRaises(ValueError):
             self.client.apply_migration(migration, is_fake=False)
 
-    def test_apply_migration_wrong_extension(self):
+    def test_apply_migration_wrong_extension(self) -> None:
         filename = "0002_wrong_ext.txt"
         self._create_migrations_file(filename, sql="SELECT 1;")
         changelog = self._create_empty_changelog()
@@ -106,7 +106,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         with self.assertRaises(FileNotFoundError):
             self.client.apply_migration(migration, is_fake=False)
 
-    def test_apply_migration_undo_success(self):
+    def test_apply_migration_undo_success(self) -> None:
         filename = "0003_undoable.sql"
         self._create_migrations_file(
             filename,
@@ -131,7 +131,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
             result = cursor.fetchone()
             self.assertFalse(result[0] if result else None)
 
-    def test_apply_migration_undo_fake(self):
+    def test_apply_migration_undo_fake(self) -> None:
         filename = "0004_undo_fake.sql"
         self._create_migrations_file(
             filename,
@@ -156,7 +156,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
             result = cursor.fetchone()
             self.assertEqual(result[0] if result else None, 0)
 
-    def test_apply_migration_undo_missing_reverse_sql(self):
+    def test_apply_migration_undo_missing_reverse_sql(self) -> None:
         filename = "0005_missing_reverse.sql"
         path = os.path.join(self.migrations_dir, filename)
         with open(path, "w") as f:
@@ -170,7 +170,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         with self.assertRaises(ValueError):
             self.client.apply_migration(migration, is_fake=False)
 
-    def test_apply_migration_undo_not_applied(self):
+    def test_apply_migration_undo_not_applied(self) -> None:
         filename = "0006_not_applied.sql"
         self._create_migrations_file(
             filename,
@@ -188,7 +188,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         with self.assertRaises(ValueError):
             self.client.apply_migration(migration, is_fake=False, is_rollback=True)
 
-    def test_apply_migration_fake_and_undo_combination(self):
+    def test_apply_migration_fake_and_undo_combination(self) -> None:
         filename = "0007_fake_undo.sql"
         self._create_migrations_file(
             filename,

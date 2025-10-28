@@ -7,7 +7,7 @@ from tests.clients.psql._base_test import BasePsqlTest
 
 
 class TestPsqlClientValidation(BasePsqlTest):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         os.makedirs(self.migrations_dir)
 
@@ -16,13 +16,13 @@ class TestPsqlClientValidation(BasePsqlTest):
             cursor.execute(sql)
             self.connection.commit()
 
-    def test_validate_simple_select_syntax(self):
+    def test_validate_simple_select_syntax(self) -> None:
         filename = "0001_init.sql"
         self._create_migrations_file(filename, sql=f"SELECT * FROM {self.TEST_MIGRATIONS_TABLE};")
         migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
-    def test_validate_simple_select_with_rollback(self):
+    def test_validate_simple_select_with_rollback(self) -> None:
         filename = "0001_init.sql"
         self._create_migrations_file(
             filename,
@@ -32,7 +32,7 @@ class TestPsqlClientValidation(BasePsqlTest):
         migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
-    def test_validate_create_table_syntax(self):
+    def test_validate_create_table_syntax(self) -> None:
         filename = "0002_create_table.sql"
         self._create_migrations_file(
             filename,
@@ -50,7 +50,7 @@ class TestPsqlClientValidation(BasePsqlTest):
                 cursor.execute(f"SELECT * FROM {self.TEST_MIGRATIONS_TABLE}_extra;")
         self.connection.rollback()
 
-    def test_invalid_sql_in_migration_code(self):
+    def test_invalid_sql_in_migration_code(self) -> None:
         filename = "0003_invalid.sql"
         self._create_migrations_file(filename, sql="SELEKT * FRM non_existing_table;")
         migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
@@ -61,7 +61,7 @@ class TestPsqlClientValidation(BasePsqlTest):
         self.assertIsInstance(error, ProgrammingError)
         self.assertIn("SELEKT", sql)
 
-    def test_invalid_sql_in_rollback_code(self):
+    def test_invalid_sql_in_rollback_code(self) -> None:
         filename = "0004_invalid_rollback.sql"
         self._create_migrations_file(
             filename,
@@ -76,18 +76,18 @@ class TestPsqlClientValidation(BasePsqlTest):
         self.assertIsInstance(error, ProgrammingError)
         self.assertIn("ROLLBAK", sql)
 
-    def test_empty_sql_file_is_skipped(self):
+    def test_empty_sql_file_is_skipped(self) -> None:
         filename = "0005_empty.sql"
         self._create_migrations_file(filename, sql="")
         migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
-    def test_file_not_found_raises_error(self):
+    def test_file_not_found_raises_error(self) -> None:
         migration = Migration(name="not_exist.sql", parents=[self.INIT_MIGRATION])
         with self.assertRaises(FileNotFoundError):
             self.client.validate_sql_syntax(migration)
 
-    def test_non_sql_file_raises_error(self):
+    def test_non_sql_file_raises_error(self) -> None:
         filename = "0006_script.txt"
         path = self.migrations_dir / filename
         path.write_text("SELECT 1;")
@@ -95,7 +95,7 @@ class TestPsqlClientValidation(BasePsqlTest):
         with self.assertRaises(FileNotFoundError):
             self.client.validate_sql_syntax(migration)
 
-    def test_validate_multiple_statements(self):
+    def test_validate_multiple_statements(self) -> None:
         filename = "0007_multi.sql"
         self._create_migrations_file(
             filename,
@@ -107,13 +107,13 @@ class TestPsqlClientValidation(BasePsqlTest):
         migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
-    def test_validate_drop_table_statement(self):
+    def test_validate_drop_table_statement(self) -> None:
         filename = "0008_drop_table.sql"
         self._create_migrations_file(filename, sql=f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}_to_drop;")
         migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
         self.assertIsNone(self.client.validate_sql_syntax(migration))
 
-    def test_validate_alter_table_add_column(self):
+    def test_validate_alter_table_add_column(self) -> None:
         # First, create the table
         with self.connection.cursor() as cursor:
             cursor.execute(f"CREATE TABLE IF NOT EXISTS {self.TEST_MIGRATIONS_TABLE}_alter (id INT);")
@@ -130,7 +130,7 @@ class TestPsqlClientValidation(BasePsqlTest):
             cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}_alter;")
             self.connection.commit()
 
-    def test_validate_alter_table_drop_column(self):
+    def test_validate_alter_table_drop_column(self) -> None:
         # First, create the table with the column
         with self.connection.cursor() as cursor:
             cursor.execute(f"CREATE TABLE IF NOT EXISTS {self.TEST_MIGRATIONS_TABLE}_alter2 (id INT, to_remove TEXT);")
@@ -147,7 +147,7 @@ class TestPsqlClientValidation(BasePsqlTest):
             cursor.execute(f"DROP TABLE IF EXISTS {self.TEST_MIGRATIONS_TABLE}_alter2;")
             self.connection.commit()
 
-    def test_invalid_drop_table_statement(self):
+    def test_invalid_drop_table_statement(self) -> None:
         filename = "0011_invalid_drop.sql"
         self._create_migrations_file(filename, sql="DROP TABL test_table;")
         migration = Migration(name=filename, parents=[self.INIT_MIGRATION])
@@ -158,7 +158,7 @@ class TestPsqlClientValidation(BasePsqlTest):
         self.assertIsInstance(error, ProgrammingError)
         self.assertIn("DROP TABL", sql)
 
-    def test_invalid_alter_table_statement(self):
+    def test_invalid_alter_table_statement(self) -> None:
         filename = "0012_invalid_alter.sql"
         self._create_migrations_file(filename, sql="ALTER TABLE some_table ADD COLUM typo_col TEXT;")
         migration = Migration(name=filename, parents=[self.INIT_MIGRATION])

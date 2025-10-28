@@ -192,7 +192,7 @@ def build_migrations_tree(changelog: ChangelogFile) -> OrderedDict[str, list[Mig
     """
     Build a tree of migrations and their childrens.
     """
-    d = OrderedDict()
+    d = OrderedDict[str, list[Migration]]()
     for migration in changelog.migrations:
         if migration.name not in d:
             d[migration.name] = []

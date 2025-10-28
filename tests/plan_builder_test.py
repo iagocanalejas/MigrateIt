@@ -10,7 +10,7 @@ from migrateit.tree import build_migration_plan
 
 
 class TestMigrationPlanBuilder(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.m1 = Migration(name="0001_init.sql", initial=True, parents=[])
         self.m2 = Migration(name="0002_add_users.sql", parents=["0001_init.sql"])
         self.m3 = Migration(name="0003_add_orders.sql", parents=["0001_init.sql"])
@@ -34,7 +34,7 @@ class TestMigrationPlanBuilder(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_dir)
 
-    def test_plan_applies_unapplied_migrations(self):
+    def test_plan_applies_unapplied_migrations(self) -> None:
         statuses = {
             "0001_init.sql": MigrationStatus.APPLIED,
             "0002_add_users.sql": MigrationStatus.NOT_APPLIED,
@@ -49,7 +49,7 @@ class TestMigrationPlanBuilder(unittest.TestCase):
             ["0002_add_users.sql", "0003_add_orders.sql", "0004_add_queries.sql", "0005_add_rows.sql"],
         )
 
-    def test_plan_all_applied_returns_empty(self):
+    def test_plan_all_applied_returns_empty(self) -> None:
         statuses = {
             "0001_init.sql": MigrationStatus.APPLIED,
             "0002_add_users.sql": MigrationStatus.APPLIED,
@@ -61,7 +61,7 @@ class TestMigrationPlanBuilder(unittest.TestCase):
         plan = build_migration_plan(self.changelog, self.migration_tree, statuses)
         self.assertEqual(plan, [])
 
-    def test_bottom_up_plan(self):
+    def test_bottom_up_plan(self) -> None:
         statuses = {
             "0001_init.sql": MigrationStatus.NOT_APPLIED,
             "0002_add_users.sql": MigrationStatus.NOT_APPLIED,
@@ -83,7 +83,7 @@ class TestMigrationPlanBuilder(unittest.TestCase):
             ["0001_init.sql", "0002_add_users.sql", "0003_add_orders.sql", "0004_add_queries.sql"],
         )
 
-    def test_rollback_plan(self):
+    def test_rollback_plan(self) -> None:
         statuses = {
             "0001_init.sql": MigrationStatus.APPLIED,
             "0002_add_users.sql": MigrationStatus.APPLIED,
@@ -102,7 +102,7 @@ class TestMigrationPlanBuilder(unittest.TestCase):
 
         self.assertEqual([m.name for m in plan], ["0005_add_rows.sql", "0004_add_queries.sql", "0002_add_users.sql"])
 
-    def test_rollback_skips_unapplied(self):
+    def test_rollback_skips_unapplied(self) -> None:
         statuses = {
             "0001_init.sql": MigrationStatus.APPLIED,
             "0002_add_users.sql": MigrationStatus.NOT_APPLIED,
@@ -121,7 +121,7 @@ class TestMigrationPlanBuilder(unittest.TestCase):
 
         self.assertEqual([m.name for m in plan], ["0001_init.sql"])
 
-    def test_raises_if_target_missing_in_rollback(self):
+    def test_raises_if_target_missing_in_rollback(self) -> None:
         statuses = {
             "0001_init.sql": MigrationStatus.APPLIED,
         }
