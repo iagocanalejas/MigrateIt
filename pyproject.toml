@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "migrateit"
-version = "0.6.0"
+version = "0.7.0"
 description = "Handle database migrations with ease managing your database changes with simple SQL files."
 readme = "README.md"
 license = { file = "LICENSE.md" }
