@@ -11,6 +11,7 @@ updates:
           - "pytest*"
           - "ruff*"
           - "coverage*"
+          - "mypy*"
       prod-dependencies:
         patterns:
           - "*"
