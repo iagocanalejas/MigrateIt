@@ -63,7 +63,7 @@ def main() -> int:
                     return commands.cmd_new(
                         client,
                         name=args.name,
-                        dependencies=args.dependecies,
+                        dependencies=args.dependencies,
                         no_edit=args.no_edit,
                     )
                 elif args.command == "show":
@@ -116,7 +116,7 @@ def _cmd_new(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "-d",
-        "--dependecies",
+        "--dependencies",
         nargs="*",
         help="List of migration names that this migration depends on.",
     )
