@@ -2,8 +2,7 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
-import psycopg2
-from psycopg2.extensions import connection as Connection
+import psycopg
 
 import migrateit.constants as C
 from migrateit import cli as commands
@@ -197,11 +196,11 @@ def _cmd_show(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 
 # TODO: add support for other databases
-def _get_connection(database: SupportedDatabase) -> Connection:
+def _get_connection(database: SupportedDatabase) -> psycopg.Connection:
     match database:
         case SupportedDatabase.POSTGRES:
             db_url = PsqlClient.get_environment_url()
-            conn = psycopg2.connect(db_url)
+            conn = psycopg.connect(db_url)
             conn.autocommit = False
             return conn
         case _:

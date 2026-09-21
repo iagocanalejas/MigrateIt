@@ -9,17 +9,17 @@ description = "Handle database migrations with ease managing your database chang
 readme = "README.md"
 license = { file = "LICENSE.md" }
 authors = [{ name = "Iago Santos" }]
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only"
 ]
 dependencies = [
-  "psycopg2-binary",
+  "psycopg[binary]",
 ]
 
 [project.scripts]
-autocana = "migrateit.main:main"
+migrateit = "migrateit.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

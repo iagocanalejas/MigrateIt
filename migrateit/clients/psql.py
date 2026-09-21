@@ -2,10 +2,11 @@ import hashlib
 import os
 import re
 from pathlib import Path
-from typing import override
+from typing import cast, override
 
-from psycopg2 import DatabaseError, ProgrammingError
-from psycopg2.extensions import connection as Connection
+from psycopg import Connection, Cursor, DatabaseError, ProgrammingError
+from psycopg.abc import Query
+from psycopg.sql import SQL, Identifier
 
 from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
@@ -34,8 +35,7 @@ class PsqlClient(SqlClient[Connection]):
     def create_migrations_table_str(cls, table_name: str) -> tuple[str, str]:
         if not table_name.isidentifier():
             raise ValueError(f"Unsafe table name: {table_name}")
-        return (
-            f"""
+        migrations_query = f"""
 CREATE TABLE IF NOT EXISTS {table_name} (
     id SERIAL PRIMARY KEY,
     migration_name VARCHAR(255) UNIQUE NOT NULL,
@@ -43,34 +43,35 @@ CREATE TABLE IF NOT EXISTS {table_name} (
     change_hash VARCHAR(64) NOT NULL,
     squashed BOOLEAN DEFAULT FALSE
 );
-            """,
-            f"""
+        """
+        reverse_query = f"""
 DROP TABLE IF EXISTS {table_name};
-            """,
-        )
+        """
+        return migrations_query, reverse_query
 
     @override
     def is_migrations_table_created(self) -> bool:
         with self.connection.cursor() as cursor:
-            cursor.execute(
-                f"""
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.tables
-                    WHERE LOWER(table_name) = LOWER('{self.table_name}')
-                );
-                """
-            )
+            query = """
+SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE LOWER(table_name) = LOWER(%(table_name)s)
+);
+            """
+            cursor.execute(query, {"table_name": self.table_name})
             result = cursor.fetchone()
             return result[0] if result else False
 
     @override
     def is_migration_applied(self, migration: Migration) -> bool:
         with self.connection.cursor() as cursor:
-            cursor.execute(
-                f"""SELECT EXISTS (SELECT 1 FROM {self.table_name} WHERE migration_name = %s);""",
-                (os.path.basename(migration.name),),
-            )
+            query = SQL("""
+SELECT EXISTS (
+    SELECT 1 FROM {} WHERE migration_name = %(migration_name)s
+);
+            """)
+            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": migration.name})
             result = cursor.fetchone()
             return result[0] if result else False
 
@@ -82,7 +83,10 @@ DROP TABLE IF EXISTS {table_name};
             return migrations
 
         with self.connection.cursor() as cursor:
-            cursor.execute(f"""SELECT migration_name, change_hash FROM {self.table_name}""")
+            query = SQL("""
+SELECT migration_name, change_hash FROM {};
+            """)
+            cursor.execute(query.format(Identifier(self.table_name)))
             rows = cursor.fetchall()
 
         for row in rows:
@@ -93,7 +97,7 @@ DROP TABLE IF EXISTS {table_name};
                 migrations[migration_name] = MigrationStatus.REMOVED
                 continue
 
-            _, _, migration_hash = self._get_content_hash(self.migrations_dir / migration.name)
+            _, _, migration_hash = self._get_migration_content_and_hash(self.migrations_dir / migration.name)
             status = MigrationStatus.APPLIED
             if migration_hash != change_hash:
                 status = MigrationStatus.CONFLICT
@@ -108,30 +112,20 @@ DROP TABLE IF EXISTS {table_name};
 
     @override
     def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
-        path = self.migrations_dir / migration.name
-        if not path.is_file() or not path.name.endswith(".sql"):
-            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
+        path = self._get_migration_path(migration)
         if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
             if is_rollback:
                 raise ValueError(f"Migration {path.name} is not applied, cannot undo it")
             raise ValueError(f"Migration {path.name} is already applied, cannot apply it again")
 
-        migration_code, reverse_migration_code, migration_hash = self._get_content_hash(path)
+        migration_code, reverse_migration_code, migration_hash = self._get_migration_content_and_hash(path)
 
         try:
             with self.connection.cursor() as cursor:
                 if not is_fake:
-                    cursor.execute(migration_code if not is_rollback else reverse_migration_code)
-                if is_rollback and not migration.initial:
-                    cursor.execute(
-                        f"""DELETE FROM {self.table_name} where migration_name = %s and change_hash = %s;""",
-                        (os.path.basename(path), migration_hash),
-                    )
-                    return
-                cursor.execute(
-                    f"""INSERT INTO {self.table_name} (migration_name, change_hash) VALUES (%s, %s);""",
-                    (os.path.basename(path), migration_hash),
-                )
+                    code = migration_code if not is_rollback else reverse_migration_code
+                    cursor.execute(code)
+                self._update_migration_changelog(cursor, migration, migration_hash, is_rollback)
         except (DatabaseError, ProgrammingError) as e:
             self.connection.rollback()
             raise e
@@ -139,24 +133,22 @@ DROP TABLE IF EXISTS {table_name};
     @override
     def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
         with self.connection.cursor() as cursor:
-            cursor.execute(
-                f"""UPDATE {self.table_name} SET squashed = TRUE WHERE migration_name IN %s;""", (tuple(migrations),)
-            )
+            query = SQL("""
+UPDATE {} SET squashed = TRUE WHERE migration_name = ANY(%(migration_name)s);
+            """)
+            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": migrations})
         self.apply_migration(new_migration, is_fake=True)
 
     @override
     def update_migration_hash(self, migration: Migration) -> None:
-        path = self.migrations_dir / migration.name
-        if not path.is_file() or not path.name.endswith(".sql"):
-            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
-
-        _, _, migration_hash = self._get_content_hash(path)
+        path = self._get_migration_path(migration)
+        _, _, migration_hash = self._get_migration_content_and_hash(path)
 
         with self.connection.cursor() as cursor:
-            cursor.execute(
-                f"""UPDATE {self.table_name} SET change_hash = %s WHERE migration_name = %s;""",
-                (migration_hash, os.path.basename(path)),
-            )
+            query = SQL("""
+UPDATE {} SET change_hash = %s WHERE migration_name = %(migration_name)s;
+            """)
+            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": os.path.basename(path)})
 
     @override
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
@@ -178,7 +170,7 @@ DROP TABLE IF EXISTS {table_name};
         if conflict_migrations:
             for conflict_migration in conflict_migrations:
                 path = self.migrations_dir / conflict_migration
-                _, _, migration_hash = self._get_content_hash(path)
+                _, _, migration_hash = self._get_migration_content_and_hash(path)
                 raise ValueError(
                     f"Migration {conflict_migration} has a different hash in the database: "
                     f"found={migration_hash} existing={self._get_database_hash(conflict_migration)}"
@@ -194,11 +186,8 @@ DROP TABLE IF EXISTS {table_name};
 
     @override
     def validate_sql_syntax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
-        path = self.migrations_dir / migration.name
-        if not path.is_file() or not path.name.endswith(".sql"):
-            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
-
-        migration_code, reverse_migration_code, _ = self._get_content_hash(path)
+        path = self._get_migration_path(migration)
+        migration_code, reverse_migration_code, _ = self._get_migration_content_and_hash(path)
 
         for code in (migration_code, reverse_migration_code):
             try:
@@ -208,42 +197,71 @@ DROP TABLE IF EXISTS {table_name};
                         continue
                     cursor.execute(code)
             except ProgrammingError as e:
-                return e, code
+                return e, str(code)
             finally:
                 self.connection.rollback()
         return None
 
-    def _patch_sql_statement(self, sql: str) -> str:
+    def _update_migration_changelog(self, cursor: Cursor, migration: Migration, hash: str, is_rollback: bool) -> None:
+        path = self.migrations_dir / migration.name
+        if is_rollback and not migration.initial:
+            query = SQL("""
+DELETE FROM {}
+WHERE migration_name = %(migration_name)s
+    AND change_hash = %(change_hash)s;
+                    """)
+        else:
+            query = SQL("""
+INSERT INTO {} (migration_name, change_hash)
+VALUES (%(migration_name)s, %(change_hash)s);
+                    """)
+        cursor.execute(
+            query.format(Identifier(self.table_name)),
+            {"migration_name": os.path.basename(path), "change_hash": hash},
+        )
+
+    def _get_migration_path(self, migration: Migration) -> Path:
+        path = self.migrations_dir / migration.name
+        if not path.is_file() or not path.name.endswith(".sql"):
+            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
+        return path
+
+    def _get_migration_content_and_hash(self, path: Path) -> tuple[Query, Query, str]:
+        content = path.read_text()
+        migration, reverse_migration = content.split(ROLLBACK_SPLIT_TAG, 1)
+        return (
+            cast(Query, migration),
+            cast(Query, reverse_migration),
+            hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        )
+
+    def _patch_sql_statement(self, query: Query) -> Query:
+        sql = str(query)
         # remove comments
         sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
         sql = re.sub(r"--.*(?=\n|$)", "", sql).strip()
 
         if not any(w in sql.upper() for w in ("CREATE", "ALTER", "DROP")):
-            return sql
+            return cast(Query, sql)
         if "CREATE TABLE" in sql.upper() and "IF NOT EXISTS" not in sql.upper():
-            return sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
+            return cast(Query, sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS"))
         if "DROP TABLE" in sql.upper() and "IF EXISTS" not in sql.upper():
-            return sql.replace("DROP TABLE", "DROP TABLE IF EXISTS")
+            return cast(Query, sql.replace("DROP TABLE", "DROP TABLE IF EXISTS"))
         if "ALTER TABLE" in sql.upper():
             if "ADD COLUMN" in sql.upper() and "IF NOT EXISTS" not in sql.upper():
-                return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS")
+                return cast(Query, sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS"))
             if "DROP COLUMN" in sql.upper() and "IF EXISTS" not in sql.upper():
-                return sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS")
-        return sql
+                return cast(Query, sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS"))
+        return cast(Query, sql)
 
     def _get_database_hash(self, migration_name: str) -> str:
         with self.connection.cursor() as cursor:
-            cursor.execute(
-                f"""SELECT change_hash FROM {self.table_name} WHERE migration_name = %s""",
-                (migration_name,),
-            )
+            query = SQL("""
+SELECT change_hash FROM {} WHERE migration_name = %(migration_name)s;
+            """)
+            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": migration_name})
             result = cursor.fetchone()
 
             if not result or not result[0]:
                 raise ValueError(f"Migration {migration_name} not found in the database")
             return result[0]
-
-    def _get_content_hash(self, path: Path) -> tuple[str, str, str]:
-        content = path.read_text()
-        migration, reverse_migration = content.split(ROLLBACK_SPLIT_TAG, 1)
-        return migration, reverse_migration, hashlib.sha256(content.encode("utf-8")).hexdigest()

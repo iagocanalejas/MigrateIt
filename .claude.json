@@ -1,0 +1,10 @@
+{
+	"permissions": {
+		"allow": [
+			"Bash(mypy*)",
+			"Bash(pytest*)",
+			"Bash(ruff*)",
+			"Bash(pre-commit*)"
+		]
+	}
+}

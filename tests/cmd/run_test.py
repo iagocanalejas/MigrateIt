@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-import psycopg2
+import psycopg
 
 from migrateit.cli import cmd_init, cmd_new, cmd_run
 from migrateit.clients.psql import PsqlClient
@@ -72,7 +72,7 @@ class CliRunTest(BaseCmdTest):
             rows = cursor.fetchall()
             self.assertEqual(len(rows), 1)
 
-            with self.assertRaises(psycopg2.errors.UndefinedTable):
+            with self.assertRaises(psycopg.errors.UndefinedTable):
                 cursor.execute("SELECT * FROM test")
             self.connection.rollback()
 

@@ -24,7 +24,7 @@ exclude = [
     "__init__.py",
 ]
 
-target-version = "py312"
+target-version = "py313"
 src = ["rscraping", "tests"]
 line-length = 120
 
