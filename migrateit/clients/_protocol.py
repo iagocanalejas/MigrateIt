@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from psycopg2 import ProgrammingError
+from psycopg import ProgrammingError
 
 from migrateit.models import Migration, MigrationStatus
 

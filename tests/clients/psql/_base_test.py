@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import psycopg2
+import psycopg
 
 from migrateit.clients import PsqlClient
 from migrateit.models import MigrateItConfig, SupportedDatabase
@@ -20,7 +20,7 @@ class BasePsqlTest(unittest.TestCase):
     TEST_MIGRATIONS_TABLE = "migrations"
 
     def setUp(self) -> None:
-        self.connection = psycopg2.connect(PsqlClient.get_environment_url())
+        self.connection = psycopg.connect(PsqlClient.get_environment_url())
         self.temp_dir = Path(tempfile.mkdtemp())
         self.migrations_dir = self.temp_dir / "migrations"
         self.changelog = create_changelog_file(self.temp_dir / "changelog.json", SupportedDatabase.POSTGRES)

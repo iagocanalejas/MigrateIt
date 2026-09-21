@@ -3,7 +3,7 @@ import re
 import sys
 from typing import IO, Any
 
-from psycopg2 import ProgrammingError
+from psycopg import ProgrammingError
 
 from migrateit.models.migration import Migration, MigrationStatus
 
@@ -89,7 +89,7 @@ def print_list(children: dict[str, list[Migration]], status_map: dict[str, Migra
 
 
 def pretty_print_sql_error(error: ProgrammingError, sql_query: str) -> None:
-    error_message = error.pgerror or str(error)
+    error_message = (error.diag.message_primary if error.diag else None) or str(error)
 
     write_line("❌ SQL Syntax Error:")
     write_line("-" * 80)

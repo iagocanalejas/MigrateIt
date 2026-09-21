@@ -1,4 +1,8 @@
 import os
+from typing import cast
+
+from psycopg import sql
+from psycopg.abc import Query
 
 from migrateit.models import Migration
 from tests.clients.psql._base_test import BasePsqlTest
@@ -15,7 +19,7 @@ class TestPsqlClientSquashMigrations(BasePsqlTest):
         self._create_migrations_file(self.INIT_MIGRATION, sql=sql)
 
         with self.connection.cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(cast(Query, sql))
             self.connection.commit()
 
     def test_squash_migrations_marks_old_as_squashed_and_applies_new_fake(self) -> None:
@@ -39,17 +43,18 @@ class TestPsqlClientSquashMigrations(BasePsqlTest):
         self.client.squash_migrations(migrations=old_migrations, new_migration=new_migration)
 
         with self.connection.cursor() as cursor:
-            cursor.execute(
-                f"""SELECT COUNT(*) FROM {self.TEST_MIGRATIONS_TABLE}
-                    WHERE migration_name IN %s AND squashed = TRUE""",
-                (tuple(old_migrations),),
-            )
+            query = sql.SQL("""
+SELECT COUNT(*) FROM {}
+WHERE migration_name = ANY(%(migrations)s) AND squashed = TRUE
+            """)
+            cursor.execute(query.format(sql.Identifier(self.TEST_MIGRATIONS_TABLE)), {"migrations": old_migrations})
             result = cursor.fetchone()
             self.assertEqual(result[0] if result else None, len(old_migrations))
 
             # Assert new migration is recorded
-            cursor.execute(
-                f"SELECT COUNT(*) FROM {self.TEST_MIGRATIONS_TABLE} WHERE migration_name = %s", (new_migration_name,)
-            )
+            query = sql.SQL("""
+SELECT COUNT(*) FROM {} WHERE migration_name = %s
+            """)
+            cursor.execute(query.format(sql.Identifier(self.TEST_MIGRATIONS_TABLE)), (new_migration_name,))
             result = cursor.fetchone()
             self.assertEqual(result[0] if result else None, 1)
