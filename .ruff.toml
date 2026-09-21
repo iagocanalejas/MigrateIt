@@ -25,7 +25,7 @@ exclude = [
 ]
 
 target-version = "py313"
-src = ["rscraping", "tests"]
+src = ["migrateit", "tests"]
 line-length = 120
 
 lint.select = [

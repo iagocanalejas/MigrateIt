@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-migrateit = "migrateit.main:main"
+migrateit = "migrateit.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -69,10 +69,11 @@ exclude_also = [
 ]
 
 [tool.mypy]
-files = "migrateit"
+files = ["migrateit", "tests"]
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_incomplete_defs = true
 disallow_untyped_defs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
+exclude = ['^build/', '^venv/']
