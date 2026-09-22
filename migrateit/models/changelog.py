@@ -59,7 +59,7 @@ class ChangelogFile:
             name = os.path.basename(name)
         name = name.split("_")[0]  # get the migration number
         for migration in self.migrations:
-            if migration.name.startswith(name):
+            if migration.name.split("_")[0] == name:
                 return migration
 
         raise ValueError(f"Migration '{name}' not found in changelog")
