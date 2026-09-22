@@ -264,7 +264,12 @@ def build_migration_plan(
     return [p for p in plan if statuses_map[p.name] != MigrationStatus.APPLIED]
 
 
-def find_path(tree: OrderedDict[str, list[Migration]], parent: str, child: str, path: list[str] = []) -> list[str]:
+def find_path(
+    tree: OrderedDict[str, list[Migration]],
+    parent: str,
+    child: str,
+    path: list[str] | None = None,
+) -> list[str]:
     """
     Find a path from parent to child in the migration tree.
     Args:
@@ -274,6 +279,8 @@ def find_path(tree: OrderedDict[str, list[Migration]], parent: str, child: str, 
     Returns:
         A list of migration names representing the path from parent to child, or an empty list if no path exists.
     """
+    if path is None:
+        path = []
     path.append(parent)
     if parent == child:
         return path
