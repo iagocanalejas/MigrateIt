@@ -2,10 +2,9 @@ import hashlib
 import os
 import re
 from pathlib import Path
-from typing import cast, override
+from typing import override
 
 from psycopg import Connection, Cursor, DatabaseError, ProgrammingError
-from psycopg.abc import Query
 from psycopg.sql import SQL, Identifier
 
 from migrateit.clients._client import SqlClient
@@ -230,33 +229,34 @@ VALUES (%(migration_name)s, %(change_hash)s);
             raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
         return path
 
-    def _get_migration_content_and_hash(self, path: Path) -> tuple[Query, Query, str]:
+    def _get_migration_content_and_hash(self, path: Path) -> tuple[str, str, str]:
         content = path.read_text()
         migration, reverse_migration = content.split(ROLLBACK_SPLIT_TAG, 1)
         return (
-            cast(Query, migration),
-            cast(Query, reverse_migration),
+            migration,
+            reverse_migration,
             hashlib.sha256(content.encode("utf-8")).hexdigest(),
         )
 
-    def _patch_sql_statement(self, query: Query) -> Query:
-        sql = str(query)
+    def _patch_sql_statement(self, sql: str) -> str:
+        sql = sql.upper()
+
         # remove comments
         sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
         sql = re.sub(r"--.*(?=\n|$)", "", sql).strip()
 
-        if not any(w in sql.upper() for w in ("CREATE", "ALTER", "DROP")):
-            return cast(Query, sql)
-        if "CREATE TABLE" in sql.upper() and "IF NOT EXISTS" not in sql.upper():
-            return cast(Query, sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS"))
-        if "DROP TABLE" in sql.upper() and "IF EXISTS" not in sql.upper():
-            return cast(Query, sql.replace("DROP TABLE", "DROP TABLE IF EXISTS"))
-        if "ALTER TABLE" in sql.upper():
-            if "ADD COLUMN" in sql.upper() and "IF NOT EXISTS" not in sql.upper():
-                return cast(Query, sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS"))
-            if "DROP COLUMN" in sql.upper() and "IF EXISTS" not in sql.upper():
-                return cast(Query, sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS"))
-        return cast(Query, sql)
+        if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
+            return sql
+        if "CREATE TABLE" in sql and "IF NOT EXISTS" not in sql:
+            return sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
+        if "DROP TABLE" in sql and "IF EXISTS" not in sql:
+            return sql.replace("DROP TABLE", "DROP TABLE IF EXISTS", 1)
+        if "ALTER TABLE" in sql:
+            if "ADD COLUMN" in sql and "IF NOT EXISTS" not in sql:
+                return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", 1)
+            if "DROP COLUMN" in sql and "IF EXISTS" not in sql:
+                return sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS", 1)
+        return sql
 
     def _get_database_hash(self, migration_name: str) -> str:
         with self.connection.cursor() as cursor:

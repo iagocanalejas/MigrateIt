@@ -1,8 +1,6 @@
 import os
-from typing import cast
 
 from psycopg import sql
-from psycopg.abc import Query
 
 from migrateit.models import Migration
 from tests.clients.psql._base_test import BasePsqlTest
@@ -19,7 +17,7 @@ class TestPsqlClientSquashMigrations(BasePsqlTest):
         self._create_migrations_file(self.INIT_MIGRATION, sql=sql)
 
         with self.connection.cursor() as cursor:
-            cursor.execute(cast(Query, sql))
+            cursor.execute(sql)
             self.connection.commit()
 
     def test_squash_migrations_marks_old_as_squashed_and_applies_new_fake(self) -> None:
