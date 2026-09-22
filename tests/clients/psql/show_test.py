@@ -11,7 +11,7 @@ class TestPsqlClientShowMigrations(BasePsqlTest):
         super().setUp()
         sql, _ = self.client.create_migrations_table_str(self.TEST_MIGRATIONS_TABLE)
         with self.connection.cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(sql)  # pyright: ignore
             self.connection.commit()
 
     def _insert_migration_row(self, name: str, hash_value: str) -> None:

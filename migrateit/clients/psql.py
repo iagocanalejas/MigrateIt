@@ -126,7 +126,7 @@ SELECT migration_name, change_hash FROM {};
             with self.connection.cursor() as cursor:
                 if not is_fake:
                     code = migration_code if not is_rollback else reverse_migration_code
-                    cursor.execute(code)
+                    cursor.execute(code)  # pyright: ignore
                 self._update_migration_changelog(cursor, migration, migration_hash, is_rollback)
         except (DatabaseError, ProgrammingError) as e:
             self.connection.rollback()
@@ -195,12 +195,12 @@ UPDATE {} SET change_hash = %(hash)s WHERE migration_name = %(migration)s;
         for code in (migration_code, reverse_migration_code):
             try:
                 with self.connection.cursor() as cursor:
-                    code = self._patch_sql_statement(code)
-                    if not code:
+                    patched = self._patch_sql_statement(code)
+                    if not patched:
                         continue
-                    cursor.execute(code)
+                    cursor.execute(patched)  # pyright: ignore
             except ProgrammingError as e:
-                return e, str(code)
+                return e, code
             finally:
                 self.connection.rollback()
         return None
@@ -240,7 +240,6 @@ VALUES (%(migration_name)s, %(change_hash)s);
 
     def _patch_sql_statement(self, sql: str) -> str:
         sql = sql.upper()
-
         # remove comments
         sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
         sql = re.sub(r"--.*(?=\n|$)", "", sql).strip()

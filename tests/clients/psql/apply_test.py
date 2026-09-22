@@ -14,7 +14,7 @@ class TestPsqlClientApplyMigrations(BasePsqlTest):
         os.makedirs(self.migrations_dir)
         sql, _ = self.client.create_migrations_table_str(self.TEST_MIGRATIONS_TABLE)
         with self.connection.cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(sql)  # pyright: ignore
             self.connection.commit()
 
     def test_apply_migration_success(self) -> None:

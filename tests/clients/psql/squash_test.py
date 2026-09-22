@@ -17,7 +17,7 @@ class TestPsqlClientSquashMigrations(BasePsqlTest):
         self._create_migrations_file(self.INIT_MIGRATION, sql=sql)
 
         with self.connection.cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(sql)  # pyright: ignore
             self.connection.commit()
 
     def test_squash_migrations_marks_old_as_squashed_and_applies_new_fake(self) -> None:

@@ -21,7 +21,7 @@ class BaseCmdTest(unittest.TestCase):
         self.connection = psycopg.connect(PsqlClient.get_environment_url())
         sql, _ = PsqlClient.create_migrations_table_str(self.TEST_MIGRATIONS_TABLE)
         with self.connection.cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(sql)  # pyright: ignore
             self.connection.commit()
 
     def tearDown(self) -> None:
