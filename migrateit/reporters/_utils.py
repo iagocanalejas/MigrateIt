@@ -12,7 +12,7 @@ NORMAL = "\033[m"
 def force_bytes(exc: Any) -> bytes:
     with contextlib.suppress(TypeError):
         return bytes(exc)
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(BaseException):
         return str(exc).encode()
     return f"<unprintable {type(exc).__name__} object>".encode()
 

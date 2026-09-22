@@ -25,7 +25,10 @@ class PsqlClient(SqlClient[Connection]):
             user = os.getenv(cls.VARNAME_DB_USER, "postgres")
             password = os.getenv(cls.VARNAME_DB_PASS, "")
             db_name = os.getenv(cls.VARNAME_DB_NAME, "migrateit")
-            db_url = f"postgresql://{user}{f':{password}' if password else ''}@{host}:{port}/{db_name}"
+            db_timeout = os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, "30")
+
+            password = f":{password}" if password else ""
+            db_url = f"postgresql://{user}{password}@{host}:{port}/{db_name}?connect_timeout={db_timeout}"
         if not db_url:
             raise ValueError("DB_URL environment variable is not set")
         return db_url
@@ -103,7 +106,7 @@ SELECT migration_name, change_hash FROM {};
                 status = MigrationStatus.CONFLICT
                 write_line(
                     f"Missmatch for migration {migration_name}. "
-                    f"Migration hash is '{migration_hash}' but '{change_hash}' was found."
+                    f"File hash is '{migration_hash}' but '{change_hash}' was found in the database."
                 )
 
             migrations[migration.name] = status

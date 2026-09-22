@@ -13,6 +13,7 @@ class SqlClient[T](ABC, SqlClientProtocol):
     VARNAME_DB_USER = os.getenv("VARNAME_DB_USER", "DB_USER")
     VARNAME_DB_PASS = os.getenv("VARNAME_DB_PASS", "DB_PASS")
     VARNAME_DB_NAME = os.getenv("VARNAME_DB_NAME", "DB_NAME")
+    VARNAME_DB_TIMEOUT_SECONDS = os.getenv("VARNAME_DB_TIMEOUT_SECONDS", "DB_TIMEOUT_SECONDS")
 
     connection: T
     config: MigrateItConfig
