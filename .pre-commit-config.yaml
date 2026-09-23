@@ -40,3 +40,4 @@ repos:
           - --config-file=pyproject.toml
         additional_dependencies:
           - psycopg[binary]
+          - pytest

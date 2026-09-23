@@ -1,11 +1,8 @@
-import os
-import shutil
-import tempfile
-import unittest
 from pathlib import Path
-from unittest.mock import patch
 
-from migrateit.models import ChangelogFile, SupportedDatabase
+import pytest
+
+from migrateit.models.changelog import ChangelogFile, Migration, SupportedDatabase
 from migrateit.tree import (
     create_changelog_file,
     create_migration_directory,
@@ -15,107 +12,137 @@ from migrateit.tree import (
 )
 
 
-@patch("migrateit.reporters.output.write_line_b", lambda *_: None)
-class TestTreeUtils(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temp_dir = Path(tempfile.mkdtemp())
-        self.migrations_dir = self.temp_dir / "migrations"
-        self.migrations_file_path = self.temp_dir / "changelog.json"
+def test_create_migration_directory(temp_dir: Path) -> None:
+    d = temp_dir / "migrations"
+    create_migration_directory(d)
+    assert d.is_dir()
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.temp_dir)
 
-    def test_create_migrations_dir_success(self) -> None:
-        create_migration_directory(self.migrations_dir)
-        self.assertTrue(os.path.exists(self.migrations_dir))
+def test_create_migration_directory_already_exists(temp_dir: Path) -> None:
+    d = temp_dir / "migrations"
+    d.mkdir()
+    create_migration_directory(d)
+    assert d.is_dir()
 
-    def test_create_migrations_dir_already_exists(self) -> None:
-        os.makedirs(self.migrations_dir)
-        create_migration_directory(self.migrations_dir)
-        self.assertTrue(os.path.exists(self.migrations_dir))
 
-    def test_create_migrations_file_success(self) -> None:
-        create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
-        self.assertTrue(os.path.exists(self.migrations_file_path))
+def test_create_changelog_file(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    cl = create_changelog_file(path, SupportedDatabase.POSTGRES)
+    assert path.exists()
+    assert cl.version == 1
+    assert cl.database == SupportedDatabase.POSTGRES
+    assert cl.path == path
 
-    def test_create_migrations_file_already_exists(self) -> None:
-        Path(self.migrations_file_path).touch()
-        with self.assertRaises(ValueError):
-            create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
 
-    def test_create_migrations_file_invalid_extension(self) -> None:
-        bad_path = self.temp_dir / "migrations.txt"
-        with self.assertRaises(ValueError):
-            create_changelog_file(bad_path, SupportedDatabase.POSTGRES)
+def test_create_changelog_file_invalid_extension(temp_dir: Path) -> None:
+    bad_path = temp_dir / "migrations.txt"
+    with pytest.raises(ValueError):
+        create_changelog_file(bad_path, SupportedDatabase.POSTGRES)
 
-    def test_load_migrations_file_success(self) -> None:
-        file = ChangelogFile(version=1, path=self.migrations_file_path)
-        with open(self.migrations_file_path, "w") as f:
-            f.write(file.to_json())
 
-        loaded = load_changelog_file(self.migrations_file_path)
-        self.assertIsInstance(loaded, ChangelogFile)
-        self.assertEqual(loaded.version, 1)
+def test_load_changelog_file_not_exists(temp_dir: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        load_changelog_file(temp_dir / "changelog.json")
 
-    def test_load_migrations_file_not_exists(self) -> None:
-        with self.assertRaises(FileNotFoundError):
-            load_changelog_file(self.migrations_file_path)
 
-    def test_save_migrations_file_success(self) -> None:
-        file = ChangelogFile(version=2, path=self.migrations_file_path)
-        Path(self.migrations_file_path).touch()
-        save_changelog_file(file)
+def test_save_changelog_file(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    path.touch()
+    cl = ChangelogFile(version=2, path=path)
+    save_changelog_file(cl)
+    assert '"version": 2' in path.read_text()
 
-        with open(self.migrations_file_path) as f:
-            content = f.read()
-        self.assertIn('"version": 2', content)
 
-    def test_save_migrations_file_not_exists(self) -> None:
-        file = ChangelogFile(version=1, path=self.migrations_file_path)
-        with self.assertRaises(FileNotFoundError):
-            save_changelog_file(file)
+def test_save_changelog_file_not_exists(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    cl = ChangelogFile(version=1, path=path)
+    with pytest.raises(FileNotFoundError):
+        save_changelog_file(cl)
 
-    def test_create_new_migration_success(self) -> None:
-        os.makedirs(self.migrations_dir)
-        create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
-        changelog = load_changelog_file(self.migrations_file_path)
 
-        create_new_migration(changelog, self.migrations_dir, "init")
-        created_files = os.listdir(self.migrations_dir)
+def test_create_new_migration_success(temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+    migrations_dir.mkdir()
+    path = temp_dir / "changelog.json"
+    cl = create_changelog_file(path, SupportedDatabase.POSTGRES)
 
-        self.assertEqual(len(created_files), 1)
-        self.assertRegex(created_files[0], r"0000_init\.sql")
+    create_new_migration(cl, migrations_dir, "init")
+    created_files = sorted(migrations_dir.iterdir())
+    assert len(created_files) == 1
+    assert created_files[0].name == "0000_init.sql"
 
-        migrations = load_changelog_file(self.migrations_file_path)
-        self.assertEqual(len(migrations.migrations), 1)
-        self.assertTrue(migrations.migrations[0].name.endswith("init.sql"))
+    migrations = load_changelog_file(path)
+    assert len(migrations.migrations) == 1
+    assert migrations.migrations[0].name.endswith("init.sql")
 
-    def test_create_new_migration_with_dependencies(self) -> None:
-        os.makedirs(self.migrations_dir)
-        create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
-        changelog = load_changelog_file(self.migrations_file_path)
 
-        create_new_migration(changelog, self.migrations_dir, "init")
-        create_new_migration(changelog, self.migrations_dir, "add_users", dependencies=["0000"])
-        created_files = os.listdir(self.migrations_dir)
-        created_files.sort()
+def test_create_new_migration_with_dependencies(temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+    migrations_dir.mkdir()
+    path = temp_dir / "changelog.json"
+    cl = create_changelog_file(path, SupportedDatabase.POSTGRES)
 
-        self.assertEqual(len(created_files), 2)
-        self.assertRegex(created_files[0], r"0000_init\.sql")
-        self.assertRegex(created_files[1], r"0001_add_users\.sql")
+    create_new_migration(cl, migrations_dir, "init")
+    create_new_migration(cl, migrations_dir, "add_users", dependencies=["0000"])
+    created_files = sorted(migrations_dir.iterdir())
+    assert len(created_files) == 2
+    assert created_files[0].name == "0000_init.sql"
+    assert created_files[1].name == "0001_add_users.sql"
 
-        migrations = load_changelog_file(self.migrations_file_path)
-        self.assertEqual(len(migrations.migrations), 2)
-        self.assertTrue(migrations.migrations[1].name.endswith("add_users.sql"))
-        self.assertIn("init", migrations.migrations[1].parents[0])
+    migrations = load_changelog_file(path)
+    assert len(migrations.migrations) == 2
+    assert "init" in migrations.migrations[1].parents[0]
 
-    def test_create_new_migration_invalid_name(self) -> None:
-        os.makedirs(self.migrations_dir)
-        create_changelog_file(self.migrations_file_path, SupportedDatabase.POSTGRES)
-        changelog = load_changelog_file(self.migrations_file_path)
 
-        with self.assertRaises(ValueError):
-            create_new_migration(changelog, self.migrations_dir, "123-bad-name")
+def test_create_new_migration_invalid_name(temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+    migrations_dir.mkdir()
+    path = temp_dir / "changelog.json"
+    cl = create_changelog_file(path, SupportedDatabase.POSTGRES)
 
-        with self.assertRaises(ValueError):
-            create_new_migration(changelog, self.migrations_dir, "")
+    with pytest.raises(ValueError):
+        create_new_migration(cl, migrations_dir, "123-bad-name")
+
+    with pytest.raises(ValueError):
+        create_new_migration(cl, migrations_dir, "")
+
+
+def test_load_changelog_file_valid(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    cl = ChangelogFile(version=1, migrations=[], path=path)
+    path.write_text(cl.to_json())
+    loaded = load_changelog_file(path)
+    assert loaded.version == 1
+
+
+def test_load_changelog_file_multiple_initial_raises(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    migrations = [
+        Migration(name="0000_a.sql", initial=True, parents=[]),
+        Migration(name="0001_b.sql", initial=True, parents=[]),
+    ]
+    cl = ChangelogFile(version=1, migrations=migrations, path=path)
+    path.write_text(cl.to_json())
+    with pytest.raises(ValueError):
+        load_changelog_file(path)
+
+
+def test_load_changelog_file_initial_with_parents_raises(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    migrations = [Migration(name="0000_a.sql", initial=True, parents=["0001_b.sql"])]
+    cl = ChangelogFile(version=1, migrations=migrations, path=path)
+    path.write_text(cl.to_json())
+    with pytest.raises(ValueError):
+        load_changelog_file(path)
+
+
+def test_load_changelog_file_non_initial_without_parents_raises(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    migrations = [Migration(name="0000_a.sql", initial=True, parents=[])]
+    cl = ChangelogFile(version=1, migrations=migrations, path=path)
+    path.write_text(cl.to_json())
+    migrations.append(Migration(name="0001_b.sql", parents=[]))
+    cl.migrations = migrations
+    path.write_text(cl.to_json())
+    with pytest.raises(ValueError):
+        load_changelog_file(path)

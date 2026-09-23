@@ -89,7 +89,11 @@ def print_list(children: dict[str, list[Migration]], status_map: dict[str, Migra
 
 
 def pretty_print_sql_error(error: ProgrammingError, sql_query: str) -> None:
-    error_message = (error.diag.message_primary if error.diag else None) or str(error)
+    error_message = None
+    if isinstance(error, ProgrammingError):
+        error_message = error.diag.message_primary if error.diag else None
+    if not error_message:
+        error_message = str(error)
 
     write_line("❌ SQL Syntax Error:")
     write_line("-" * 80)

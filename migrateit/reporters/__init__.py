@@ -13,15 +13,16 @@ from .errors import (
     error_handler as error_handler,
 )
 from .logs import (
+    LoggingHandler as LoggingHandler,
     logging_handler as logging_handler,
 )
 from .output import (
     STATUS_COLORS as STATUS_COLORS,
+    pretty_print_sql_error as pretty_print_sql_error,
+    print_dag as print_dag,
+    print_list as print_list,
+    print_logo as print_logo,
     write as write,
     write_line as write_line,
     write_line_b as write_line_b,
-    print_logo as print_logo,
-    print_dag as print_dag,
-    print_list as print_list,
-    pretty_print_sql_error as pretty_print_sql_error,
 )
