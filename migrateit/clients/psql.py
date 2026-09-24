@@ -150,8 +150,10 @@ UPDATE {} SET squashed = TRUE WHERE migration_name = ANY(%(migration_name)s);
             query = SQL("""
 UPDATE {} SET change_hash = %(hash)s WHERE migration_name = %(migration)s;
             """)
-            params = {"migration": os.path.basename(path), "hash": migration_hash}
-            cursor.execute(query.format(Identifier(self.table_name)), params)
+            cursor.execute(
+                query.format(Identifier(self.table_name)),
+                {"migration": os.path.basename(path), "hash": migration_hash},
+            )
 
     @override
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:

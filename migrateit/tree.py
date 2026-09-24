@@ -203,7 +203,7 @@ def build_migrations_tree(changelog: ChangelogFile) -> OrderedDict[str, list[Mig
 
 def build_migration_plan(
     changelog: ChangelogFile,
-    migration_tree: OrderedDict[str, list[Migration]],
+    migration_tree: dict[str, list[Migration]],
     statuses_map: dict[str, MigrationStatus],
     target_migration: Migration | None = None,
     is_rollback: bool = False,
@@ -212,7 +212,7 @@ def build_migration_plan(
     Build a migration plan based on the changelog and migration tree.
     Args:
         changelog: The changelog file containing migrations.
-        migration_tree: An ordered dictionary representing the migration tree.
+        migration_tree: A dictionary representing the migration tree.
         statuses_map: A map of migration names to their statuses.
         target_migration: The target migration to apply or rollback to.
         is_rollback: Whether the plan is for a rollback operation.
@@ -265,7 +265,7 @@ def build_migration_plan(
 
 
 def find_path(
-    tree: OrderedDict[str, list[Migration]],
+    tree: dict[str, list[Migration]],
     parent: str,
     child: str,
     path: list[str] | None = None,
@@ -273,7 +273,7 @@ def find_path(
     """
     Find a path from parent to child in the migration tree.
     Args:
-        tree: The migration tree as an OrderedDict.
+        tree: The migration tree.
         parent: The starting migration name.
         child: The target migration name.
     Returns:

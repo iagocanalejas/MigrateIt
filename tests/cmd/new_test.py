@@ -1,77 +1,65 @@
 import os
-from unittest.mock import patch
+from pathlib import Path
+
+import pytest
 
 from migrateit.cli import cmd_init, cmd_new
 from migrateit.clients.psql import PsqlClient
 from migrateit.models.changelog import SupportedDatabase
 from migrateit.models.config import MigrateItConfig
 from migrateit.tree import load_changelog_file
-from tests.cmd._base_test import BaseCmdTest
 
 
-@patch("migrateit.reporters.output.write_line_b", lambda *_: None)
-class CliNewTest(BaseCmdTest):
-    def setUp(self) -> None:
-        super().setUp()
+def _setup_test_client(cmd_client: PsqlClient, temp_dir: Path) -> PsqlClient:
+    cmd_init(
+        table_name="migrations",
+        migrations_dir=cmd_client.migrations_dir,
+        migrations_file=cmd_client.changelog.path,
+        database=SupportedDatabase.POSTGRES,
+    )
 
-        with patch("migrateit.reporters.output.write_line_b", lambda *_: None):
-            cmd_init(
-                table_name=self.TEST_MIGRATIONS_TABLE,
-                migrations_dir=self.migrations_dir,
-                migrations_file=self.temp_dir / "changelog.json",
-                database=SupportedDatabase.POSTGRES,
-            )
+    changelog = load_changelog_file(cmd_client.changelog.path)
+    config = MigrateItConfig(
+        table_name="migrations",
+        migrations_dir=cmd_client.migrations_dir,
+        changelog=changelog,
+    )
+    client = PsqlClient(connection=cmd_client.connection, config=config)
+    return client
 
-        self.changelog = load_changelog_file(self.temp_dir / "changelog.json")
-        self.config = MigrateItConfig(
-            table_name=self.TEST_MIGRATIONS_TABLE,
-            migrations_dir=self.migrations_dir,
-            changelog=self.changelog,
-        )
-        self.client = PsqlClient(connection=self.connection, config=self.config)
 
-    def test_cmd_new(self) -> None:
-        cmd_new(
-            client=self.client,
-            name="test_migration",
-            no_edit=True,
-        )
+def test_cmd_new(cmd_client: PsqlClient, temp_dir: Path) -> None:
+    client = _setup_test_client(cmd_client, temp_dir)
+    cmd_new(client=client, name="test_migration", no_edit=True)
 
-        self.assertTrue(os.path.exists(self.migrations_dir / "0001_test_migration.sql"))
+    assert os.path.exists(client.migrations_dir / "0001_test_migration.sql")
 
-        changelog = load_changelog_file(self.temp_dir / "changelog.json")
-        self.assertEqual(len(changelog.migrations), 2)
-        self.assertEqual(changelog.migrations[1].name, "0001_test_migration.sql")
+    changelog = load_changelog_file(client.changelog.path)
+    assert len(changelog.migrations) == 2
+    assert changelog.migrations[1].name == "0001_test_migration.sql"
 
-    def test_cmd_new_with_existing_migration(self) -> None:
-        with open(self.migrations_dir / "0001_test_migration.sql", "w", encoding="utf-8") as f:
-            f.write("Hello, world!\n")
 
-        with self.assertRaises(FileExistsError) as ctx:
-            cmd_new(
-                client=self.client,
-                name="test_migration",
-                no_edit=True,
-            )
+def test_cmd_new_with_existing_migration(cmd_client: PsqlClient, temp_dir: Path) -> None:
+    client = _setup_test_client(cmd_client, temp_dir)
 
-        self.assertIn("already exists", str(ctx.exception))
+    with open(client.migrations_dir / "0001_test_migration.sql", "w", encoding="utf-8") as f:
+        f.write("Hello, world!\n")
 
-    def test_cmd_new_with_dependencies(self) -> None:
-        cmd_new(
-            client=self.client,
-            name="test_migration",
-            no_edit=True,
-        )
-        cmd_new(
-            client=self.client,
-            name="test_migration",
-            dependencies=["0000", "0001"],
-            no_edit=True,
-        )
+    with pytest.raises(FileExistsError) as ctx:
+        cmd_new(client=client, name="test_migration", no_edit=True)
 
-        self.assertTrue(os.path.exists(self.migrations_dir / "0002_test_migration.sql"))
+    assert "already exists" in str(ctx.value)
 
-        changelog = load_changelog_file(self.temp_dir / "changelog.json")
-        self.assertEqual(len(changelog.migrations), 3)
-        self.assertEqual(changelog.migrations[2].name, "0002_test_migration.sql")
-        self.assertEqual(changelog.migrations[2].parents, ["0000_migrateit.sql", "0001_test_migration.sql"])
+
+def test_cmd_new_with_dependencies(cmd_client: PsqlClient, temp_dir: Path) -> None:
+    client = _setup_test_client(cmd_client, temp_dir)
+
+    cmd_new(client=client, name="test_migration", no_edit=True)
+    cmd_new(client=client, name="test_migration", dependencies=["0000", "0001"], no_edit=True)
+
+    assert os.path.exists(client.migrations_dir / "0002_test_migration.sql")
+
+    changelog = load_changelog_file(client.changelog.path)
+    assert len(changelog.migrations) == 3
+    assert changelog.migrations[2].name == "0002_test_migration.sql"
+    assert changelog.migrations[2].parents == ["0000_migrateit.sql", "0001_test_migration.sql"]

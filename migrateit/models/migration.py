@@ -24,6 +24,8 @@ class Migration:
 
     @staticmethod
     def is_same_migration_name(name1: str, name2: str) -> bool:
+        if not name1 or not name2:
+            return False
         return name1 == name2 or name1.startswith(name2.split("_")[0])
 
     def to_dict(self) -> dict[str, Any]:
