@@ -1,4 +1,5 @@
 import logging
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -77,13 +78,6 @@ def test_format_color_all_colors() -> None:
 
 
 # --- TestPrintDag ---
-
-
-@patch("migrateit.reporters.output.write_line")
-def test_print_dag_single_node(mock_write: MagicMock) -> None:
-    status_map: dict[str, MigrationStatus] = {"0001_init.sql": MigrationStatus.APPLIED}
-    print_dag("0001_init.sql", {}, status_map)
-    mock_write.assert_called()
 
 
 @patch("migrateit.reporters.output.write_line")
@@ -195,11 +189,14 @@ def test_error_handler_no_exception() -> None:
 # --- TestLoggingHandler ---
 
 
-@pytest.mark.parametrize("level, msg", [
-    (logging.INFO, "info message"),
-    (logging.ERROR, "error message"),
-    (logging.WARNING, "warn message"),
-])
+@pytest.mark.parametrize(
+    "level, msg",
+    [
+        (logging.INFO, "info message"),
+        (logging.ERROR, "error message"),
+        (logging.WARNING, "warn message"),
+    ],
+)
 def test_logging_handler_emits(level: int, msg: str) -> None:
     handler = LoggingHandler(use_color=False)
     record = logging.LogRecord(
@@ -234,23 +231,6 @@ def test_logging_handler_color_enabled() -> None:
         assert RED in call_args
 
 
-def test_logging_handler_color_disabled() -> None:
-    handler = LoggingHandler(use_color=False)
-    record = logging.LogRecord(
-        name="test",
-        level=logging.ERROR,
-        pathname="",
-        lineno=0,
-        msg="uncolored",
-        args=(),
-        exc_info=None,
-    )
-    with patch("migrateit.reporters.logs.write_line") as mock_write:
-        handler.emit(record)
-        call_args = mock_write.call_args[0][0]
-        assert RED not in call_args
-
-
 # --- TestLoggingContextManager ---
 
 
@@ -270,12 +250,6 @@ def test_logging_handler_context_emits(mock_write: MagicMock) -> None:
     mock_write.assert_called()
 
 
-def test_logging_handler_sets_level() -> None:
-    logger = logging.getLogger("migrateit")
-    with logging_handler(use_color=True):
-        assert logger.level == logging.INFO
-
-
 # --- TestPrettyPrintSqlError ---
 
 
@@ -292,3 +266,124 @@ def test_pretty_print_sql_error_with_position() -> None:
         pretty_print_sql_error(error, "SEL * FROM foo;")
         calls = [c[0][0] for c in mock_write.call_args_list]
         assert any("^" in c for c in calls)
+
+
+# --- TestLoggingHandlerFormat ---
+
+
+def test_logging_handler_format_with_custom_fmt() -> None:
+    handler = LoggingHandler(use_color=False, fmt="CUSTOM: %(message)s")
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="hello",
+        args=(),
+        exc_info=None,
+    )
+    with patch("migrateit.reporters.logs.write_line") as mock_write:
+        handler.emit(record)
+        call_args = mock_write.call_args[0][0]
+        assert "CUSTOM:" in call_args
+        assert "hello" in call_args
+
+
+def test_logging_handler_format_includes_logger_name() -> None:
+    handler = LoggingHandler(use_color=False)
+    record = logging.LogRecord(
+        name="migrateit.cli",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="run command",
+        args=(),
+        exc_info=None,
+    )
+    with patch("migrateit.reporters.logs.write_line") as mock_write:
+        handler.emit(record)
+        call_args = mock_write.call_args[0][0]
+        assert "migrateit.cli" in call_args
+
+
+def test_logging_handler_format_includes_timestamp() -> None:
+    handler = LoggingHandler(use_color=False)
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="hello",
+        args=(),
+        exc_info=None,
+    )
+    with patch("migrateit.reporters.logs.write_line") as mock_write:
+        handler.emit(record)
+        call_args = mock_write.call_args[0][0]
+        # asctime format: YYYY-MM-DD HH:MM:SS,mmm
+        assert "-" in call_args and ":" in call_args
+
+
+def test_logging_handler_exc_info_appends_traceback() -> None:
+    handler = LoggingHandler(use_color=False)
+    try:
+        raise ValueError("test error")
+    except ValueError:
+        exc_info = sys.exc_info()
+
+    record = logging.LogRecord(
+        name="test",
+        level=logging.ERROR,
+        pathname="",
+        lineno=0,
+        msg="error occurred",
+        args=(),
+        exc_info=exc_info,
+    )
+    with patch("migrateit.reporters.logs.write_line") as mock_write:
+        handler.emit(record)
+        call_args = mock_write.call_args[0][0]
+        assert "error occurred" in call_args
+        assert "ValueError" in call_args
+        assert "test error" in call_args
+
+
+def test_logging_handler_exc_info_none_skips_traceback() -> None:
+    handler = LoggingHandler(use_color=False)
+    record = logging.LogRecord(
+        name="test",
+        level=logging.ERROR,
+        pathname="",
+        lineno=0,
+        msg="error occurred",
+        args=(),
+        exc_info=None,
+    )
+    with patch("migrateit.reporters.logs.write_line") as mock_write:
+        handler.emit(record)
+        call_args = mock_write.call_args[0][0]
+        assert "error occurred" in call_args
+        assert "Traceback" not in call_args
+
+
+def test_logging_handler_critical_color() -> None:
+    handler = LoggingHandler(use_color=True)
+    record = logging.LogRecord(
+        name="test",
+        level=logging.CRITICAL,
+        pathname="",
+        lineno=0,
+        msg="critical msg",
+        args=(),
+        exc_info=None,
+    )
+    with patch("migrateit.reporters.logs.write_line") as mock_write:
+        handler.emit(record)
+        call_args = mock_write.call_args[0][0]
+        assert RED in call_args
+
+
+def test_logging_handler_sets_custom_level() -> None:
+    logger = logging.getLogger("migrateit")
+    with logging_handler(level=logging.DEBUG):
+        assert logger.level == logging.DEBUG

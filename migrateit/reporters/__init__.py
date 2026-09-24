@@ -1,10 +1,10 @@
 from ._utils import (
-    RED as RED,
-    GREEN as GREEN,
-    YELLOW as YELLOW,
     BLUE as BLUE,
-    SUBTLE as SUBTLE,
+    GREEN as GREEN,
     NORMAL as NORMAL,
+    RED as RED,
+    SUBTLE as SUBTLE,
+    YELLOW as YELLOW,
     force_bytes as force_bytes,
     format_color as format_color,
 )

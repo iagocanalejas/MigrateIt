@@ -273,7 +273,9 @@ def test_validate_empty_migrations(client: PsqlClient, temp_dir: Path) -> None:
     client.connection.commit()
 
     client.config.changelog = ChangelogFile(version=1, migrations=[])
-    client.validate_migrations({})  # should not raise
+    statuses: dict[str, MigrationStatus] = {}
+    client.validate_migrations(statuses)  # should not raise
+    assert statuses == {}  # empty dict passed through unchanged
 
 
 def test_validate_no_initial_raises(client: PsqlClient, temp_dir: Path) -> None:

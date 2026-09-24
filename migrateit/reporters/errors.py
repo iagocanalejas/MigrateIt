@@ -27,7 +27,7 @@ def error_handler() -> Generator[None]:
             msg, ret_code = "Interrupted (^C)", 130
         else:
             msg, ret_code = "An unexpected error has occurred", 3
-        _log_and_exit(msg, ret_code, e, traceback.format_exc())
+        _log_and_exit("\n\n" + msg, ret_code, e, traceback.format_exc())
 
 
 def _log_and_exit(

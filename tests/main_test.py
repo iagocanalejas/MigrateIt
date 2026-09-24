@@ -114,7 +114,6 @@ def test_cmd_show_calls_print_list() -> None:
             mock_print_list.assert_called_once()
 
 
-
 def test_cmd_show_validate_sql_success() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     m1 = Migration(name="0001_init.sql", initial=True, parents=[])
@@ -149,6 +148,52 @@ def test_cmd_show_validate_sql_failure() -> None:
             sql_validation = [c for c in call_args if "SQL validation" in c]
             assert len(sql_validation) == 1
             assert "failed" in sql_validation[0]
+
+
+def test_cmd_show_shows_pending_hint() -> None:
+    mock_client = MagicMock(spec=PsqlClient)
+    tree: dict[str, list[Migration]] = {"0001_init.sql": []}
+    mock_client.retrieve_migration_statuses.return_value = {
+        "0001_init.sql": MigrationStatus.NOT_APPLIED,
+    }
+    mock_client.changelog.migrations = []
+    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
+        with patch("migrateit.cli.write_line") as mock_write:
+            cli.cmd_show(mock_client)
+            call_args = [c[0][0] for c in mock_write.call_args_list]
+            hints = [c for c in call_args if "pending" in c.lower()]
+            assert len(hints) == 1
+            assert "migrateit migrate" in hints[0]
+
+
+def test_cmd_show_shows_conflict_hint() -> None:
+    mock_client = MagicMock(spec=PsqlClient)
+    tree: dict[str, list[Migration]] = {"0001_init.sql": []}
+    mock_client.retrieve_migration_statuses.return_value = {
+        "0001_init.sql": MigrationStatus.CONFLICT,
+    }
+    mock_client.changelog.migrations = []
+    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
+        with patch("migrateit.cli.write_line") as mock_write:
+            cli.cmd_show(mock_client)
+            call_args = [c[0][0] for c in mock_write.call_args_list]
+            hints = [c for c in call_args if "hash conflicts" in c.lower()]
+            assert len(hints) == 1
+
+
+def test_cmd_show_no_hint_when_all_clean() -> None:
+    mock_client = MagicMock(spec=PsqlClient)
+    tree: dict[str, list[Migration]] = {"0001_init.sql": []}
+    mock_client.retrieve_migration_statuses.return_value = {
+        "0001_init.sql": MigrationStatus.APPLIED,
+    }
+    mock_client.changelog.migrations = []
+    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
+        with patch("migrateit.cli.write_line") as mock_write:
+            cli.cmd_show(mock_client)
+            call_args = [c[0][0] for c in mock_write.call_args_list]
+            hints = [c for c in call_args if "pending" in c.lower() or "conflicts" in c.lower()]
+            assert len(hints) == 0
 
 
 def test_cmd_squash_no_end_migration() -> None:

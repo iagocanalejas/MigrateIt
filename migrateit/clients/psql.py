@@ -9,7 +9,8 @@ from psycopg.sql import SQL, Identifier
 
 from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
-from migrateit.reporters import write_line
+from migrateit.reporters.logs import logger
+from migrateit.reporters.output import write_line
 from migrateit.tree import ROLLBACK_SPLIT_TAG, build_migrations_tree
 
 
@@ -103,10 +104,8 @@ SELECT migration_name, change_hash FROM {};
             status = MigrationStatus.APPLIED
             if migration_hash != change_hash:
                 status = MigrationStatus.CONFLICT
-                write_line(
-                    f"Missmatch for migration {migration_name}. "
-                    f"File hash is '{migration_hash}' but '{change_hash}' was found in the database."
-                )
+                write_line(f"Hash mismatch for {migration_name}: file={migration_hash} db={change_hash}")
+                logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, change_hash)
 
             migrations[migration.name] = status
 

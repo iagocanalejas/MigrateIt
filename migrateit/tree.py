@@ -7,6 +7,7 @@ from migrateit.models import ChangelogFile, Migration
 from migrateit.models.changelog import SupportedDatabase
 from migrateit.models.migration import MigrationStatus
 from migrateit.reporters import write_line
+from migrateit.reporters.logs import logger
 
 
 def create_migration_directory(migrations_dir: Path) -> None:
@@ -60,6 +61,7 @@ def create_new_migration(
     # create the new migration file with a header and rollback tag
     content = f"-- Migration {new_filepath.name}\n-- Created on {datetime.now().isoformat()}\n\n\n{ROLLBACK_SPLIT_TAG}"
     new_filepath.write_text(content)
+    logger.info("Created migration file: %s", new_filepath.name)
 
     new_migration = Migration(
         name=new_filepath.name,
@@ -185,6 +187,7 @@ def save_changelog_file(changelog: ChangelogFile) -> None:
     if not changelog.path.exists():
         raise FileNotFoundError(f"File {changelog.path.name} does not exist")
     changelog.path.write_text(changelog.to_json())
+    logger.info("Saved changelog: %s (%d migration(s))", changelog.path, len(changelog.migrations))
     write_line(f"\tMigrations file updated: {changelog.path}")
 
 

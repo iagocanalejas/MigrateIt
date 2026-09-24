@@ -11,6 +11,7 @@ from migrateit.models import (
     SupportedDatabase,
 )
 from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, print_dag, print_list, write_line
+from migrateit.reporters.logs import logger
 from migrateit.tree import (
     build_migration_plan,
     build_migrations_tree,
@@ -25,6 +26,7 @@ from migrateit.tree import (
 
 
 def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, database: SupportedDatabase) -> int:
+    write_line(f"Initializing {database.value} database migrations")
     write_line(f"\tCreating migrations file: {migrations_file}")
     changelog = create_changelog_file(migrations_file, database)
 
@@ -40,6 +42,7 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
             raise NotImplementedError(f"Database {database} is not supported yet")
 
     write_into_migration_file(Path(migrations_dir / migration.name), sql=sql, rollback=rollback)
+    write_line(f"Initialization complete: table={table_name} directory={migrations_dir}")
 
     return 0
 
@@ -53,12 +56,14 @@ def cmd_new(
     if not client.is_migrations_table_created():
         raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
 
+    write_line(f"Creating new migration: {name}")
     migration = create_new_migration(
         changelog=client.changelog,
         migrations_dir=client.migrations_dir,
         name=name,
         dependencies=dependencies,
     )
+    write_line(f"Migration file created: {migration.name}")
 
     if no_edit:
         return 0
@@ -85,6 +90,7 @@ def cmd_run(
         write_line(f"Updating hash for migration: {target_migration.name}")
         client.update_migration_hash(target_migration)
         client.connection.commit()
+        write_line(f"Hash updated for {target_migration.name}")
         return 0
 
     statuses = client.retrieve_migration_statuses()
@@ -93,7 +99,8 @@ def cmd_run(
             raise ValueError("Fake migration requires a target migration name")
         if target_migration.initial:
             raise ValueError("Cannot fake the initial migration")
-        write_line(f"{'Faking' if not is_rollback else 'Faking rollback for'} migration: {target_migration.name}")
+        action = "Faking" if not is_rollback else "Faking rollback for"
+        write_line(f"{action} migration: {target_migration.name}")
         client.apply_migration(target_migration, is_fake=is_fake, is_rollback=is_rollback)
         client.connection.commit()
         return 0
@@ -111,14 +118,24 @@ def cmd_run(
     )
 
     if not migration_plan:
-        write_line("Nothing to do.")
+        if is_rollback:
+            write_line("Rollback: no migrations to roll back")
+        else:
+            write_line("All migrations already applied")
         return 0
 
+    action = "Applying" if not is_rollback else "Rolling back"
+    if target_migration:
+        write_line(f"Target: {target_migration.name}")
+    write_line(f"{action} {len(migration_plan)} migration(s)")
+
     for migration in migration_plan:
-        write_line(f"{'Applying' if not is_rollback else 'Rolling back'} migration: {migration.name}")
+        write_line(f"{action.lower().capitalize()} migration: {migration.name}")
         client.apply_migration(migration, is_rollback=is_rollback)
 
     client.connection.commit()
+    direction = "Migration" if not is_rollback else "Rollback"
+    write_line(f"{direction} complete: {len(migration_plan)} migration(s) applied")
     return 0
 
 
@@ -155,6 +172,7 @@ def cmd_squash(
 
     for migration_name in to_squash:
         migration = client.changelog.get_migration_by_name(migration_name)
+        logger.debug("Merging %s into %s", migration.name, squashed_migration.name)
         write_line(f"Squashing migration: {migration.name}")
         sql, rollback = retrieve_migration_sqls(client.migrations_dir / migration.name)
         write_into_migration_file(client.migrations_dir / squashed_migration.name, sql=sql, rollback=rollback)
@@ -169,7 +187,7 @@ def cmd_squash(
 
     client.changelog.migrations = [m for m in client.changelog.migrations if m.name not in to_squash]
     save_changelog_file(client.changelog)
-    write_line("Changelog file updated")
+    write_line(f"Changelog updated: removed {len(to_squash)} migration(s), added {squashed_migration.name}")
 
     return 0
 
@@ -199,6 +217,16 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
         MigrationStatus.CONFLICT: "Conflict",
     }.items():
         write_line(f"  {label:<12}: {STATUS_COLORS[status]}{status_count[status]}{STATUS_COLORS['reset']}")
+
+    not_applied = status_count[MigrationStatus.NOT_APPLIED]
+    if not_applied > 0:
+        write_line(f"\n→ {not_applied} migration(s) pending. Run `migrateit migrate` to apply them.")
+    removed_count = status_count[MigrationStatus.REMOVED]
+    if removed_count > 0:
+        write_line(f"\n⚠ {removed_count} migration(s) found in database but missing from changelog.")
+    conflict_count = status_count[MigrationStatus.CONFLICT]
+    if conflict_count > 0:
+        write_line(f"\n⚠ {conflict_count} migration(s) have hash conflicts between file and database.")
 
     if validate_sql:
         write_line("\nValidating SQL migrations...")

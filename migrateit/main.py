@@ -9,6 +9,7 @@ from migrateit import cli as commands
 from migrateit.clients.psql import PsqlClient
 from migrateit.models import MigrateItConfig, SupportedDatabase
 from migrateit.reporters import FatalError, error_handler, logging_handler, print_logo
+from migrateit.reporters.logs import logger
 from migrateit.tree import load_changelog_file
 
 
@@ -40,6 +41,7 @@ def main() -> int:
     print_logo()
     with error_handler(), logging_handler(True):
         if hasattr(args, "func"):
+            logger.debug("Running command: %s", args.command)
             root = Path(C.MIGRATEIT_ROOT_DIR)
             if args.command == "init":
                 if args.database not in [db.value for db in SupportedDatabase]:
@@ -58,6 +60,7 @@ def main() -> int:
                 changelog=changelog,
             )
             with _get_connection(changelog.database) as conn:
+                logger.debug("Connected to database: %s", changelog.database.value)
                 client = PsqlClient(conn, config)
                 if args.command == "new":
                     return commands.cmd_new(
