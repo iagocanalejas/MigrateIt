@@ -7,7 +7,7 @@ from typing import override
 from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
 from migrateit.reporters.logs import logger
-from migrateit.tree import ROLLBACK_SPLIT_TAG
+from migrateit.tree import ROLLBACK_SPLIT_TAG, build_migrations_tree
 
 
 class SqliteClient(SqlClient[sqlite3.Connection]):
@@ -63,7 +63,6 @@ DROP TABLE IF EXISTS {table_name};
     @override
     def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
         """Retrieve migration statuses from the SQLite database."""
-        from migrateit.tree import build_migrations_tree
 
         migrations = {k: MigrationStatus.NOT_APPLIED for k, _ in build_migrations_tree(self.changelog).items()}
 

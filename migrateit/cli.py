@@ -10,7 +10,7 @@ from migrateit.models import (
     MigrationStatus,
     SupportedDatabase,
 )
-from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, print_dag, print_list, write_line
+from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, write_line
 from migrateit.reporters.logs import logger
 from migrateit.tree import (
     build_migration_plan,
@@ -195,7 +195,6 @@ def cmd_squash(
 
 
 def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool = False) -> int:
-    migrations = build_migrations_tree(client.changelog)
     status_map = client.retrieve_migration_statuses()
     status_count = {status: 0 for status in MigrationStatus}
 
@@ -207,9 +206,9 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
     write_line("-" * 60)
 
     if list_mode:
-        print_list(migrations, status_map)
+        client.changelog.print_list(status_map)
     else:
-        print_dag(next(iter(migrations)), migrations, status_map)
+        client.changelog.print_dag(status_map=status_map)
 
     write_line("\nSummary:")
     for status, label in {

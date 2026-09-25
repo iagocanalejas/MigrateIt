@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance for Claude Code when working with code in this repository.
 
 ## Project
 
-**migrateit** — A CLI database migration tool for PostgreSQL. Manages database schema changes through versioned SQL files with support for dependency trees, squashing, rollback, and hash-based change detection.
+**migrateit** — A CLI database migration tool for PostgreSQL and SQLite. Manages database schema changes through versioned SQL files with support for dependency trees, squashing, rollback, and hash-based change detection.
 
 ## Python & Code Style Guidelines
 
@@ -22,13 +22,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Tooling Configuration**:
   - `mypy`, `ruff`, and `pytest` settings are centralized in `pyproject.toml`.
   - `pre-commit` manages Git hooks via `.pre-commit-config.yaml`.
-- **Imports**: Group imports strictly as Standard Library -> External -> Internal, handled automatically by `ruff`.
+- **Imports**: Group imports strictly as Standard Library → External → Internal, handled automatically by `ruff`.
 - **Testing**: Write type-annotated test functions under `tests/` mirroring the core package layout.
 
 ## AI Assistant Operational Rules
 
 - Always run `mypy .` and `ruff check .` to verify changes before completing a task.
-- Ensure any newly added code maintains 100% type annotation coverage.
+- Ensure any newly added code is type annotated.
+- Ensure any newly added code maintains 100% code coverage.
 
 ## Essential Commands
 
@@ -37,11 +38,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 python3.14 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Run tests (requires local PostgreSQL on localhost:5432 with postgres/postgres credentials)
+# Run tests
 pytest
 
 # Run a specific test
-pytest tests/cmd/run_test.py -v
+pytest tests/cli/init_test.py -v
 
 # Type check
 mypy .
@@ -54,9 +55,16 @@ pre-commit run --all-files
 
 # Run the CLI
 migrateit init postgres
+migrateit init sqlite
 migrateit new migration_name
+migrateit new migration_name -d dep1 dep2
 migrateit show
+migrateit show -l
+migrateit show --validate-sql
 migrateit migrate
+migrateit migrate --fake
+migrateit migrate --update-hash
+migrateit migrate migration_name
 migrateit rollback 0000
 migrateit squash 0001 0005
 ```
@@ -67,27 +75,29 @@ migrateit squash 0001 0005
 
 ```
 migrateit/
-├── cli.py            # argparse entry point: subcommand parsing, connection setup, dispatch
-├── main.py           # Command implementations (cmd_init, cmd_new, cmd_run, cmd_squash, cmd_show)
+├── cli.py            # Command implementations (cmd_init, cmd_new, cmd_run, cmd_squash, cmd_show)
+├── main.py           # CLI entry point: argparse subcommand parsing, connection setup, dispatch
 ├── tree.py           # File/tree operations: migration file I/O, changelog persistence, DAG building, plan computation
-├── constants.py      # Version, defaults for table name and migrations directory
+├── constants.py      # Version, defaults for root dir and table name
 ├── clients/          # Database client layer
 │   ├── _protocol.py  # SqlClientProtocol (Protocol defining the database client interface)
-│   ├── _client.py    # SqlClient[T] (generic ABC holding connection + config)
-│   └── psql.py       # PsqlClient(SqlClient[Connection]) — PostgreSQL implementation
+│   ├── _client.py    # SqlClient[T] (generic ABC holding connection + config + env var names)
+│   ├── psql.py       # PsqlClient(SqlClient[Connection]) — PostgreSQL implementation
+│   └── sqlite.py     # SqliteClient(SqlClient[sqlite3.Connection]) — SQLite implementation
 ├── models/           # Domain dataclasses
 │   ├── config.py     # MigrateItConfig (table_name, migrations_dir, changelog)
 │   ├── migration.py  # Migration (name, initial flag, parents list), MigrationStatus enum
 │   └── changelog.py  # ChangelogFile (version, database type, migration list), SupportedDatabase enum
 └── reporters/        # Output and error handling
-    ├── output.py     # Terminal output with ANSI colors, DAG/tree printing
+    ├── output.py     # Raw byte output, ExitStack-based multi-stream logging, DAG/tree printing
     ├── errors.py     # FatalError, error_handler context manager
-    └── logs.py       # logging_handler context manager
+    ├── logs.py       # LoggingHandler, logging_handler context manager
+    └── _utils.py     # Color constants, force_bytes, format_color helpers
 ```
 
 ### Key architectural patterns
 
-1. **Strategy/Protocol pattern for database clients**: `SqlClientProtocol` in `_protocol.py` defines the interface. `SqlClient[T]` is a generic ABC holding a typed `connection` and `MigrateItConfig`. `PsqlClient` is the only concrete implementation today. New databases implement `SqlClientProtocol` and subclass `SqlClient`.
+1. **Strategy/Protocol pattern for database clients**: `SqlClientProtocol` in `_protocol.py` defines the interface. `SqlClient[T]` is a generic ABC holding a typed `connection` and `MigrateItConfig`. `PsqlClient` and `SqliteClient` are the concrete implementations today. New databases implement `SqlClientProtocol` and subclass `SqlClient`.
 
 2. **Migration DAG**: Migrations form a directed acyclic graph via `parents` lists on `Migration` objects. `build_migrations_tree()` in `tree.py` builds an `OrderedDict[str, list[Migration]]` (parent → children). `build_migration_plan()` does a topological traversal (BFS) to produce an execution plan, supporting forward migrations, rollbacks, and target-specific runs.
 
@@ -95,16 +105,19 @@ migrateit/
 
 4. **Migration file format**: SQL files follow `NNNN_name.sql` convention. Forward and rollback SQL are separated by the `-- Rollback migration` tag. The `_get_content_hash()` method splits on this tag and computes a SHA-256 of the full content.
 
-5. **Command flow**: `cli.py` parses args → opens DB connection → constructs `PsqlClient` → dispatches to `main.py` command functions. Each command function calls tree utilities for file I/O and client methods for DB operations. Rollbacks and migrations share `cmd_run()` with different flags.
+5. **Command flow**: `main.py` parses args via argparse → opens DB connection → constructs typed client (`PsqlClient` or `SqliteClient`) → dispatches to command functions in `cli.py`. Each command function calls tree utilities for file I/O and client methods for DB operations. Rollbacks and migrations share `cmd_run()` with different flags.
 
-### Testing
-
-Tests live under `tests/` mirroring the package structure. The test base class `BaseCmdTest` (in `tests/cmd/_base_test.py`) sets up a temp directory, creates a test changelog table in PostgreSQL, and tears it down. Tests use `unittest.TestCase`.
-
-Environment variables in `.testenv` configure test DB credentials (localhost/postgres).
+6. **Context manager patterns**: `error_handler()` wraps the entire CLI execution for consistent error reporting. `logging_handler()` installs a colored logging handler. `ExitStack` is used for multi-stream output (terminal + log file) and safe cleanup.
 
 ### Config
 
 - `MIGRATEIT_MIGRATIONS_DIR` (default: `migrateit`) — root directory for migrations
 - `MIGRATEIT_MIGRATIONS_TABLE` (default: `MIGRATEIT_CHANGELOG`) — name of the changelog table
-- DB credentials via `DB_URL` or `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASS`/`DB_NAME`
+- DB credentials via `DB_URL`, `DB_FILE` (SQLite only), `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME`, `DB_TIMEOUT_SECONDS`
+
+## Supported Databases
+
+| Database   | Driver    | Notes                              |
+| ---------- | --------- | ---------------------------------- |
+| PostgreSQL | `psycopg` | Full feature support, cursor-based |
+| SQLite     | `sqlite3` | Stdlib, `executescript`-based      |

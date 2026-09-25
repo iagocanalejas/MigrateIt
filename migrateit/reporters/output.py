@@ -3,7 +3,7 @@ import re
 import sys
 from typing import IO, Any
 
-from migrateit.models.migration import Migration, MigrationStatus
+from migrateit.models.migration import MigrationStatus
 
 from ._utils import GREEN, NORMAL
 
@@ -54,36 +54,6 @@ def print_logo() -> None:
     write_line("          |___/")
     write_line("##########################################")
     write_line(NORMAL)
-
-
-def print_dag(
-    name: str,
-    children: dict[str, list[Migration]],
-    status_map: dict[str, MigrationStatus],
-    level: int = 0,
-    seen: set[str] = set(),
-) -> None:
-    indent = "  " * level + ("└─ " if level > 0 else "")
-    status = status_map[name]
-    status_str = f"{STATUS_COLORS[status]}{status.name.replace('_', ' ').title()}{STATUS_COLORS['reset']}"
-
-    # indicate repeated visit
-    repeat_marker = " (*)" if name in seen else ""
-    write_line(f"{indent}{name:<40} | {status_str}{repeat_marker}")
-
-    if name in seen:
-        return
-    seen.add(name)
-
-    for child in children.get(name, []):
-        print_dag(child.name, children, status_map, level + 1, seen)
-
-
-def print_list(children: dict[str, list[Migration]], status_map: dict[str, MigrationStatus]) -> None:
-    for name in children.keys():
-        status = status_map[name]
-        status_str = f"{STATUS_COLORS[status]}{status.name.replace('_', ' ').title()}{STATUS_COLORS['reset']}"
-        write_line(f"{name:<40} | {status_str}")
 
 
 def pretty_print_sql_error(error: BaseException, sql_query: str) -> None:
