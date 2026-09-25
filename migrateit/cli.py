@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from migrateit.clients import PsqlClient, SqlClient
+from migrateit.clients import PsqlClient, SqlClient, SqliteClient
 from migrateit.models import (
     MigrationStatus,
     SupportedDatabase,
@@ -38,6 +38,8 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     match database:
         case SupportedDatabase.POSTGRES:
             sql, rollback = PsqlClient.create_migrations_table_str(table_name=table_name)
+        case SupportedDatabase.SQLITE:
+            sql, rollback = SqliteClient.create_migrations_table_str(table_name=table_name)
         case _:
             raise NotImplementedError(f"Database {database} is not supported yet")
 

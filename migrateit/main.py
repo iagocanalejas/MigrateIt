@@ -1,4 +1,5 @@
 import argparse
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -6,7 +7,9 @@ import psycopg
 
 import migrateit.constants as C
 from migrateit import cli as commands
+from migrateit.clients._protocol import SqlClientProtocol
 from migrateit.clients.psql import PsqlClient
+from migrateit.clients.sqlite import SqliteClient
 from migrateit.models import MigrateItConfig, SupportedDatabase
 from migrateit.reporters import FatalError, error_handler, logging_handler, print_logo
 from migrateit.reporters.logs import logger
@@ -61,7 +64,14 @@ def main() -> int:
             )
             with _get_connection(changelog.database) as conn:
                 logger.debug("Connected to database: %s", changelog.database.value)
-                client = PsqlClient(conn, config)
+                client: SqlClientProtocol
+                match (changelog.database, conn):
+                    case (SupportedDatabase.POSTGRES, psycopg.Connection() as pg_conn):
+                        client = PsqlClient(pg_conn, config)
+                    case (SupportedDatabase.SQLITE, sqlite3.Connection() as sq_conn):
+                        client = SqliteClient(sq_conn, config)
+                    case _:
+                        raise NotImplementedError(f"Database {changelog.database} is not supported")
                 if args.command == "new":
                     return commands.cmd_new(
                         client,
@@ -198,14 +208,17 @@ def _cmd_show(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     return parser
 
 
-# TODO: add support for other databases
-def _get_connection(database: SupportedDatabase) -> psycopg.Connection:
+def _get_connection(database: SupportedDatabase) -> psycopg.Connection | sqlite3.Connection:
     match database:
         case SupportedDatabase.POSTGRES:
             db_url = PsqlClient.get_environment_url()
-            conn = psycopg.connect(db_url)
-            conn.autocommit = False
-            return conn
+            pg_conn = psycopg.connect(db_url)
+            pg_conn.autocommit = False
+            return pg_conn
+        case SupportedDatabase.SQLITE:
+            db_url = SqliteClient.get_environment_url()
+            sqlite_conn = sqlite3.connect(db_url.replace("sqlite:///", ""))
+            return sqlite_conn
         case _:
             raise NotImplementedError(f"Database {database} is not supported")
 

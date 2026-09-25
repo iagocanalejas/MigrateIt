@@ -1,7 +1,5 @@
 from typing import Protocol
 
-from psycopg import ProgrammingError
-
 from migrateit.models import Migration, MigrationStatus
 
 
@@ -100,7 +98,7 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def validate_sql_syntax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
+    def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
         """
         Validate the SQL syntax of a migration.
 

@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import override
 
-from psycopg import Connection, Cursor, DatabaseError, ProgrammingError
+import psycopg
 from psycopg.sql import SQL, Identifier
 
 from migrateit.clients._client import SqlClient
@@ -14,7 +14,7 @@ from migrateit.reporters.output import write_line
 from migrateit.tree import ROLLBACK_SPLIT_TAG, build_migrations_tree
 
 
-class PsqlClient(SqlClient[Connection]):
+class PsqlClient(SqlClient[psycopg.Connection]):
     @override
     @classmethod
     def get_environment_url(cls) -> str:
@@ -127,7 +127,7 @@ SELECT migration_name, change_hash FROM {};
                     code = migration_code if not is_rollback else reverse_migration_code
                     cursor.execute(code)  # pyright: ignore
                 self._update_migration_changelog(cursor, migration, migration_hash, is_rollback)
-        except (DatabaseError, ProgrammingError) as e:
+        except (psycopg.DatabaseError, psycopg.ProgrammingError) as e:
             self.connection.rollback()
             raise e
 
@@ -189,7 +189,7 @@ UPDATE {} SET change_hash = %(hash)s WHERE migration_name = %(migration)s;
                     raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
 
     @override
-    def validate_sql_syntax(self, migration: Migration) -> tuple[ProgrammingError, str] | None:
+    def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
         path = self._get_migration_path(migration)
         migration_code, reverse_migration_code, _ = self._get_migration_content_and_hash(path)
 
@@ -200,13 +200,19 @@ UPDATE {} SET change_hash = %(hash)s WHERE migration_name = %(migration)s;
                     if not patched:
                         continue
                     cursor.execute(patched)  # pyright: ignore
-            except ProgrammingError as e:
+            except psycopg.ProgrammingError as e:
                 return e, code
             finally:
                 self.connection.rollback()
         return None
 
-    def _update_migration_changelog(self, cursor: Cursor, migration: Migration, hash: str, is_rollback: bool) -> None:
+    def _update_migration_changelog(
+        self,
+        cursor: psycopg.Cursor,
+        migration: Migration,
+        hash: str,
+        is_rollback: bool,
+    ) -> None:
         path = self.migrations_dir / migration.name
         if is_rollback and not migration.initial:
             query = SQL("""

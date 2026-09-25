@@ -10,6 +10,7 @@ from .migration import Migration
 
 class SupportedDatabase(Enum):
     POSTGRES = "postgres"
+    SQLITE = "sqlite"
 
 
 @dataclass
