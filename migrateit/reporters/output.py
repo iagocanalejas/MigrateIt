@@ -3,8 +3,6 @@ import re
 import sys
 from typing import IO, Any
 
-from psycopg import ProgrammingError
-
 from migrateit.models.migration import Migration, MigrationStatus
 
 from ._utils import GREEN, NORMAL
@@ -88,10 +86,12 @@ def print_list(children: dict[str, list[Migration]], status_map: dict[str, Migra
         write_line(f"{name:<40} | {status_str}")
 
 
-def pretty_print_sql_error(error: ProgrammingError, sql_query: str) -> None:
+def pretty_print_sql_error(error: BaseException, sql_query: str) -> None:
     error_message = None
-    if isinstance(error, ProgrammingError):
-        error_message = error.diag.message_primary if error.diag else None
+    if hasattr(error, "diag"):
+        error_message = getattr(error, "diag", None)
+        if error_message is not None:
+            error_message = getattr(error_message, "message_primary", None)
     if not error_message:
         error_message = str(error)
 
@@ -100,7 +100,7 @@ def pretty_print_sql_error(error: ProgrammingError, sql_query: str) -> None:
     write_line(error_message.strip())
     write_line("-" * 80)
 
-    # Extract error position if available
+    # Extract error position if available (PostgreSQL-specific)
     match = re.search(r"POSITION: (\d+)", error_message)
     if match:
         position = int(match.group(1))

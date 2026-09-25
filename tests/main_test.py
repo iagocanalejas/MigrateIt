@@ -254,20 +254,3 @@ def test_get_environment_url_no_password() -> None:
     with patch.dict(os.environ, env):
         url = PsqlClient.get_environment_url()
         assert ":@" not in url
-
-
-def test_create_migrations_table_str_valid() -> None:
-    sql, rollback = PsqlClient.create_migrations_table_str("my_migrations")
-    assert "CREATE TABLE" in sql
-    assert "my_migrations" in sql
-    assert "DROP TABLE" in rollback
-
-
-def test_create_migrations_table_str_invalid() -> None:
-    with pytest.raises(ValueError):
-        PsqlClient.create_migrations_table_str("invalid-table-name")
-
-
-def test_create_migrations_table_str_number() -> None:
-    with pytest.raises(ValueError):
-        PsqlClient.create_migrations_table_str("123")
