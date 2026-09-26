@@ -100,7 +100,7 @@ def test_cmd_squash_no_end_migration() -> None:
     mock_client.changelog.get_migration_by_name = lambda n: m2 if "second" in n else m1
 
     with (
-        patch("migrateit.cli.build_migrations_tree", return_value={}),
+        patch.object(mock_client.changelog, "migrations_tree", return_value={}),
         patch("migrateit.cli.find_path", return_value=[]),
     ):
         with pytest.raises(ValueError) as ctx:
@@ -117,7 +117,7 @@ def test_cmd_squash_initial_migration() -> None:
     mock_client.changelog.get_migration_by_name = lambda n: m1 if "init" in n else m2
 
     with (
-        patch("migrateit.cli.build_migrations_tree", return_value={}),
+        patch.object(mock_client.changelog, "migrations_tree", return_value={}),
         patch("migrateit.cli.find_path", return_value=["0000_init.sql"]),
     ):
         with pytest.raises(ValueError) as ctx:

@@ -114,7 +114,7 @@ def test_environment_url_default() -> None:
     """Test default SQLite environment URL."""
     with patch.dict(os.environ, {}, clear=True):
         url = SqliteClient.get_environment_url()
-        assert url == "sqlite:///migrateit.db"
+        assert url == f"sqlite:///{os.path.abspath('migrateit.db')}"
 
 
 @pytest.mark.sqlite

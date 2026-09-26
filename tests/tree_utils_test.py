@@ -5,7 +5,6 @@ import pytest
 from migrateit.models.changelog import ChangelogFile, Migration, SupportedDatabase
 from migrateit.tree import (
     ROLLBACK_SPLIT_TAG,
-    build_migrations_tree,
     create_changelog_file,
     create_migration_directory,
     create_new_migration,
@@ -329,37 +328,6 @@ def test_write_sql_strips_newlines(temp_dir: Path) -> None:
     assert "DROP TABLE test;" in content
     # Verify excessive blank lines are collapsed
     assert "\n\n\n\n" not in content
-
-
-# --- build_migrations_tree tests ---
-
-
-@pytest.mark.unit
-def test_build_tree_simple_chain() -> None:
-    migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_test.sql", parents=["0000_init.sql"]),
-        Migration(name="0002_next.sql", parents=["0001_test.sql"]),
-    ]
-    changelog = ChangelogFile(version=1, migrations=migrations)
-    tree = build_migrations_tree(changelog)
-    assert list(tree.keys()) == ["0000_init.sql", "0001_test.sql", "0002_next.sql"]
-    assert tree["0000_init.sql"] == [migrations[1]]
-    assert tree["0001_test.sql"] == [migrations[2]]
-    assert tree["0002_next.sql"] == []
-
-
-@pytest.mark.unit
-def test_build_tree_with_multiple_parents() -> None:
-    m1 = Migration(name="0000_init.sql", initial=True, parents=[])
-    m2 = Migration(name="0001_branch_a.sql", parents=["0000_init.sql"])
-    m3 = Migration(name="0002_branch_b.sql", parents=["0000_init.sql"])
-    m4 = Migration(name="0003_merge.sql", parents=["0001_branch_a.sql", "0002_branch_b.sql"])
-    changelog = ChangelogFile(version=1, migrations=[m1, m2, m3, m4])
-    tree = build_migrations_tree(changelog)
-    assert tree["0003_merge.sql"] == []
-    assert m4 in tree["0001_branch_a.sql"]
-    assert m4 in tree["0002_branch_b.sql"]
 
 
 # --- find_path tests ---

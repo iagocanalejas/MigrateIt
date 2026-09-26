@@ -25,18 +25,27 @@ pip install migrateit
 Configurations can be changed as environment variables.
 
 ```ini
-# basic configuration
+# BASIC CONFIGURATION
 MIGRATEIT_MIGRATIONS_TABLE=MIGRATEIT_CHANGELOG
 MIGRATEIT_MIGRATIONS_DIR=migrateit        # directory for migration files
 
-# database connection variables
+# DATABASE CONNECTION
+
+# psql
 DB_URL=postgresql://postgres:postgres@localhost:5432/postgres
-DB_FILE=migrateit.db                      # SQLite only (default)
+# or
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=postgres
 DB_USER=postgres
 DB_PASS=postgres
+
+# sqlite
+DB_URL=sqlite://migrateit.db
+# or
+DB_FILE=migrateit.db
+
+# common
 DB_TIMEOUT_SECONDS=30
 ```
 

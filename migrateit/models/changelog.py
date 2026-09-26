@@ -1,5 +1,6 @@
 import json
 import os
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -21,6 +22,16 @@ class ChangelogFile:
     database: SupportedDatabase = SupportedDatabase.POSTGRES
     migrations: list[Migration] = field(default_factory=list)
     path: Path = field(default_factory=Path)
+
+    @property
+    def migrations_tree(self) -> OrderedDict[str, list[Migration]]:
+        d = OrderedDict[str, list[Migration]]()
+        for migration in self.migrations:
+            if migration.name not in d:
+                d[migration.name] = []
+            for parent in migration.parents:
+                d[parent].append(migration)
+        return d
 
     def __str__(self) -> str:
         return self.path.name
@@ -67,21 +78,79 @@ class ChangelogFile:
 
         raise ValueError(f"Migration '{name}' not found in changelog")
 
-    def print_dag(self, status_map: dict[str, MigrationStatus]) -> None:
-        from migrateit.tree import build_migrations_tree
+    def build_migration_plan(
+        self,
+        migration_tree: dict[str, list[Migration]],
+        statuses_map: dict[str, MigrationStatus],
+        target_migration: Migration | None = None,
+        is_rollback: bool = False,
+    ) -> list[Migration]:
+        """
+        Build a migration plan based on the changelog and migration tree.
+        Args:
+            migration_tree: A dictionary representing the migration tree.
+            statuses_map: A map of migration names to their statuses.
+            target_migration: The target migration to apply or rollback to.
+            is_rollback: Whether the plan is for a rollback operation.
+        Returns:
+            A list of migrations to apply or rollback, in the correct order.
+        """
+        plan: list[Migration] = []
+        visited: set[str] = set()
+        queue: deque[Migration] = deque([self.migrations[0]])
+        is_bottom_up = target_migration is not None and not is_rollback
 
-        migration_tree = build_migrations_tree(self)
-        first_migration = next(iter(migration_tree))
-        ChangelogFile._print_dag_rec(first_migration, migration_tree, status_map)
+        if is_rollback:
+            if not target_migration:
+                raise ValueError("Target migration is required for rollback plan")
+            queue = deque([target_migration])
+
+        if is_bottom_up:
+            if not target_migration:
+                raise ValueError("Target migration is required for bottom-up plan")
+            queue = deque([target_migration])
+
+            def get_neighbors(m: Migration) -> list[str]:
+                return list(reversed(m.parents))
+        else:
+
+            def get_neighbors(m: Migration) -> list[str]:
+                # get the children of the migration
+                return [m.name for m in migration_tree.get(m.name, [])]
+
+        while queue:
+            current = queue.popleft()
+            if current.name in visited:
+                continue
+
+            if not is_bottom_up and not is_rollback and not all(p in visited for p in current.parents):
+                queue.append(current)  # requeue
+                continue
+
+            visited.add(current.name)
+            plan.append(current)
+            for neighbor_name in get_neighbors(current):
+                neighbor = self.get_migration_by_name(neighbor_name)
+                if neighbor.name in visited:
+                    continue
+                queue.append(neighbor)
+
+        plan = list(reversed(plan)) if is_bottom_up or is_rollback else plan
+        if is_rollback:
+            return [p for p in plan if statuses_map[p.name] == MigrationStatus.APPLIED]
+        return [p for p in plan if statuses_map[p.name] != MigrationStatus.APPLIED]
 
     def print_list(self, status_map: dict[str, MigrationStatus]) -> None:
-        from migrateit.tree import build_migrations_tree
-
-        migration_tree = build_migrations_tree(self)
+        migration_tree = self.migrations_tree
         for name in migration_tree.keys():
             status = status_map[name]
             status_str = f"{STATUS_COLORS[status]}{status.name.replace('_', ' ').title()}{STATUS_COLORS['reset']}"
             write_line(f"{name:<40} | {status_str}")
+
+    def print_dag(self, status_map: dict[str, MigrationStatus]) -> None:
+        migration_tree = self.migrations_tree
+        first_migration = next(iter(migration_tree))
+        ChangelogFile._print_dag_rec(first_migration, migration_tree, status_map)
 
     @staticmethod
     def _print_dag_rec(
