@@ -7,19 +7,19 @@ from typing import override
 from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
 from migrateit.reporters.logs import logger
-from migrateit.tree import ROLLBACK_SPLIT_TAG, build_migrations_tree
+from migrateit.tree import ROLLBACK_SPLIT_TAG
 
 
 class SqliteClient(SqlClient[sqlite3.Connection]):
     @override
     @classmethod
     def get_environment_url(cls) -> str:
-        """Get the SQLite database path from environment or use default."""
         db_url = os.getenv(cls.VARNAME_DB_URL)
         if db_url:
             return db_url
+
         db_file = os.getenv(cls.VARNAME_DB_FILE, "migrateit.db")
-        return f"sqlite:///{db_file}"
+        return f"sqlite:///{os.path.abspath(db_file)}"
 
     @override
     @classmethod
@@ -64,7 +64,7 @@ DROP TABLE IF EXISTS {table_name};
     def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
         """Retrieve migration statuses from the SQLite database."""
 
-        migrations = {k: MigrationStatus.NOT_APPLIED for k, _ in build_migrations_tree(self.changelog).items()}
+        migrations = {k: MigrationStatus.NOT_APPLIED for k, _ in self.changelog.migrations_tree.items()}
 
         if not self.is_migrations_table_created():
             return migrations

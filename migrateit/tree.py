@@ -1,11 +1,9 @@
 import re
-from collections import OrderedDict, deque
 from datetime import datetime
 from pathlib import Path
 
 from migrateit.models import ChangelogFile, Migration
 from migrateit.models.changelog import SupportedDatabase
-from migrateit.models.migration import MigrationStatus
 from migrateit.reporters import write_line
 from migrateit.reporters.logs import logger
 
@@ -189,82 +187,6 @@ def save_changelog_file(changelog: ChangelogFile) -> None:
     changelog.path.write_text(changelog.to_json())
     logger.info("Saved changelog: %s (%d migration(s))", changelog.path, len(changelog.migrations))
     write_line(f"\tMigrations file updated: {changelog.path}")
-
-
-def build_migrations_tree(changelog: ChangelogFile) -> OrderedDict[str, list[Migration]]:
-    """
-    Build a tree of migrations and their childrens.
-    """
-    d = OrderedDict[str, list[Migration]]()
-    for migration in changelog.migrations:
-        if migration.name not in d:
-            d[migration.name] = []
-        for parent in migration.parents:
-            d[parent].append(migration)
-    return d
-
-
-def build_migration_plan(
-    changelog: ChangelogFile,
-    migration_tree: dict[str, list[Migration]],
-    statuses_map: dict[str, MigrationStatus],
-    target_migration: Migration | None = None,
-    is_rollback: bool = False,
-) -> list[Migration]:
-    """
-    Build a migration plan based on the changelog and migration tree.
-    Args:
-        changelog: The changelog file containing migrations.
-        migration_tree: A dictionary representing the migration tree.
-        statuses_map: A map of migration names to their statuses.
-        target_migration: The target migration to apply or rollback to.
-        is_rollback: Whether the plan is for a rollback operation.
-    Returns:
-        A list of migrations to apply or rollback, in the correct order.
-    """
-    plan: list[Migration] = []
-    visited: set[str] = set()
-    queue: deque[Migration] = deque([changelog.migrations[0]])
-    is_bottom_up = target_migration is not None and not is_rollback
-
-    if is_rollback:
-        if not target_migration:
-            raise ValueError("Target migration is required for rollback plan")
-        queue = deque([target_migration])
-
-    def get_neighbors(m: Migration) -> list[str]:
-        # get the children of the migration
-        return [m.name for m in migration_tree.get(m.name, [])]
-
-    if is_bottom_up:
-        if not target_migration:
-            raise ValueError("Target migration is required for bottom-up plan")
-        queue = deque([target_migration])
-
-        def get_neighbors(m: Migration) -> list[str]:
-            return list(reversed(m.parents))
-
-    while queue:
-        current = queue.popleft()
-        if current.name in visited:
-            continue
-
-        if not is_bottom_up and not is_rollback and not all(p in visited for p in current.parents):
-            queue.append(current)  # requeue
-            continue
-
-        visited.add(current.name)
-        plan.append(current)
-        for neighbor_name in get_neighbors(current):
-            neighbor = changelog.get_migration_by_name(neighbor_name)
-            if neighbor.name in visited:
-                continue
-            queue.append(neighbor)
-
-    plan = list(reversed(plan)) if is_bottom_up or is_rollback else plan
-    if is_rollback:
-        return [p for p in plan if statuses_map[p.name] == MigrationStatus.APPLIED]
-    return [p for p in plan if statuses_map[p.name] != MigrationStatus.APPLIED]
 
 
 def find_path(

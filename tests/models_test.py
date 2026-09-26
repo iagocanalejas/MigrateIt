@@ -196,3 +196,34 @@ def test_migration_is_same_migration_name_empty_second() -> None:
 @pytest.mark.unit
 def test_migration_is_same_migration_name_both_empty() -> None:
     assert Migration.is_same_migration_name("", "") is False
+
+
+# --- changelog.migrations_tree tests ---
+
+
+@pytest.mark.unit
+def test_build_tree_simple_chain() -> None:
+    migrations = [
+        Migration(name="0000_init.sql", initial=True, parents=[]),
+        Migration(name="0001_test.sql", parents=["0000_init.sql"]),
+        Migration(name="0002_next.sql", parents=["0001_test.sql"]),
+    ]
+    changelog = ChangelogFile(version=1, migrations=migrations)
+    tree = changelog.migrations_tree
+    assert list(tree.keys()) == ["0000_init.sql", "0001_test.sql", "0002_next.sql"]
+    assert tree["0000_init.sql"] == [migrations[1]]
+    assert tree["0001_test.sql"] == [migrations[2]]
+    assert tree["0002_next.sql"] == []
+
+
+@pytest.mark.unit
+def test_build_tree_with_multiple_parents() -> None:
+    m1 = Migration(name="0000_init.sql", initial=True, parents=[])
+    m2 = Migration(name="0001_branch_a.sql", parents=["0000_init.sql"])
+    m3 = Migration(name="0002_branch_b.sql", parents=["0000_init.sql"])
+    m4 = Migration(name="0003_merge.sql", parents=["0001_branch_a.sql", "0002_branch_b.sql"])
+    changelog = ChangelogFile(version=1, migrations=[m1, m2, m3, m4])
+    tree = changelog.migrations_tree
+    assert tree["0003_merge.sql"] == []
+    assert m4 in tree["0001_branch_a.sql"]
+    assert m4 in tree["0002_branch_b.sql"]

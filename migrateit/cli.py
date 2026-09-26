@@ -13,8 +13,6 @@ from migrateit.models import (
 from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, write_line
 from migrateit.reporters.logs import logger
 from migrateit.tree import (
-    build_migration_plan,
-    build_migrations_tree,
     create_changelog_file,
     create_migration_directory,
     create_new_migration,
@@ -111,9 +109,8 @@ def cmd_run(
         raise ValueError("Rollback requires a target migration name")
     client.validate_migrations(statuses)
 
-    migration_plan = build_migration_plan(
-        client.changelog,
-        migration_tree=build_migrations_tree(client.changelog),
+    migration_plan = client.changelog.build_migration_plan(
+        migration_tree=client.changelog.migrations_tree,
         statuses_map=statuses,
         target_migration=target_migration,
         is_rollback=is_rollback,
@@ -154,7 +151,7 @@ def cmd_squash(
     end_migration = client.changelog.get_migration_by_name(end_migration).name
     write_line(f"Squashing migrations from {start_migration} to {end_migration}.")
 
-    to_squash = find_path(build_migrations_tree(client.changelog), start_migration, end_migration)
+    to_squash = find_path(client.changelog.migrations_tree, start_migration, end_migration)
     write_line(f"Following migrations will be squashed: {', '.join(to_squash)}")
     if not to_squash:
         raise ValueError(f"No path found from {start_migration} to {end_migration}.")
