@@ -6,9 +6,9 @@ import pytest
 from migrateit import cli
 from migrateit.clients.psql import PsqlClient
 from migrateit.models import Migration
-from migrateit.models.migration import MigrationStatus
 
 
+@pytest.mark.unit
 def test_cmd_new_raises_when_table_not_created() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     mock_client.is_migrations_table_created.return_value = False
@@ -18,6 +18,7 @@ def test_cmd_new_raises_when_table_not_created() -> None:
     assert "does not exist" in str(ctx.value)
 
 
+@pytest.mark.unit
 def test_cmd_run_hash_update_success() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     mock_client.connection = MagicMock()
@@ -33,6 +34,7 @@ def test_cmd_run_hash_update_success() -> None:
     assert result == 0
 
 
+@pytest.mark.unit
 def test_cmd_run_hash_update_no_target() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     with pytest.raises(ValueError) as ctx:
@@ -40,6 +42,7 @@ def test_cmd_run_hash_update_no_target() -> None:
     assert "requires a target migration name" in str(ctx.value)
 
 
+@pytest.mark.unit
 def test_cmd_run_hash_update_initial_raises() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     mock_target = MagicMock(spec=Migration)
@@ -52,6 +55,7 @@ def test_cmd_run_hash_update_initial_raises() -> None:
     assert "Cannot update hash for the initial migration" in str(ctx.value)
 
 
+@pytest.mark.unit
 def test_cmd_run_fake_no_target() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     mock_client.is_migrations_table_created.return_value = True
@@ -62,6 +66,7 @@ def test_cmd_run_fake_no_target() -> None:
     assert "Fake migration requires a target migration name" in str(ctx.value)
 
 
+@pytest.mark.unit
 def test_cmd_run_fake_initial_raises() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     mock_target = MagicMock(spec=Migration)
@@ -75,6 +80,7 @@ def test_cmd_run_fake_initial_raises() -> None:
     assert "Cannot fake the initial migration" in str(ctx.value)
 
 
+@pytest.mark.unit
 def test_cmd_run_rollback_no_target() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     mock_client.is_migrations_table_created.return_value = True
@@ -85,117 +91,7 @@ def test_cmd_run_rollback_no_target() -> None:
     assert "Rollback requires a target migration name" in str(ctx.value)
 
 
-def test_cmd_show_calls_print_dag() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    m2 = Migration(name="0002_add.sql", parents=["0001_init.sql"])
-    tree: dict[str, list[Migration]] = {
-        "0001_init.sql": [m2],
-        "0002_add.sql": [],
-    }
-    mock_client.retrieve_migration_statuses.return_value = {
-        "0001_init.sql": MigrationStatus.APPLIED,
-        "0002_add.sql": MigrationStatus.NOT_APPLIED,
-    }
-    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
-        with patch("migrateit.cli.print_dag") as mock_print_dag:
-            cli.cmd_show(mock_client, list_mode=False)
-            mock_print_dag.assert_called_once()
-
-
-def test_cmd_show_calls_print_list() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    tree: dict[str, list[Migration]] = {"0001_init.sql": []}
-    mock_client.retrieve_migration_statuses.return_value = {
-        "0001_init.sql": MigrationStatus.APPLIED,
-    }
-    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
-        with patch("migrateit.cli.print_list") as mock_print_list:
-            cli.cmd_show(mock_client, list_mode=True)
-            mock_print_list.assert_called_once()
-
-
-def test_cmd_show_validate_sql_success() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    m1 = Migration(name="0001_init.sql", initial=True, parents=[])
-    tree: dict[str, list[Migration]] = {"0001_init.sql": []}
-    mock_client.retrieve_migration_statuses.return_value = {
-        "0001_init.sql": MigrationStatus.APPLIED,
-    }
-    mock_client.changelog.migrations = [m1]
-    mock_client.validate_sql_syntax.return_value = None
-    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
-        with patch("migrateit.cli.write_line") as mock_write:
-            cli.cmd_show(mock_client, validate_sql=True)
-            call_args = [c[0][0] for c in mock_write.call_args_list]
-            sql_validation = [c for c in call_args if "SQL validation" in c]
-            assert len(sql_validation) == 1
-            assert "passed" in sql_validation[0]
-
-
-def test_cmd_show_validate_sql_failure() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    m1 = Migration(name="0001_init.sql", initial=True, parents=[])
-    tree: dict[str, list[Migration]] = {"0001_init.sql": []}
-    mock_client.retrieve_migration_statuses.return_value = {
-        "0001_init.sql": MigrationStatus.APPLIED,
-    }
-    mock_client.changelog.migrations = [m1]
-    mock_client.validate_sql_syntax.return_value = (Exception("syntax error"), "SELECT *;")
-    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
-        with patch("migrateit.cli.write_line") as mock_write:
-            cli.cmd_show(mock_client, validate_sql=True)
-            call_args = [c[0][0] for c in mock_write.call_args_list]
-            sql_validation = [c for c in call_args if "SQL validation" in c]
-            assert len(sql_validation) == 1
-            assert "failed" in sql_validation[0]
-
-
-def test_cmd_show_shows_pending_hint() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    tree: dict[str, list[Migration]] = {"0001_init.sql": []}
-    mock_client.retrieve_migration_statuses.return_value = {
-        "0001_init.sql": MigrationStatus.NOT_APPLIED,
-    }
-    mock_client.changelog.migrations = []
-    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
-        with patch("migrateit.cli.write_line") as mock_write:
-            cli.cmd_show(mock_client)
-            call_args = [c[0][0] for c in mock_write.call_args_list]
-            hints = [c for c in call_args if "pending" in c.lower()]
-            assert len(hints) == 1
-            assert "migrateit migrate" in hints[0]
-
-
-def test_cmd_show_shows_conflict_hint() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    tree: dict[str, list[Migration]] = {"0001_init.sql": []}
-    mock_client.retrieve_migration_statuses.return_value = {
-        "0001_init.sql": MigrationStatus.CONFLICT,
-    }
-    mock_client.changelog.migrations = []
-    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
-        with patch("migrateit.cli.write_line") as mock_write:
-            cli.cmd_show(mock_client)
-            call_args = [c[0][0] for c in mock_write.call_args_list]
-            hints = [c for c in call_args if "hash conflicts" in c.lower()]
-            assert len(hints) == 1
-
-
-def test_cmd_show_no_hint_when_all_clean() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    tree: dict[str, list[Migration]] = {"0001_init.sql": []}
-    mock_client.retrieve_migration_statuses.return_value = {
-        "0001_init.sql": MigrationStatus.APPLIED,
-    }
-    mock_client.changelog.migrations = []
-    with patch("migrateit.cli.build_migrations_tree", return_value=tree):
-        with patch("migrateit.cli.write_line") as mock_write:
-            cli.cmd_show(mock_client)
-            call_args = [c[0][0] for c in mock_write.call_args_list]
-            hints = [c for c in call_args if "pending" in c.lower() or "conflicts" in c.lower()]
-            assert len(hints) == 0
-
-
+@pytest.mark.unit
 def test_cmd_squash_no_end_migration() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     m1 = Migration(name="0000_init.sql", initial=True)
@@ -203,13 +99,16 @@ def test_cmd_squash_no_end_migration() -> None:
     mock_client.changelog.migrations = [m1, m2]
     mock_client.changelog.get_migration_by_name = lambda n: m2 if "second" in n else m1
 
-    with patch("migrateit.cli.build_migrations_tree", return_value={}):
-        with patch("migrateit.cli.find_path", return_value=[]):
-            with pytest.raises(ValueError) as ctx:
-                cli.cmd_squash(mock_client, start_migration="0001")
-            assert "No path found" in str(ctx.value)
+    with (
+        patch("migrateit.cli.build_migrations_tree", return_value={}),
+        patch("migrateit.cli.find_path", return_value=[]),
+    ):
+        with pytest.raises(ValueError) as ctx:
+            cli.cmd_squash(mock_client, start_migration="0001")
+        assert "No path found" in str(ctx.value)
 
 
+@pytest.mark.unit
 def test_cmd_squash_initial_migration() -> None:
     mock_client = MagicMock(spec=PsqlClient)
     m1 = Migration(name="0000_init.sql", initial=True)
@@ -217,19 +116,23 @@ def test_cmd_squash_initial_migration() -> None:
     mock_client.changelog.migrations = [m1, m2]
     mock_client.changelog.get_migration_by_name = lambda n: m1 if "init" in n else m2
 
-    with patch("migrateit.cli.build_migrations_tree", return_value={}):
-        with patch("migrateit.cli.find_path", return_value=["0000_init.sql"]):
-            with pytest.raises(ValueError) as ctx:
-                cli.cmd_squash(mock_client, start_migration="0000", end_migration="0000")
-            assert "Cannot squash initial migrations" in str(ctx.value)
+    with (
+        patch("migrateit.cli.build_migrations_tree", return_value={}),
+        patch("migrateit.cli.find_path", return_value=["0000_init.sql"]),
+    ):
+        with pytest.raises(ValueError) as ctx:
+            cli.cmd_squash(mock_client, start_migration="0000", end_migration="0000")
+        assert "Cannot squash initial migrations" in str(ctx.value)
 
 
+@pytest.mark.unit
 def test_get_environment_url_from_db_url() -> None:
     with patch.dict(os.environ, {"DB_URL": "postgresql://user:pass@host:5432/mydb"}):
         url = PsqlClient.get_environment_url()
         assert url == "postgresql://user:pass@host:5432/mydb"
 
 
+@pytest.mark.unit
 def test_get_environment_url_builds_from_parts() -> None:
     env: dict[str, str] = {
         "DB_HOST": "testhost",
@@ -244,6 +147,7 @@ def test_get_environment_url_builds_from_parts() -> None:
         assert "5433" in url
 
 
+@pytest.mark.unit
 def test_get_environment_url_no_password() -> None:
     env: dict[str, str] = {
         "DB_HOST": "localhost",

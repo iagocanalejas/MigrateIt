@@ -74,3 +74,4 @@ out/
 *.csv
 
 db/
+test.db
