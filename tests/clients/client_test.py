@@ -7,6 +7,7 @@ from migrateit.clients._client import SqlClient
 from migrateit.models import ChangelogFile, MigrateItConfig
 
 
+@pytest.mark.unit
 def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
     config = MigrateItConfig(
         table_name="migrations",
@@ -17,6 +18,7 @@ def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
         SqlClient[None](None, config)  # type: ignore[abstract]
 
 
+@pytest.mark.unit
 def test_sql_client_valid_config(temp_dir: Path) -> None:
     config = MigrateItConfig(
         table_name="migrations",
@@ -32,6 +34,7 @@ def test_sql_client_valid_config(temp_dir: Path) -> None:
     assert isinstance(client.changelog, ChangelogFile)
 
 
+@pytest.mark.unit
 def test_validate_config_empty_table_name() -> None:
     config = MigrateItConfig(
         table_name="",
@@ -42,6 +45,7 @@ def test_validate_config_empty_table_name() -> None:
         SqlClient.validate_config(config)
 
 
+@pytest.mark.unit
 def test_validate_config_non_string_table_name() -> None:
     config = MigrateItConfig(
         table_name=int(123),  # type: ignore[arg-type]
@@ -52,6 +56,7 @@ def test_validate_config_non_string_table_name() -> None:
         SqlClient.validate_config(config)
 
 
+@pytest.mark.unit
 def test_validate_config_invalid_identifier() -> None:
     config = MigrateItConfig(
         table_name="invalid-name",

@@ -22,11 +22,20 @@ dev = [
 ]
 
 [project.scripts]
-migrateit = "migrateit.cli:main"
+migrateit = "migrateit.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["migrateit*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "postgres: tests requiring a PostgreSQL connection",
+    "sqlite: tests requiring a SQLite connection",
+    "unit: fast unit tests with no database",
+    "integration: integration tests requiring a database",
+]
 
 [tool.pyright]
 strictListInference = true
@@ -46,6 +55,7 @@ source = ["migrateit"]
 omit = [
   "**/__init__.py",
   "**/_protocol.py",
+  "**/reporters/*.py",
   "main.py",
 ]
 

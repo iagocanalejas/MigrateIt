@@ -19,8 +19,6 @@ from .logs import (
 from .output import (
     STATUS_COLORS as STATUS_COLORS,
     pretty_print_sql_error as pretty_print_sql_error,
-    print_dag as print_dag,
-    print_list as print_list,
     print_logo as print_logo,
     write as write,
     write_line as write_line,

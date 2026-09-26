@@ -5,7 +5,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from .migration import Migration
+from migrateit.reporters.output import STATUS_COLORS, write_line
+
+from .migration import Migration, MigrationStatus
 
 
 class SupportedDatabase(Enum):
@@ -64,3 +66,42 @@ class ChangelogFile:
                 return migration
 
         raise ValueError(f"Migration '{name}' not found in changelog")
+
+    def print_dag(self, status_map: dict[str, MigrationStatus]) -> None:
+        from migrateit.tree import build_migrations_tree
+
+        migration_tree = build_migrations_tree(self)
+        first_migration = next(iter(migration_tree))
+        ChangelogFile._print_dag_rec(first_migration, migration_tree, status_map)
+
+    def print_list(self, status_map: dict[str, MigrationStatus]) -> None:
+        from migrateit.tree import build_migrations_tree
+
+        migration_tree = build_migrations_tree(self)
+        for name in migration_tree.keys():
+            status = status_map[name]
+            status_str = f"{STATUS_COLORS[status]}{status.name.replace('_', ' ').title()}{STATUS_COLORS['reset']}"
+            write_line(f"{name:<40} | {status_str}")
+
+    @staticmethod
+    def _print_dag_rec(
+        name: str,
+        children: dict[str, list[Migration]],
+        status_map: dict[str, MigrationStatus],
+        level: int = 0,
+        seen: set[str] = set(),
+    ) -> None:
+        indent = "  " * level + ("└─ " if level > 0 else "")
+        status = status_map[name]
+        status_str = f"{STATUS_COLORS[status]}{status.name.replace('_', ' ').title()}{STATUS_COLORS['reset']}"
+
+        # indicate repeated visit
+        repeat_marker = " (*)" if name in seen else ""
+        write_line(f"{indent}{name:<40} | {status_str}{repeat_marker}")
+
+        if name in seen:
+            return
+        seen.add(name)
+
+        for child in children.get(name, []):
+            ChangelogFile._print_dag_rec(child.name, children, status_map, level + 1, seen)
