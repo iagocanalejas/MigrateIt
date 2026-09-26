@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from migrateit.cli import cmd_new
 from migrateit.clients.psql import PsqlClient
 from migrateit.clients.sqlite import SqliteClient
 from migrateit.main import _get_connection, main
@@ -25,6 +26,13 @@ def test_get_connection_postgres() -> None:
         mock_conn.autocommit = False
 
 
+@pytest.mark.postgres
+def test_get_environment_url_from_db_url() -> None:
+    with patch.dict(os.environ, {"DB_URL": "postgresql://user:pass@host:5432/mydb"}):
+        url = PsqlClient.get_environment_url()
+        assert url == "postgresql://user:pass@host:5432/mydb"
+
+
 @pytest.mark.sqlite
 def test_get_connection_sqlite() -> None:
     """Test _get_connection returns a sqlite3 connection for SQLite."""
@@ -32,20 +40,6 @@ def test_get_connection_sqlite() -> None:
         result = _get_connection(SupportedDatabase.SQLITE)
         assert isinstance(result, sqlite3.Connection)
         result.close()
-
-
-@pytest.mark.unit
-def test_main_no_args_returns_1(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test main() returns 1 when no subcommand is provided."""
-    monkeypatch.setattr(sys, "argv", ["migrateit"])
-    with (
-        patch("migrateit.main.print_logo"),
-        patch("migrateit.main.error_handler"),
-        patch("migrateit.main.logging_handler"),
-        patch("sys.stdout"),
-    ):
-        result = main()
-        assert result == 1
 
 
 @pytest.mark.unit
@@ -61,8 +55,6 @@ def test_main_version_flag(monkeypatch: pytest.MonkeyPatch, capfd: pytest.Captur
 @pytest.mark.unit
 def test_cmd_new_with_editor(temp_dir: Path) -> None:
     """Test cmd_new launches editor subprocess when no_edit is False."""
-    from migrateit.cli import cmd_new
-
     mock_client: MagicMock = MagicMock(spec=PsqlClient)
     mock_client.is_migrations_table_created.return_value = True
     mock_client.changelog.migrations = [MagicMock(name="0000_init.sql", initial=True, parents=[])]

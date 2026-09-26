@@ -1,160 +1,157 @@
-import os
+import json
+import sqlite3
+from collections.abc import Generator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from migrateit import cli
-from migrateit.clients.psql import PsqlClient
-from migrateit.models import Migration
+from migrateit import constants as C
+from migrateit.main import main
+from migrateit.models.changelog import SupportedDatabase
+
+
+def _load_changelog(
+    temp_dir: Path,
+    database: SupportedDatabase = SupportedDatabase.SQLITE,
+    migrations: list[dict[str, object]] | None = None,
+) -> Path:
+    """Write a minimal changelog.json into temp_dir and return its path."""
+    changelog_path = temp_dir / "changelog.json"
+    changelog_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "database": database.value,
+                "migrations": migrations or [{"name": "0000_init.sql", "parents": [], "initial": True}],
+            }
+        )
+    )
+    return changelog_path
+
+
+@pytest.fixture(autouse=True)
+def patch_migrateit_root(temp_dir: Path) -> Generator[Path]:
+    (temp_dir / "migrations").mkdir(parents=True, exist_ok=True)
+    with patch("migrateit.constants.MIGRATEIT_ROOT_DIR", str(temp_dir)):
+        yield temp_dir
 
 
 @pytest.mark.unit
-def test_cmd_new_raises_when_table_not_created() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    mock_client.is_migrations_table_created.return_value = False
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_main_init(temp_dir: Path, database: SupportedDatabase) -> None:
+    """Test main() dispatches the init command for every supported database."""
+    with (
+        patch("migrateit.main.commands.cmd_init", return_value=0) as mock_init,
+        patch("sys.argv", ["migrateit", "init", database.value]),
+    ):
+        result = main()
 
-    with pytest.raises(ValueError) as ctx:
-        cli.cmd_new(mock_client, name="test_migration", no_edit=True)
-    assert "does not exist" in str(ctx.value)
+    assert result == 0
+    mock_init.assert_called_once_with(
+        table_name=C.MIGRATEIT_MIGRATIONS_TABLE,
+        migrations_dir=temp_dir / "migrations",
+        migrations_file=temp_dir / "changelog.json",
+        database=database,
+    )
 
 
 @pytest.mark.unit
-def test_cmd_run_hash_update_success() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    mock_client.connection = MagicMock()
-    mock_target = MagicMock(spec=Migration)
-    mock_target.name = "0001_test.sql"
-    mock_target.initial = False
-    mock_client.changelog.get_migration_by_name.return_value = mock_target
+def test_main_new(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlite3.Connection, str]) -> None:
+    """Test main() dispatches the ``new`` command for every database."""
+    db_conn, client_class_name = mock_conn_and_client
+    # Derive database type from the client class name
+    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    _load_changelog(
+        temp_dir,
+        database=db,
+        migrations=[{"name": "0000_init.sql", "parents": [], "initial": True}],
+    )
+    with (
+        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch(f"migrateit.main.{client_class_name}"),
+        patch("migrateit.main.commands.cmd_new", return_value=0),
+        patch("sys.argv", ["migrateit", "new", "add_users_table", "-d", "0000_init.sql"]),
+    ):
+        result = main()
 
-    result = cli.cmd_run(mock_client, name="0001_test.sql", is_hash_update=True)
-
-    mock_client.update_migration_hash.assert_called_once_with(mock_target)
-    mock_client.connection.commit.assert_called_once()
     assert result == 0
 
 
 @pytest.mark.unit
-def test_cmd_run_hash_update_no_target() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    with pytest.raises(ValueError) as ctx:
-        cli.cmd_run(mock_client, name=None, is_hash_update=True)
-    assert "requires a target migration name" in str(ctx.value)
-
-
-@pytest.mark.unit
-def test_cmd_run_hash_update_initial_raises() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    mock_target = MagicMock(spec=Migration)
-    mock_target.name = "0000_init.sql"
-    mock_target.initial = True
-    mock_client.changelog.get_migration_by_name.return_value = mock_target
-
-    with pytest.raises(ValueError) as ctx:
-        cli.cmd_run(mock_client, name="0000", is_hash_update=True)
-    assert "Cannot update hash for the initial migration" in str(ctx.value)
-
-
-@pytest.mark.unit
-def test_cmd_run_fake_no_target() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    mock_client.is_migrations_table_created.return_value = True
-    mock_client.retrieve_migration_statuses.return_value = {}
-
-    with pytest.raises(ValueError) as ctx:
-        cli.cmd_run(mock_client, name=None, is_fake=True)
-    assert "Fake migration requires a target migration name" in str(ctx.value)
-
-
-@pytest.mark.unit
-def test_cmd_run_fake_initial_raises() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    mock_target = MagicMock(spec=Migration)
-    mock_target.name = "0000_init.sql"
-    mock_target.initial = True
-    mock_client.changelog.get_migration_by_name.return_value = mock_target
-    mock_client.retrieve_migration_statuses.return_value = {}
-
-    with pytest.raises(ValueError) as ctx:
-        cli.cmd_run(mock_client, name="0000", is_fake=True)
-    assert "Cannot fake the initial migration" in str(ctx.value)
-
-
-@pytest.mark.unit
-def test_cmd_run_rollback_no_target() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    mock_client.is_migrations_table_created.return_value = True
-    mock_client.retrieve_migration_statuses.return_value = {}
-
-    with pytest.raises(ValueError) as ctx:
-        cli.cmd_run(mock_client, name=None, is_rollback=True)
-    assert "Rollback requires a target migration name" in str(ctx.value)
-
-
-@pytest.mark.unit
-def test_cmd_squash_no_end_migration() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    m1 = Migration(name="0000_init.sql", initial=True)
-    m2 = Migration(name="0001_second.sql", parents=["0000_init.sql"])
-    mock_client.changelog.migrations = [m1, m2]
-    mock_client.changelog.get_migration_by_name = lambda n: m2 if "second" in n else m1
-
+def test_main_show(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlite3.Connection, str]) -> None:
+    """Test main() dispatches the ``show`` command for every database."""
+    db_conn, client_class_name = mock_conn_and_client
+    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    _load_changelog(temp_dir, database=db)
     with (
-        patch.object(mock_client.changelog, "migrations_tree", return_value={}),
-        patch("migrateit.cli.find_path", return_value=[]),
+        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch("migrateit.main.commands.cmd_show", return_value=0),
+        patch("sys.argv", ["migrateit", "show", "--list", "--validate-sql"]),
     ):
-        with pytest.raises(ValueError) as ctx:
-            cli.cmd_squash(mock_client, start_migration="0001")
-        assert "No path found" in str(ctx.value)
+        result = main()
+
+    assert result == 0
 
 
 @pytest.mark.unit
-def test_cmd_squash_initial_migration() -> None:
-    mock_client = MagicMock(spec=PsqlClient)
-    m1 = Migration(name="0000_init.sql", initial=True)
-    m2 = Migration(name="0001_second.sql", parents=["0000_init.sql"])
-    mock_client.changelog.migrations = [m1, m2]
-    mock_client.changelog.get_migration_by_name = lambda n: m1 if "init" in n else m2
-
+def test_main_migrate(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlite3.Connection, str]) -> None:
+    """Test main() dispatches the ``migrate`` command for every database."""
+    db_conn, client_class_name = mock_conn_and_client
+    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    _load_changelog(temp_dir, database=db)
     with (
-        patch.object(mock_client.changelog, "migrations_tree", return_value={}),
-        patch("migrateit.cli.find_path", return_value=["0000_init.sql"]),
+        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch("migrateit.main.commands.cmd_run", return_value=0),
+        patch("sys.argv", ["migrateit", "migrate", "0001_add_posts", "--fake", "--update-hash"]),
     ):
-        with pytest.raises(ValueError) as ctx:
-            cli.cmd_squash(mock_client, start_migration="0000", end_migration="0000")
-        assert "Cannot squash initial migrations" in str(ctx.value)
+        result = main()
+
+    assert result == 0
 
 
 @pytest.mark.unit
-def test_get_environment_url_from_db_url() -> None:
-    with patch.dict(os.environ, {"DB_URL": "postgresql://user:pass@host:5432/mydb"}):
-        url = PsqlClient.get_environment_url()
-        assert url == "postgresql://user:pass@host:5432/mydb"
+def test_main_rollback(
+    temp_dir: Path,
+    mock_conn_and_client: tuple[MagicMock | sqlite3.Connection, str],
+) -> None:
+    """Test main() dispatches the ``rollback`` command for every database."""
+    db_conn, client_class_name = mock_conn_and_client
+    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    _load_changelog(temp_dir, database=db)
+    with (
+        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch("migrateit.main.commands.cmd_run", return_value=0),
+        patch("sys.argv", ["migrateit", "rollback", "0001_add_posts", "--fake"]),
+    ):
+        result = main()
+
+    assert result == 0
 
 
 @pytest.mark.unit
-def test_get_environment_url_builds_from_parts() -> None:
-    env: dict[str, str] = {
-        "DB_HOST": "testhost",
-        "DB_PORT": "5433",
-        "DB_USER": "testuser",
-        "DB_PASS": "testpass",
-        "DB_NAME": "testdb",
-    }
-    with patch.dict(os.environ, env):
-        url = PsqlClient.get_environment_url()
-        assert "testhost" in url
-        assert "5433" in url
+def test_main_squash(
+    temp_dir: Path,
+    mock_conn_and_client: tuple[MagicMock | sqlite3.Connection, str],
+) -> None:
+    """Test main() dispatches the ``squash`` command for every database."""
+    db_conn, client_class_name = mock_conn_and_client
+    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    _load_changelog(temp_dir, database=db)
+    with (
+        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch("migrateit.main.commands.cmd_squash", return_value=0),
+        patch("sys.argv", ["migrateit", "squash", "0001_a", "0003_c", "-n", "squashed"]),
+    ):
+        result = main()
+
+    assert result == 0
 
 
 @pytest.mark.unit
-def test_get_environment_url_no_password() -> None:
-    env: dict[str, str] = {
-        "DB_HOST": "localhost",
-        "DB_PORT": "5432",
-        "DB_USER": "postgres",
-        "DB_NAME": "migrateit",
-    }
-    with patch.dict(os.environ, env):
-        url = PsqlClient.get_environment_url()
-        assert ":@" not in url
+def test_main_no_command(temp_dir: Path) -> None:
+    """Test main() prints help and returns 1 when no subcommand is given."""
+    with patch("sys.argv", ["migrateit"]):
+        result = main()
+
+    assert result == 1

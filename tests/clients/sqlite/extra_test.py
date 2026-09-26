@@ -9,7 +9,7 @@ from migrateit.clients.sqlite import SqliteClient
 from migrateit.models.changelog import Migration
 from migrateit.models.migration import MigrationStatus
 from migrateit.tree import create_new_migration
-from tests.conftest import create_migration_file
+from tests.conftest import TEST_MIGRATIONS_TABLE, create_migration_file
 
 # --- create_migrations_table tests ---
 
@@ -66,10 +66,13 @@ def test_is_migration_applied(sqlite_client: SqliteClient) -> None:
 
 
 @pytest.mark.sqlite
-def test_retrieve_statuses_no_table(sqlite_client: SqliteClient, temp_dir: Path) -> None:
+def test_no_table_returns_not_applied(sqlite_client: SqliteClient, temp_dir: Path) -> None:
     """Test retrieving statuses when no migrations table exists."""
     migrations_dir = temp_dir / "migrations"
     migrations_dir.mkdir(parents=True, exist_ok=True)
+
+    sqlite_client.connection.execute(f"DROP TABLE IF EXISTS {TEST_MIGRATIONS_TABLE}")
+    sqlite_client.connection.commit()
 
     create_new_migration(changelog=sqlite_client.changelog, migrations_dir=migrations_dir, name="migrateit")
     statuses = sqlite_client.retrieve_migration_statuses()
@@ -83,12 +86,7 @@ def test_retrieve_statuses_no_table(sqlite_client: SqliteClient, temp_dir: Path)
 @pytest.mark.sqlite
 def test_update_migration_hash(sqlite_client: SqliteClient, temp_dir: Path) -> None:
     """Test updating migration hash."""
-    create_migration_file(
-        temp_dir / "migrations",
-        "0001_test.sql",
-        sql="SELECT 1;",
-        rollback_sql="SELECT 1;",
-    )
+    create_migration_file(temp_dir / "migrations", "0001_test.sql")
 
     sqlite_client.changelog.migrations.append(
         Migration(name="0001_test.sql", initial=False, parents=["0000_migrateit.sql"])
@@ -179,12 +177,7 @@ def test_get_database_hash_not_found(sqlite_client: SqliteClient) -> None:
 @pytest.mark.sqlite
 def test_apply_migration_rollback_on_sqlite_error(sqlite_client: SqliteClient, temp_dir: Path) -> None:
     """Test that SQLite errors trigger a rollback."""
-    create_migration_file(
-        temp_dir / "migrations",
-        "0001_bad.sql",
-        sql="NOT VALID SQL AT ALL !!!",
-        rollback_sql="SELECT 1;",
-    )
+    create_migration_file(temp_dir / "migrations", "0001_bad.sql", sql="NOT VALID SQL AT ALL !!!")
     sqlite_client.changelog.migrations.append(
         Migration(name="0001_bad.sql", initial=False, parents=["0000_migrateit.sql"])
     )

@@ -18,7 +18,7 @@ def _insert_migration_row(client: SqliteClient, name: str, hash_value: str) -> N
 
 
 @pytest.mark.sqlite
-@patch.object(SqliteClient, "_get_migration_content_and_hash")
+@patch.object(SqliteClient, "get_migration_content_and_hash")
 def test_show_migrations_applied_and_not_applied(
     mock_get_migration_content_and_hash: MagicMock,
     sqlite_client: SqliteClient,
@@ -43,7 +43,7 @@ def test_show_migrations_applied_and_not_applied(
 
 
 @pytest.mark.sqlite
-@patch.object(SqliteClient, "_get_migration_content_and_hash")
+@patch.object(SqliteClient, "get_migration_content_and_hash")
 def test_show_migrations_conflict_and_removed(
     mock_get_migration_content_and_hash: MagicMock,
     sqlite_client: SqliteClient,
@@ -64,7 +64,7 @@ def test_show_migrations_conflict_and_removed(
 
 
 @pytest.mark.sqlite
-@patch.object(SqliteClient, "_get_migration_content_and_hash")
+@patch.object(SqliteClient, "get_migration_content_and_hash")
 def test_show_migrations_order_error(
     mock_get_migration_content_and_hash: MagicMock,
     sqlite_client: SqliteClient,

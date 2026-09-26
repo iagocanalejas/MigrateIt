@@ -218,6 +218,7 @@ def _get_connection(database: SupportedDatabase) -> psycopg.Connection | sqlite3
         case SupportedDatabase.SQLITE:
             db_url = SqliteClient.get_environment_url()
             sqlite_conn = sqlite3.connect(db_url.replace("sqlite:///", ""))
+            sqlite_conn.autocommit = False
             return sqlite_conn
         case _:
             raise NotImplementedError(f"Database {database} is not supported")

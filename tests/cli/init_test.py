@@ -27,7 +27,8 @@ def test_cmd_init(cmd_client: SqlClient[Any], temp_dir: Path) -> None:
 
 
 @pytest.mark.integration
-def test_cmd_init_missing_rollback_tag(temp_dir: Path) -> None:
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_cmd_init_missing_rollback_tag(temp_dir: Path, database: SupportedDatabase) -> None:
     """Test cmd_init raises FileExistsError when migration file already exists."""
 
     migrations_dir = temp_dir / "migrations"
@@ -38,7 +39,7 @@ def test_cmd_init_missing_rollback_tag(temp_dir: Path) -> None:
         table_name="migrations",
         migrations_dir=migrations_dir,
         migrations_file=migrations_file,
-        database=SupportedDatabase.SQLITE,
+        database=database,
     )
 
     # Clean up the files
@@ -55,6 +56,6 @@ def test_cmd_init_missing_rollback_tag(temp_dir: Path) -> None:
             table_name="migrations",
             migrations_dir=migrations_dir,
             migrations_file=migrations_file,
-            database=SupportedDatabase.SQLITE,
+            database=database,
         )
     assert "already exists" in str(ctx.value)

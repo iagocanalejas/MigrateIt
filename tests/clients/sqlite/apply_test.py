@@ -149,12 +149,7 @@ def test_apply_migration_wrong_extension(sqlite_client: SqliteClient, temp_dir: 
 @pytest.mark.sqlite
 def test_apply_migration_already_applied(sqlite_client: SqliteClient, temp_dir: Path) -> None:
     """Test applying an already applied migration."""
-    create_migration_file(
-        temp_dir / "migrations",
-        "0001_applied.sql",
-        sql="SELECT 1;",
-        rollback_sql="SELECT 1;",
-    )
+    create_migration_file(temp_dir / "migrations", "0001_applied.sql")
 
     sqlite_client.changelog.migrations.append(
         Migration(name="0001_applied.sql", initial=False, parents=["0000_migrateit.sql"])
@@ -164,5 +159,5 @@ def test_apply_migration_already_applied(sqlite_client: SqliteClient, temp_dir: 
     sqlite_client.apply_migration(migration)
     sqlite_client.connection.commit()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="already applied, cannot apply it again"):
         sqlite_client.apply_migration(migration)

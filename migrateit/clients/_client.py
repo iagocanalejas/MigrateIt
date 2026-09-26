@@ -1,9 +1,14 @@
+import hashlib
 import os
+import re
 from abc import ABC
 from pathlib import Path
 
 from migrateit.clients._protocol import SqlClientProtocol
 from migrateit.models import ChangelogFile, MigrateItConfig
+from migrateit.tree import ROLLBACK_SPLIT_TAG
+
+WHITESPACE_RE = re.compile(r"\s+")
 
 
 class SqlClient[T](ABC, SqlClientProtocol):
@@ -55,3 +60,19 @@ class SqlClient[T](ABC, SqlClientProtocol):
             raise ValueError("Migrations directory is required")
         if not config.changelog.path:
             raise ValueError("Migrations file is required")
+
+    @staticmethod
+    def get_migration_content_and_hash(path: Path) -> tuple[str, str, str]:
+        content = path.read_text()
+        parts = content.split(ROLLBACK_SPLIT_TAG)
+        if len(parts) == 1:
+            raise ValueError("No rollback tag in migration file")
+        if len(parts) > 2:
+            raise ValueError("Too many rollback tags in migration file")
+
+        migration, reverse_migration = parts
+        return (
+            WHITESPACE_RE.sub(" ", migration).strip(),
+            WHITESPACE_RE.sub(" ", reverse_migration).strip(),
+            hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        )

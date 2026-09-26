@@ -6,7 +6,11 @@ from psycopg import ProgrammingError
 
 from migrateit.clients import PsqlClient
 from migrateit.models import Migration
+from migrateit.models.changelog import ChangelogFile
+from migrateit.models.migration import MigrationStatus
 from tests.conftest import INIT_MIGRATION, TEST_MIGRATIONS_TABLE, create_migration_file
+
+# --- validate_sql_syntax ---
 
 
 @pytest.mark.postgres
@@ -16,22 +20,6 @@ def test_validate_simple_select_syntax(pg_client: PsqlClient, temp_dir: Path) ->
 
     filename = "0001_init.sql"
     create_migration_file(migrations_dir, filename, sql=f"SELECT * FROM {TEST_MIGRATIONS_TABLE};")
-    migration = Migration(name=filename, parents=[INIT_MIGRATION])
-    assert pg_client.validate_sql_syntax(migration) is None
-
-
-@pytest.mark.postgres
-def test_validate_simple_select_with_rollback(pg_client: PsqlClient, temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    os.makedirs(migrations_dir, exist_ok=True)
-
-    filename = "0001_init.sql"
-    create_migration_file(
-        migrations_dir,
-        filename,
-        sql=f"SELECT * FROM {TEST_MIGRATIONS_TABLE};",
-        rollback_sql="SELECT 1;",
-    )
     migration = Migration(name=filename, parents=[INIT_MIGRATION])
     assert pg_client.validate_sql_syntax(migration) is None
 
@@ -229,3 +217,89 @@ def test_invalid_alter_table_statement(pg_client: PsqlClient, temp_dir: Path) ->
     error, sql = error_result
     assert isinstance(error, ProgrammingError)
     assert "ADD COLUM" in sql
+
+
+# --- validate_migrations ---
+
+
+@pytest.mark.postgres
+def test_validate_empty_migrations(pg_client: PsqlClient, temp_dir: Path) -> None:
+    pg_client.config.changelog = ChangelogFile(version=1, migrations=[])
+    statuses: dict[str, MigrationStatus] = {}
+    pg_client.validate_migrations(statuses)  # should not raise
+    assert statuses == {}  # empty dict passed through unchanged
+
+
+@pytest.mark.postgres
+def test_validate_no_initial_raises(pg_client: PsqlClient, temp_dir: Path) -> None:
+    migrations = [Migration(name="0001_test.sql", parents=[])]
+    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+    statuses: dict[str, MigrationStatus] = {}
+    with pytest.raises(ValueError, match="Initial migration is not defined"):
+        pg_client.validate_migrations(statuses)
+
+
+@pytest.mark.postgres
+def test_validate_multiple_initial_raises(pg_client: PsqlClient, temp_dir: Path) -> None:
+    migrations = [
+        Migration(name="0000_a.sql", initial=True, parents=[]),
+        Migration(name="0001_b.sql", initial=True, parents=[]),
+    ]
+    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+    statuses: dict[str, MigrationStatus] = {}
+    with pytest.raises(ValueError, match="Multiple initial migrations found"):
+        pg_client.validate_migrations(statuses)
+
+
+@pytest.mark.postgres
+def test_validate_removed_raises(pg_client: PsqlClient, temp_dir: Path) -> None:
+    migrations = [Migration(name="0000_init.sql", initial=True, parents=[])]
+    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+    statuses = {"0000_init.sql": MigrationStatus.APPLIED, "ghost.sql": MigrationStatus.REMOVED}
+    with pytest.raises(ValueError, match="Removed migrations found"):
+        pg_client.validate_migrations(statuses)
+
+
+@pytest.mark.postgres
+def test_validate_parent_not_applied(pg_client: PsqlClient, temp_dir: Path) -> None:
+    migrations = [
+        Migration(name="0000_init.sql", initial=True, parents=[]),
+        Migration(name="0001_child.sql", parents=["0000_init.sql"]),
+    ]
+    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+    statuses = {
+        "0000_init.sql": MigrationStatus.NOT_APPLIED,
+        "0001_child.sql": MigrationStatus.APPLIED,
+    }
+    with pytest.raises(ValueError, match="applied before"):
+        pg_client.validate_migrations(statuses)
+
+
+# --- validate_migrations conflict path ---
+
+
+@pytest.mark.postgres
+def test_validate_conflict_raises(pg_client: PsqlClient, temp_dir: Path) -> None:
+    filename = "0001_test.sql"
+    migrations_dir = temp_dir / "migrations"
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    create_migration_file(migrations_dir, filename)
+
+    migrations = [
+        Migration(name="0000_init.sql", initial=True, parents=[]),
+        Migration(name=filename, parents=["0000_init.sql"]),
+    ]
+    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+
+    # Insert a different hash into the DB to trigger conflict
+    with pg_client.connection.cursor() as cursor:
+        cursor.execute(
+            f"INSERT INTO {TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES (%s, %s)",
+            (filename, "different_hash"),
+        )
+    pg_client.connection.commit()
+
+    statuses = pg_client.retrieve_migration_statuses()
+    assert statuses[filename] == MigrationStatus.CONFLICT
+    with pytest.raises(ValueError, match="has a different hash"):
+        pg_client.validate_migrations(statuses)

@@ -40,7 +40,7 @@ def test_table_missing_returns_false(pg_client: PsqlClient, temp_dir: Path) -> N
 def test_applied_migration_returns_true(pg_client: PsqlClient, temp_dir: Path) -> None:
     migration = Migration(name="0000_init.sql", initial=True, parents=[])
     migrations_dir = temp_dir / "migrations"
-    create_migration_file(migrations_dir, "0000_init.sql", sql="SELECT 1;")
+    create_migration_file(migrations_dir, "0000_init.sql")
     pg_client.config.changelog = ChangelogFile(version=1, migrations=[migration])
 
     pg_client.apply_migration(migration, is_fake=False)
@@ -58,7 +58,7 @@ def test_not_applied_migration_returns_false(pg_client: PsqlClient, temp_dir: Pa
 def test_update_migration_hash(pg_client: PsqlClient, temp_dir: Path) -> None:
     filename = "0001_update_hash.sql"
     migrations_dir = temp_dir / "migrations"
-    create_migration_file(migrations_dir, filename, sql="SELECT 1;")
+    create_migration_file(migrations_dir, filename)
     migration = Migration(name=filename, parents=[INIT_MIGRATION])
     pg_client.config.changelog = ChangelogFile(version=1, migrations=[Migration(name=INIT_MIGRATION), migration])
 
@@ -89,14 +89,14 @@ def test_update_migration_hash(pg_client: PsqlClient, temp_dir: Path) -> None:
 def test_update_migration_hash_after_file_change(pg_client: PsqlClient, temp_dir: Path) -> None:
     filename = "0002_update_hash.sql"
     migrations_dir = temp_dir / "migrations"
-    create_migration_file(migrations_dir, filename, sql="SELECT 1;")
+    create_migration_file(migrations_dir, filename)
     migration = Migration(name=filename, parents=[INIT_MIGRATION])
     pg_client.config.changelog = ChangelogFile(version=1, migrations=[Migration(name=INIT_MIGRATION), migration])
 
     pg_client.apply_migration(migration, is_fake=False)
 
     # Change the file content
-    path = os.path.join(migrations_dir, filename)
+    path = migrations_dir / filename
     new_content = "SELECT 2;"
     with open(path, "a") as f:
         f.write(new_content)
@@ -105,7 +105,7 @@ def test_update_migration_hash_after_file_change(pg_client: PsqlClient, temp_dir
         f.write(f"SELECT 1;\n{new_content}\n\n{pg_client.__class__.__module__}")
     # Actually let's use the helper
     os.remove(path)
-    create_migration_file(migrations_dir, filename, sql="SELECT 1;\nSELECT 2;")
+    create_migration_file(migrations_dir, filename)
 
     pg_client.update_migration_hash(migration)
     pg_client.connection.commit()
@@ -170,9 +170,9 @@ def test_get_content_and_hash(pg_client: PsqlClient, temp_dir: Path) -> None:
     os.makedirs(migrations_dir, exist_ok=True)
 
     filename = "0001_test.sql"
-    create_migration_file(migrations_dir, filename, sql="SELECT 1;", rollback_sql="SELECT 2;")
-    path = os.path.join(migrations_dir, filename)
-    migration_code, reverse_code, hash_val = pg_client._get_migration_content_and_hash(Path(path))
+    create_migration_file(migrations_dir, filename)
+    path = migrations_dir / filename
+    migration_code, reverse_code, hash_val = pg_client.get_migration_content_and_hash(Path(path))
     assert "SELECT 1;" in migration_code
     assert "SELECT 2;" in reverse_code
     assert len(hash_val) == 64  # SHA-256 hex digest
@@ -184,21 +184,16 @@ def test_get_content_and_hash_empty_reverse(pg_client: PsqlClient, temp_dir: Pat
     os.makedirs(migrations_dir, exist_ok=True)
 
     filename = "0002_test.sql"
-    path = os.path.join(migrations_dir, filename)
+    path = migrations_dir / filename
     with open(path, "w") as f:
         f.write("SELECT 1;\n\n-- Rollback migration")
-    migration_code, reverse_code, hash_val = pg_client._get_migration_content_and_hash(Path(path))
+    migration_code, reverse_code, hash_val = pg_client.get_migration_content_and_hash(Path(path))
     assert "SELECT 1;" in migration_code
     assert reverse_code == ""
 
 
 @pytest.mark.postgres
 def test_get_database_hash(pg_client: PsqlClient, temp_dir: Path) -> None:
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
-
     test_hash = "abc123def456"
     with pg_client.connection.cursor() as cursor:
         cursor.execute(
@@ -212,12 +207,7 @@ def test_get_database_hash(pg_client: PsqlClient, temp_dir: Path) -> None:
 
 @pytest.mark.postgres
 def test_get_database_hash_not_found(pg_client: PsqlClient, temp_dir: Path) -> None:
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
-
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not found in the database"):
         pg_client._get_database_hash("nonexistent.sql")
 
 
@@ -225,16 +215,12 @@ def test_get_database_hash_not_found(pg_client: PsqlClient, temp_dir: Path) -> N
 def test_no_table_returns_not_applied(pg_client: PsqlClient, temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     os.makedirs(migrations_dir, exist_ok=True)
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
 
     with pg_client.connection.cursor() as cursor:
         cursor.execute(f"DROP TABLE IF EXISTS {TEST_MIGRATIONS_TABLE}")
     pg_client.connection.commit()
 
-    create_migration_file(migrations_dir, "0001_test.sql", sql="SELECT 1;")
+    create_migration_file(migrations_dir, "0001_test.sql")
     migrations = [Migration(name="0001_test.sql", parents=[INIT_MIGRATION])]
     pg_client.config.changelog = ChangelogFile(version=1, migrations=[Migration(name=INIT_MIGRATION), *migrations])
     statuses = pg_client.retrieve_migration_statuses()
@@ -245,13 +231,9 @@ def test_no_table_returns_not_applied(pg_client: PsqlClient, temp_dir: Path) -> 
 def test_mixed_statuses(pg_client: PsqlClient, temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     os.makedirs(migrations_dir, exist_ok=True)
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
 
-    create_migration_file(migrations_dir, "0001_applied.sql", sql="SELECT 1;")
-    create_migration_file(migrations_dir, "0002_not_applied.sql", sql="SELECT 2;")
+    create_migration_file(migrations_dir, "0001_applied.sql")
+    create_migration_file(migrations_dir, "0002_not_applied.sql")
     migrations = [
         Migration(name="0001_applied.sql", parents=[INIT_MIGRATION]),
         Migration(name="0002_not_applied.sql", parents=[INIT_MIGRATION]),
@@ -264,116 +246,3 @@ def test_mixed_statuses(pg_client: PsqlClient, temp_dir: Path) -> None:
     statuses = pg_client.retrieve_migration_statuses()
     assert statuses["0001_applied.sql"] == MigrationStatus.APPLIED
     assert statuses["0002_not_applied.sql"] == MigrationStatus.NOT_APPLIED
-
-
-@pytest.mark.postgres
-def test_validate_empty_migrations(pg_client: PsqlClient, temp_dir: Path) -> None:
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
-
-    pg_client.config.changelog = ChangelogFile(version=1, migrations=[])
-    statuses: dict[str, MigrationStatus] = {}
-    pg_client.validate_migrations(statuses)  # should not raise
-    assert statuses == {}  # empty dict passed through unchanged
-
-
-@pytest.mark.postgres
-def test_validate_no_initial_raises(pg_client: PsqlClient, temp_dir: Path) -> None:
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
-
-    migrations = [Migration(name="0001_test.sql", parents=[])]
-    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
-    statuses: dict[str, MigrationStatus] = {}
-    with pytest.raises(ValueError):
-        pg_client.validate_migrations(statuses)
-
-
-@pytest.mark.postgres
-def test_validate_multiple_initial_raises(pg_client: PsqlClient, temp_dir: Path) -> None:
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
-
-    migrations = [
-        Migration(name="0000_a.sql", initial=True, parents=[]),
-        Migration(name="0001_b.sql", initial=True, parents=[]),
-    ]
-    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
-    statuses: dict[str, MigrationStatus] = {}
-    with pytest.raises(ValueError):
-        pg_client.validate_migrations(statuses)
-
-
-@pytest.mark.postgres
-def test_validate_removed_raises(pg_client: PsqlClient, temp_dir: Path) -> None:
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
-
-    migrations = [Migration(name="0000_init.sql", initial=True, parents=[])]
-    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
-    statuses = {"0000_init.sql": MigrationStatus.APPLIED, "ghost.sql": MigrationStatus.REMOVED}
-    with pytest.raises(ValueError):
-        pg_client.validate_migrations(statuses)
-
-
-@pytest.mark.postgres
-def test_validate_parent_not_applied(pg_client: PsqlClient, temp_dir: Path) -> None:
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
-
-    migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_child.sql", parents=["0000_init.sql"]),
-    ]
-    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
-    statuses = {
-        "0000_init.sql": MigrationStatus.NOT_APPLIED,
-        "0001_child.sql": MigrationStatus.APPLIED,
-    }
-    with pytest.raises(ValueError):
-        pg_client.validate_migrations(statuses)
-
-
-# --- validate_migrations conflict path ---
-
-
-@pytest.mark.postgres
-def test_validate_conflict_raises(pg_client: PsqlClient, temp_dir: Path) -> None:
-    sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(sql)  # pyright: ignore
-    pg_client.connection.commit()
-
-    filename = "0001_test.sql"
-    migrations_dir = temp_dir / "migrations"
-    migrations_dir.mkdir(parents=True, exist_ok=True)
-    create_migration_file(migrations_dir, filename, sql="SELECT 1;")
-
-    migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name=filename, parents=["0000_init.sql"]),
-    ]
-    pg_client.config.changelog = ChangelogFile(version=1, migrations=migrations)
-
-    # Insert a different hash into the DB to trigger conflict
-    with pg_client.connection.cursor() as cursor:
-        cursor.execute(
-            f"INSERT INTO {TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES (%s, %s)",
-            (filename, "different_hash"),
-        )
-    pg_client.connection.commit()
-
-    statuses = pg_client.retrieve_migration_statuses()
-    assert statuses[filename] == MigrationStatus.CONFLICT
-    with pytest.raises(ValueError, match="has a different hash"):
-        pg_client.validate_migrations(statuses)

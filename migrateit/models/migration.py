@@ -18,6 +18,12 @@ class Migration:
     initial: bool = False
     parents: list[str] = field(default_factory=list)
 
+    def __str__(self) -> str:
+        return self.name
+
+    def __repr__(self) -> str:
+        return str(self)
+
     @staticmethod
     def is_valid_name(path: Path) -> bool:
         return path.is_file() and path.name.endswith(".sql") and re.match(r"^\d{4}_", path.name) is not None
