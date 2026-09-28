@@ -1,4 +1,6 @@
 -r requirements.txt
 coverage
 mypy
+psycopg[binary]
+pysqlite3
 pytest

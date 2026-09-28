@@ -15,12 +15,6 @@ classifiers = [
   "Programming Language :: Python :: 3 :: Only"
 ]
 
-[project.optional-dependencies]
-dev = [
-  "pysqlite3",
-  "psycopg[binary]",
-]
-
 [project.scripts]
 migrateit = "migrateit.main:main"
 
