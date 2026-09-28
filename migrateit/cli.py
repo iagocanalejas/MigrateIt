@@ -110,7 +110,6 @@ def cmd_run(
     client.validate_migrations(statuses)
 
     migration_plan = client.changelog.build_migration_plan(
-        migration_tree=client.changelog.migrations_tree,
         statuses_map=statuses,
         target_migration=target_migration,
         is_rollback=is_rollback,
@@ -145,6 +144,8 @@ def cmd_squash(
     name: str | None = None,
 ) -> int:
     if not end_migration:
+        if len(client.changelog.migrations) < 3:
+            raise ValueError("Cannot squash less than 3 migrations.")
         end_migration = client.changelog.migrations[-1].name
 
     start_migration = client.changelog.get_migration_by_name(start_migration).name
@@ -178,7 +179,9 @@ def cmd_squash(
 
     write_line(f"Squashed migration created: {squashed_migration.name}")
 
-    if all(statuses[m] == MigrationStatus.APPLIED for m in to_squash):
+    are_migrations_applied = statuses[to_squash[0]] == MigrationStatus.APPLIED
+    if are_migrations_applied:
+        # if all the migrations are already applied we need to update the database
         client.squash_migrations(to_squash, squashed_migration)
         client.connection.commit()
         write_line("Migrations marked as squashed in the database.")

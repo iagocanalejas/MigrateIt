@@ -11,10 +11,7 @@ TEST_TABLE = "test_entity"
 
 
 @pytest.mark.postgres
-def test_squash_migrations_marks_old_as_squashed_and_applies_new_fake(
-    pg_client: PsqlClient,
-    temp_dir: Path,
-) -> None:
+def test_squash_migrations_marks_old_as_squashed_and_applies_new_fake(pg_client: PsqlClient, temp_dir: Path) -> None:
     """Test squashing applied migrations across databases."""
     migrations_dir = temp_dir / "migrations"
 
@@ -29,7 +26,7 @@ def test_squash_migrations_marks_old_as_squashed_and_applies_new_fake(
     new_migration_name = "0012_squashed.sql"
 
     for fname in old_migrations:
-        create_migration_file(migrations_dir, fname, sql="SELECT 1;")
+        create_migration_file(migrations_dir, fname)
 
     for fname in old_migrations:
         pg_client.changelog.migrations.append(

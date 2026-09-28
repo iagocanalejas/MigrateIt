@@ -59,6 +59,7 @@ omit = [
 ]
 
 [tool.coverage.report]
+fail_under = 100
 exclude_also = [
   "pragma: no cover*",
   "import .*",

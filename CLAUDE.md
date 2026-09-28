@@ -22,7 +22,6 @@ This file provides guidance for Claude Code when working with code in this repos
 - **Tooling Configuration**:
   - `mypy`, `ruff`, and `pytest` settings are centralized in `pyproject.toml`.
   - `pre-commit` manages Git hooks via `.pre-commit-config.yaml`.
-- **Imports**: Group imports strictly as Standard Library → External → Internal, handled automatically by `ruff`.
 - **Testing**: Write type-annotated test functions under `tests/` mirroring the core package layout.
 
 ## AI Assistant Operational Rules
@@ -33,26 +32,7 @@ This file provides guidance for Claude Code when working with code in this repos
 
 ## Essential Commands
 
-```bash
-# Setup
-python3.14 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Run a specific test
-pytest tests/cli/init_test.py -v
-
-# Type check
-mypy .
-
-# Lint & format
-ruff check . && ruff format .
-
-# Pre-commit hooks
-pre-commit run --all-files
-
+```
 # Run the CLI
 migrateit init postgres
 migrateit init sqlite
@@ -70,30 +50,6 @@ migrateit squash 0001 0005
 ```
 
 ## Architecture
-
-### Package structure (`migrateit/`)
-
-```
-migrateit/
-├── cli.py            # Command implementations (cmd_init, cmd_new, cmd_run, cmd_squash, cmd_show)
-├── main.py           # CLI entry point: argparse subcommand parsing, connection setup, dispatch
-├── tree.py           # File/tree operations: migration file I/O, changelog persistence, DAG building, plan computation
-├── constants.py      # Version, defaults for root dir and table name
-├── clients/          # Database client layer
-│   ├── _protocol.py  # SqlClientProtocol (Protocol defining the database client interface)
-│   ├── _client.py    # SqlClient[T] (generic ABC holding connection + config + env var names)
-│   ├── psql.py       # PsqlClient(SqlClient[Connection]) — PostgreSQL implementation
-│   └── sqlite.py     # SqliteClient(SqlClient[sqlite3.Connection]) — SQLite implementation
-├── models/           # Domain dataclasses
-│   ├── config.py     # MigrateItConfig (table_name, migrations_dir, changelog)
-│   ├── migration.py  # Migration (name, initial flag, parents list), MigrationStatus enum
-│   └── changelog.py  # ChangelogFile (version, database type, migration list), SupportedDatabase enum
-└── reporters/        # Output and error handling
-    ├── output.py     # Raw byte output, ExitStack-based multi-stream logging, DAG/tree printing
-    ├── errors.py     # FatalError, error_handler context manager
-    ├── logs.py       # LoggingHandler, logging_handler context manager
-    └── _utils.py     # Color constants, force_bytes, format_color helpers
-```
 
 ### Key architectural patterns
 

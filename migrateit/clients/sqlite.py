@@ -7,7 +7,6 @@ from typing import override
 from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
 from migrateit.reporters.logs import logger
-from migrateit.tree import ROLLBACK_SPLIT_TAG
 
 
 class SqliteClient(SqlClient[sqlite3.Connection]):
@@ -80,7 +79,7 @@ DROP TABLE IF EXISTS {table_name};
                 migrations[migration_name] = MigrationStatus.REMOVED
                 continue
 
-            _, _, migration_hash = self._get_migration_content_and_hash(self.migrations_dir / migration.name)
+            _, _, migration_hash = self.get_migration_content_and_hash(self.migrations_dir / migration.name)
             status = MigrationStatus.APPLIED
             if migration_hash != change_hash:
                 status = MigrationStatus.CONFLICT
@@ -99,7 +98,7 @@ DROP TABLE IF EXISTS {table_name};
                 raise ValueError(f"Migration {path.name} is not applied, cannot undo it")
             raise ValueError(f"Migration {path.name} is already applied, cannot apply it again")
 
-        migration_code, reverse_migration_code, migration_hash = self._get_migration_content_and_hash(path)
+        migration_code, reverse_migration_code, migration_hash = self.get_migration_content_and_hash(path)
 
         try:
             if not is_fake:
@@ -124,18 +123,18 @@ DROP TABLE IF EXISTS {table_name};
             hash = hashlib.sha256(b"").hexdigest()
             self.connection.execute(
                 f"INSERT INTO {self.table_name} (migration_name, change_hash) VALUES (?, ?);",
-                (os.path.basename(self.migrations_dir / new_migration.name), hash),
+                ((self.migrations_dir / new_migration.name).name, hash),
             )
 
     @override
     def update_migration_hash(self, migration: Migration) -> None:
         """Update the hash of a migration in SQLite."""
         path = self._get_migration_path(migration)
-        _, _, migration_hash = self._get_migration_content_and_hash(path)
+        _, _, migration_hash = self.get_migration_content_and_hash(path)
 
         self.connection.execute(
             f"INSERT OR REPLACE INTO {self.table_name} (migration_name, change_hash) VALUES (?, ?);",
-            (os.path.basename(path), migration_hash),
+            (path.name, migration_hash),
         )
 
     @override
@@ -155,13 +154,15 @@ DROP TABLE IF EXISTS {table_name};
 
         conflict_migrations = [m for m, s in status_map.items() if s == MigrationStatus.CONFLICT]
         if conflict_migrations:
+            errors: list[str] = []
             for conflict_migration in conflict_migrations:
                 path = self.migrations_dir / conflict_migration
-                _, _, migration_hash = self._get_migration_content_and_hash(path)
-                raise ValueError(
+                _, _, migration_hash = self.get_migration_content_and_hash(path)
+                errors.append(
                     f"Migration {conflict_migration} has a different hash in the database: "
                     f"found={migration_hash} existing={self._get_database_hash(conflict_migration)}"
                 )
+            raise ValueError("\n".join(errors))
 
         for migration in self.changelog.migrations:
             if status_map[migration.name] != MigrationStatus.APPLIED:
@@ -174,15 +175,13 @@ DROP TABLE IF EXISTS {table_name};
     def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
         """Validate SQL syntax for SQLite by executing in a separate in-memory DB."""
         path = self._get_migration_path(migration)
-        migration_code, reverse_migration_code, _ = self._get_migration_content_and_hash(path)
+        migration_code, reverse_migration_code, _ = self.get_migration_content_and_hash(path)
 
         try:
             memory_conn = sqlite3.connect(":memory:")
             try:
                 for code in (migration_code, reverse_migration_code):
                     patched = self._patch_sql_for_validation(code)
-                    if not patched:
-                        continue
                     memory_conn.executescript(patched)
             finally:
                 memory_conn.close()
@@ -207,12 +206,12 @@ DROP TABLE IF EXISTS {table_name};
         if is_rollback and not migration.initial:
             self.connection.execute(
                 f"DELETE FROM {self.table_name} WHERE migration_name=? AND change_hash=?;",
-                (os.path.basename(self.migrations_dir / migration.name), hash),
+                ((self.migrations_dir / migration.name).name, hash),
             )
         else:
             self.connection.execute(
                 f"INSERT INTO {self.table_name} (migration_name, change_hash) VALUES (?, ?);",
-                (os.path.basename(self.migrations_dir / migration.name), hash),
+                ((self.migrations_dir / migration.name).name, hash),
             )
 
     def _get_migration_path(self, migration: Migration) -> Path:
@@ -221,16 +220,6 @@ DROP TABLE IF EXISTS {table_name};
         if not path.is_file() or not path.name.endswith(".sql"):
             raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
         return path
-
-    def _get_migration_content_and_hash(self, path: Path) -> tuple[str, str, str]:
-        """Read migration content and compute its SHA-256 hash."""
-        content = path.read_text()
-        migration, reverse_migration = content.split(ROLLBACK_SPLIT_TAG, 1)
-        return (
-            migration,
-            reverse_migration,
-            hashlib.sha256(content.encode("utf-8")).hexdigest(),
-        )
 
     def _get_database_hash(self, migration_name: str) -> str:
         """Retrieve a migration's hash from the SQLite database."""

@@ -27,8 +27,9 @@ class ChangelogFile:
     def migrations_tree(self) -> OrderedDict[str, list[Migration]]:
         d = OrderedDict[str, list[Migration]]()
         for migration in self.migrations:
-            if migration.name not in d:
-                d[migration.name] = []
+            if migration.name in d:
+                raise ValueError(f"Found duplicated migration={migration.name}")
+            d[migration.name] = []
             for parent in migration.parents:
                 d[parent].append(migration)
         return d
@@ -80,7 +81,6 @@ class ChangelogFile:
 
     def build_migration_plan(
         self,
-        migration_tree: dict[str, list[Migration]],
         statuses_map: dict[str, MigrationStatus],
         target_migration: Migration | None = None,
         is_rollback: bool = False,
@@ -88,7 +88,6 @@ class ChangelogFile:
         """
         Build a migration plan based on the changelog and migration tree.
         Args:
-            migration_tree: A dictionary representing the migration tree.
             statuses_map: A map of migration names to their statuses.
             target_migration: The target migration to apply or rollback to.
             is_rollback: Whether the plan is for a rollback operation.
@@ -99,6 +98,7 @@ class ChangelogFile:
         visited: set[str] = set()
         queue: deque[Migration] = deque([self.migrations[0]])
         is_bottom_up = target_migration is not None and not is_rollback
+        is_normal_order = not is_bottom_up and not is_rollback
 
         if is_rollback:
             if not target_migration:
@@ -110,32 +110,33 @@ class ChangelogFile:
                 raise ValueError("Target migration is required for bottom-up plan")
             queue = deque([target_migration])
 
-            def get_neighbors(m: Migration) -> list[str]:
-                return list(reversed(m.parents))
-        else:
-
-            def get_neighbors(m: Migration) -> list[str]:
-                # get the children of the migration
-                return [m.name for m in migration_tree.get(m.name, [])]
+        def get_neighbors(m: Migration) -> list[str]:
+            # get the children of the migration
+            return list(reversed(m.parents)) if is_bottom_up else [m.name for m in self.migrations_tree.get(m.name, [])]
 
         while queue:
             current = queue.popleft()
-            if current.name in visited:
-                continue
 
-            if not is_bottom_up and not is_rollback and not all(p in visited for p in current.parents):
-                queue.append(current)  # requeue
+            has_unvisited_parents = any(p not in visited for p in current.parents)
+            if is_normal_order and has_unvisited_parents:
+                # Structure: A → B, A → D, B → C, C → D
+                # Tree: { A: [B, D], B: [C], C: [D], D: [] }
+                # D will be processed before it's parent C, so we skip and requeue it
+                queue.append(current)
                 continue
 
             visited.add(current.name)
             plan.append(current)
             for neighbor_name in get_neighbors(current):
                 neighbor = self.get_migration_by_name(neighbor_name)
-                if neighbor.name in visited:
-                    continue
-                queue.append(neighbor)
+                if neighbor.name not in visited and neighbor not in queue:
+                    # Structure: A → B, A → C, B → C
+                    # Tree: { A: [B, C], B: [C], C: [] }
+                    # when: is_bottom_up=True
+                    # C is a common child of A and B. It gets added to the queue twice, so we skip the second visit.
+                    queue.append(neighbor)
 
-        plan = list(reversed(plan)) if is_bottom_up or is_rollback else plan
+        plan = list(reversed(plan)) if not is_normal_order else plan
         if is_rollback:
             return [p for p in plan if statuses_map[p.name] == MigrationStatus.APPLIED]
         return [p for p in plan if statuses_map[p.name] != MigrationStatus.APPLIED]

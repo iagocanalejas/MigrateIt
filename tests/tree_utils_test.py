@@ -37,20 +37,22 @@ def test_create_migration_directory_already_exists(temp_dir: Path) -> None:
 
 
 @pytest.mark.unit
-def test_create_changelog_file(temp_dir: Path) -> None:
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_changelog_file(temp_dir: Path, database: SupportedDatabase) -> None:
     path = temp_dir / "changelog.json"
-    cl = create_changelog_file(path, SupportedDatabase.POSTGRES)
+    cl = create_changelog_file(path, database)
     assert path.exists()
     assert cl.version == 1
-    assert cl.database == SupportedDatabase.POSTGRES
+    assert cl.database == database
     assert cl.path == path
 
 
 @pytest.mark.unit
-def test_create_changelog_file_invalid_extension(temp_dir: Path) -> None:
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_changelog_file_invalid_extension(temp_dir: Path, database: SupportedDatabase) -> None:
     bad_path = temp_dir / "migrations.txt"
-    with pytest.raises(ValueError):
-        create_changelog_file(bad_path, SupportedDatabase.POSTGRES)
+    with pytest.raises(ValueError, match="must be a JSON file"):
+        create_changelog_file(bad_path, database)
 
 
 # --- load_changelog_file tests ---
@@ -80,7 +82,7 @@ def test_load_changelog_file_multiple_initial_raises(temp_dir: Path) -> None:
     ]
     cl = ChangelogFile(version=1, migrations=migrations, path=path)
     path.write_text(cl.to_json())
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="exactly one initial migration"):
         load_changelog_file(path)
 
 
@@ -90,7 +92,7 @@ def test_load_changelog_file_initial_with_parents_raises(temp_dir: Path) -> None
     migrations = [Migration(name="0000_a.sql", initial=True, parents=["0001_b.sql"])]
     cl = ChangelogFile(version=1, migrations=migrations, path=path)
     path.write_text(cl.to_json())
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="cannot have parents"):
         load_changelog_file(path)
 
 
@@ -104,7 +106,7 @@ def test_load_changelog_file_non_initial_without_parents_raises(temp_dir: Path) 
     migrations.append(Migration(name="0001_b.sql", parents=[]))
     cl.migrations = migrations
     path.write_text(cl.to_json())
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="must have parents"):
         load_changelog_file(path)
 
 
@@ -132,11 +134,12 @@ def test_save_changelog_file_not_exists(temp_dir: Path) -> None:
 
 
 @pytest.mark.unit
-def test_create_new_migration_success(temp_dir: Path) -> None:
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_new_migration_success(temp_dir: Path, database: SupportedDatabase) -> None:
     migrations_dir = temp_dir / "migrations"
     migrations_dir.mkdir()
     path = temp_dir / "changelog.json"
-    cl = create_changelog_file(path, SupportedDatabase.POSTGRES)
+    cl = create_changelog_file(path, database)
 
     create_new_migration(cl, migrations_dir, "init")
     created_files = sorted(migrations_dir.iterdir())
@@ -149,11 +152,12 @@ def test_create_new_migration_success(temp_dir: Path) -> None:
 
 
 @pytest.mark.unit
-def test_create_new_migration_with_dependencies(temp_dir: Path) -> None:
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_new_migration_with_dependencies(temp_dir: Path, database: SupportedDatabase) -> None:
     migrations_dir = temp_dir / "migrations"
     migrations_dir.mkdir()
     path = temp_dir / "changelog.json"
-    cl = create_changelog_file(path, SupportedDatabase.POSTGRES)
+    cl = create_changelog_file(path, database)
 
     create_new_migration(cl, migrations_dir, "init")
     create_new_migration(cl, migrations_dir, "add_users", dependencies=["0000"])
@@ -168,16 +172,17 @@ def test_create_new_migration_with_dependencies(temp_dir: Path) -> None:
 
 
 @pytest.mark.unit
-def test_create_new_migration_invalid_name(temp_dir: Path) -> None:
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_new_migration_invalid_name(temp_dir: Path, database: SupportedDatabase) -> None:
     migrations_dir = temp_dir / "migrations"
     migrations_dir.mkdir()
     path = temp_dir / "changelog.json"
-    cl = create_changelog_file(path, SupportedDatabase.POSTGRES)
+    cl = create_changelog_file(path, database)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not a valid identifier"):
         create_new_migration(cl, migrations_dir, "123-bad-name")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not a valid identifier"):
         create_new_migration(cl, migrations_dir, "")
 
 
@@ -239,7 +244,7 @@ def test_retrieve_sql_multiple_statements(temp_dir: Path) -> None:
 @pytest.mark.unit
 def test_retrieve_sql_nonexistent_file(temp_dir: Path) -> None:
     bad_path = temp_dir / "nonexistent.sql"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="is not a valid SQL file"):
         retrieve_migration_sqls(bad_path)
 
 
@@ -247,7 +252,7 @@ def test_retrieve_sql_nonexistent_file(temp_dir: Path) -> None:
 def test_retrieve_sql_non_sql_file(temp_dir: Path) -> None:
     bad_path = temp_dir / "test.txt"
     bad_path.write_text("SELECT 1;")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="is not a valid SQL file"):
         retrieve_migration_sqls(bad_path)
 
 
@@ -303,7 +308,7 @@ def test_write_rollback_only(temp_dir: Path) -> None:
 @pytest.mark.unit
 def test_write_both_none_raises(temp_dir: Path) -> None:
     file_path = _make_migration_file(temp_dir)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="At least one of sql or rollback must be provided"):
         write_into_migration_file(file_path, sql=None, rollback=None)
 
 
@@ -311,7 +316,7 @@ def test_write_both_none_raises(temp_dir: Path) -> None:
 def test_write_no_rollback_tag_raises(temp_dir: Path) -> None:
     bad_path = temp_dir / "bad.sql"
     bad_path.write_text("SELECT 1;")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="does not contain a rollback section"):
         write_into_migration_file(bad_path, sql="SELECT 1;", rollback=None)
 
 

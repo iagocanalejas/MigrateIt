@@ -1,4 +1,3 @@
-import hashlib
 import os
 import re
 from pathlib import Path
@@ -11,7 +10,6 @@ from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
-from migrateit.tree import ROLLBACK_SPLIT_TAG
 
 
 class PsqlClient(SqlClient[psycopg.Connection]):
@@ -100,7 +98,7 @@ SELECT migration_name, change_hash FROM {};
                 migrations[migration_name] = MigrationStatus.REMOVED
                 continue
 
-            _, _, migration_hash = self._get_migration_content_and_hash(self.migrations_dir / migration.name)
+            _, _, migration_hash = self.get_migration_content_and_hash(self.migrations_dir / migration.name)
             status = MigrationStatus.APPLIED
             if migration_hash != change_hash:
                 status = MigrationStatus.CONFLICT
@@ -119,7 +117,7 @@ SELECT migration_name, change_hash FROM {};
                 raise ValueError(f"Migration {path.name} is not applied, cannot undo it")
             raise ValueError(f"Migration {path.name} is already applied, cannot apply it again")
 
-        migration_code, reverse_migration_code, migration_hash = self._get_migration_content_and_hash(path)
+        migration_code, reverse_migration_code, migration_hash = self.get_migration_content_and_hash(path)
 
         try:
             with self.connection.cursor() as cursor:
@@ -127,7 +125,7 @@ SELECT migration_name, change_hash FROM {};
                     code = migration_code if not is_rollback else reverse_migration_code
                     cursor.execute(code)  # pyright: ignore
                 self._update_migration_changelog(cursor, migration, migration_hash, is_rollback)
-        except (psycopg.DatabaseError, psycopg.ProgrammingError) as e:
+        except (psycopg.DatabaseError, psycopg.ProgrammingError) as e:  # pragma: no cover
             self.connection.rollback()
             raise e
 
@@ -143,7 +141,7 @@ UPDATE {} SET squashed = TRUE WHERE migration_name = ANY(%(migration_name)s);
     @override
     def update_migration_hash(self, migration: Migration) -> None:
         path = self._get_migration_path(migration)
-        _, _, migration_hash = self._get_migration_content_and_hash(path)
+        _, _, migration_hash = self.get_migration_content_and_hash(path)
 
         with self.connection.cursor() as cursor:
             query = SQL("""
@@ -151,7 +149,7 @@ UPDATE {} SET change_hash = %(hash)s WHERE migration_name = %(migration)s;
             """)
             cursor.execute(
                 query.format(Identifier(self.table_name)),
-                {"migration": os.path.basename(path), "hash": migration_hash},
+                {"migration": path.name, "hash": migration_hash},
             )
 
     @override
@@ -172,13 +170,15 @@ UPDATE {} SET change_hash = %(hash)s WHERE migration_name = %(migration)s;
         # check conflict migrations
         conflict_migrations = [m for m, s in status_map.items() if s == MigrationStatus.CONFLICT]
         if conflict_migrations:
+            errors: list[str] = []
             for conflict_migration in conflict_migrations:
                 path = self.migrations_dir / conflict_migration
-                _, _, migration_hash = self._get_migration_content_and_hash(path)
-                raise ValueError(
+                _, _, migration_hash = self.get_migration_content_and_hash(path)
+                errors.append(
                     f"Migration {conflict_migration} has a different hash in the database: "
                     f"found={migration_hash} existing={self._get_database_hash(conflict_migration)}"
                 )
+            raise ValueError("\n".join(errors))
 
         # check for each migration all the parents are applied
         for migration in self.changelog.migrations:
@@ -191,14 +191,12 @@ UPDATE {} SET change_hash = %(hash)s WHERE migration_name = %(migration)s;
     @override
     def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
         path = self._get_migration_path(migration)
-        migration_code, reverse_migration_code, _ = self._get_migration_content_and_hash(path)
+        migration_code, reverse_migration_code, _ = self.get_migration_content_and_hash(path)
 
         for code in (migration_code, reverse_migration_code):
             try:
                 with self.connection.cursor() as cursor:
                     patched = self._patch_sql_statement(code)
-                    if not patched:
-                        continue
                     cursor.execute(patched)  # pyright: ignore
             except psycopg.ProgrammingError as e:
                 return e, code
@@ -227,7 +225,7 @@ VALUES (%(migration_name)s, %(change_hash)s);
                     """)
         cursor.execute(
             query.format(Identifier(self.table_name)),
-            {"migration_name": os.path.basename(path), "change_hash": hash},
+            {"migration_name": path.name, "change_hash": hash},
         )
 
     def _get_migration_path(self, migration: Migration) -> Path:
@@ -235,15 +233,6 @@ VALUES (%(migration_name)s, %(change_hash)s);
         if not path.is_file() or not path.name.endswith(".sql"):
             raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
         return path
-
-    def _get_migration_content_and_hash(self, path: Path) -> tuple[str, str, str]:
-        content = path.read_text()
-        migration, reverse_migration = content.split(ROLLBACK_SPLIT_TAG, 1)
-        return (
-            migration,
-            reverse_migration,
-            hashlib.sha256(content.encode("utf-8")).hexdigest(),
-        )
 
     def _patch_sql_statement(self, sql: str) -> str:
         sql = sql.upper()

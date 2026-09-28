@@ -14,7 +14,7 @@ from migrateit.tree import load_changelog_file
 from tests.conftest import TEST_MIGRATIONS_TABLE
 
 
-@pytest.fixture(params=["psql", "sqlite"], ids=["psql", "sqlite"])
+@pytest.fixture(params=list(SupportedDatabase), ids=lambda db: db.value)
 def cmd_client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlClient[Any]]:
     """Parameterized fixture that yields a fully initialized client for both PostgreSQL and SQLite.
 
@@ -27,7 +27,7 @@ def cmd_client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlC
     migrations_dir = temp_dir / "migrations"
     migrations_file = temp_dir / "changelog.json"
 
-    if database_type == "psql":
+    if database_type is SupportedDatabase.POSTGRES:
         import psycopg
 
         from migrateit.clients.psql import PsqlClient
@@ -66,7 +66,7 @@ def cmd_client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlC
         conn.commit()
         conn.close()
 
-    else:
+    elif database_type is SupportedDatabase.SQLITE:
         # SQLite: in-memory connection
         cmd_init(
             table_name=TEST_MIGRATIONS_TABLE,
@@ -94,6 +94,9 @@ def cmd_client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlC
 
         # Cleanup
         sqlite_conn.close()
+
+    else:
+        raise ValueError(f"Unsupported database type: {database_type}")
 
 
 def get_query_rows(conn: Any, query: str) -> list[tuple[Any, ...]]:

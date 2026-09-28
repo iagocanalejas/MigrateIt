@@ -19,7 +19,7 @@ def _insert_migration_row(pg_client: PsqlClient, name: str, hash_value: str) -> 
 
 
 @pytest.mark.postgres
-@patch.object(PsqlClient, "_get_migration_content_and_hash")
+@patch.object(PsqlClient, "get_migration_content_and_hash")
 def test_show_migrations_applied_and_not_applied(
     mock_get_migration_content_and_hash: MagicMock,
     pg_client: PsqlClient,
@@ -44,7 +44,7 @@ def test_show_migrations_applied_and_not_applied(
 
 
 @pytest.mark.postgres
-@patch.object(PsqlClient, "_get_migration_content_and_hash")
+@patch.object(PsqlClient, "get_migration_content_and_hash")
 def test_show_migrations_conflict_and_removed(
     mock_get_migration_content_and_hash: MagicMock,
     pg_client: PsqlClient,
@@ -65,7 +65,7 @@ def test_show_migrations_conflict_and_removed(
 
 
 @pytest.mark.postgres
-@patch.object(PsqlClient, "_get_migration_content_and_hash")
+@patch.object(PsqlClient, "get_migration_content_and_hash")
 def test_show_migrations_order_error(
     mock_get_migration_content_and_hash: MagicMock,
     pg_client: PsqlClient,
