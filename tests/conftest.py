@@ -44,9 +44,7 @@ def _make_psql_conn() -> MagicMock:
 
 
 @pytest.fixture(params=list(SupportedDatabase), ids=lambda db: db.value)
-def mock_conn_and_client(
-    request: pytest.FixtureRequest,
-) -> Generator[tuple[MagicMock | sqlite3.Connection, str]]:
+def mock_conn_and_client(request: pytest.FixtureRequest) -> Generator[tuple[MagicMock | sqlite3.Connection, str]]:
     """Yield (connection, client_class_name) for every SupportedDatabase.
 
     The connection satisfies the match-statement ``isinstance`` check
