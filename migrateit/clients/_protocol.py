@@ -86,6 +86,15 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
+    def export_database_schema(self, migration: Migration) -> None:
+        """
+        Export the full schema of the database to a migration file.
+
+        Args:
+            migration: The migration object to export the schema to. If None, a new migration will be created.
+        """
+        ...
+
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
         """
         Validate the migrations in the database.

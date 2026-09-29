@@ -28,7 +28,7 @@ def test_create_migration_directory(temp_dir: Path) -> None:
 @pytest.mark.unit
 def test_create_migration_directory_already_exists(temp_dir: Path) -> None:
     d = temp_dir / "migrations"
-    d.mkdir()
+    d.mkdir(exist_ok=True)
     create_migration_directory(d)
     assert d.is_dir()
 
@@ -137,7 +137,7 @@ def test_save_changelog_file_not_exists(temp_dir: Path) -> None:
 @pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
 def test_create_new_migration_success(temp_dir: Path, database: SupportedDatabase) -> None:
     migrations_dir = temp_dir / "migrations"
-    migrations_dir.mkdir()
+    migrations_dir.mkdir(exist_ok=True)
     path = temp_dir / "changelog.json"
     cl = create_changelog_file(path, database)
 
@@ -155,7 +155,7 @@ def test_create_new_migration_success(temp_dir: Path, database: SupportedDatabas
 @pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
 def test_create_new_migration_with_dependencies(temp_dir: Path, database: SupportedDatabase) -> None:
     migrations_dir = temp_dir / "migrations"
-    migrations_dir.mkdir()
+    migrations_dir.mkdir(exist_ok=True)
     path = temp_dir / "changelog.json"
     cl = create_changelog_file(path, database)
 
@@ -175,7 +175,7 @@ def test_create_new_migration_with_dependencies(temp_dir: Path, database: Suppor
 @pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
 def test_create_new_migration_invalid_name(temp_dir: Path, database: SupportedDatabase) -> None:
     migrations_dir = temp_dir / "migrations"
-    migrations_dir.mkdir()
+    migrations_dir.mkdir(exist_ok=True)
     path = temp_dir / "changelog.json"
     cl = create_changelog_file(path, database)
 
