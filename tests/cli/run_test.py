@@ -2,7 +2,10 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import pytest
+from mysql.connector.abstracts import MySQLConnectionAbstract
+from mysql.connector.pooling import PooledMySQLConnection
 
 from migrateit.cli import cmd_new, cmd_run
 from migrateit.clients import SqlClient
@@ -52,10 +55,7 @@ def test_cmd_run_fake(cmd_client: SqlClient[Any], temp_dir: Path) -> None:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='test';",
         )
         assert sqlite_cursor.fetchone() is None
-    else:
-        import psycopg
-
-        assert isinstance(client.connection, psycopg.Connection)
+    elif isinstance(client.connection, psycopg.Connection):
         with client.connection.cursor() as pg_cursor:
             pg_cursor.execute(
                 "SELECT EXISTS("
@@ -65,6 +65,13 @@ def test_cmd_run_fake(cmd_client: SqlClient[Any], temp_dir: Path) -> None:
             )
             result = pg_cursor.fetchone()
             assert result is not None and not result[0]
+    elif isinstance(client.connection, (MySQLConnectionAbstract, PooledMySQLConnection)):
+        with client.connection.cursor() as cursor:
+            cursor.execute("SHOW TABLES LIKE 'test'")
+            result = cursor.fetchone()
+            assert result is None
+    else:  # pragma: no cover
+        raise NotImplementedError(f"Database {client.connection} is not supported")
 
 
 @pytest.mark.integration
@@ -75,7 +82,7 @@ def test_cmd_run_rollback(cmd_client: SqlClient[Any], temp_dir: Path) -> None:
     create_migration_file(
         client.migrations_dir,
         "0001_new.sql",
-        sql="CREATE TABLE test (id INTEGER PRIMARY KEY);",
+        sql="CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY);",
         rollback_sql="DROP TABLE test;",
     )
 
@@ -120,16 +127,15 @@ def test_cmd_run_hash_update_initial(cmd_client: SqlClient[Any]) -> None:
 @pytest.mark.integration
 def test_cmd_run_hash_update_success(cmd_client: SqlClient[Any], temp_dir: Path) -> None:
     """Test cmd_run successfully updates the hash for a non-initial migration."""
-    client = cmd_client
-    cmd_new(client, name="new", no_edit=True)
-    create_migration_file(client.migrations_dir, "0001_new.sql")
+    cmd_new(cmd_client, name="new", no_edit=True)
+    create_migration_file(cmd_client.migrations_dir, "0001_new.sql")
 
-    cmd_run(client=client, name="0001")
-    rows_before = get_query_rows(client.connection, "SELECT migration_name, change_hash FROM migrations")
+    cmd_run(client=cmd_client, name="0001")
+    rows_before = get_query_rows(cmd_client.connection, "SELECT migration_name, change_hash FROM migrations")
     original_hash = next(r[1] for r in rows_before if r[0] == "0001_new.sql")
 
-    cmd_run(client=client, name="0001", is_hash_update=True)
-    rows_after = get_query_rows(client.connection, "SELECT migration_name, change_hash FROM migrations")
+    cmd_run(client=cmd_client, name="0001", is_hash_update=True)
+    rows_after = get_query_rows(cmd_client.connection, "SELECT migration_name, change_hash FROM migrations")
     updated_hash = next(r[1] for r in rows_after if r[0] == "0001_new.sql")
 
     assert updated_hash == original_hash

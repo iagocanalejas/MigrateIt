@@ -30,6 +30,7 @@ testpaths = ["tests"]
 markers = [
     "postgres: tests requiring a PostgreSQL connection",
     "sqlite: tests requiring a SQLite connection",
+    "mysql: tests requiring a MySQL connection",
     "unit: fast unit tests with no database",
     "integration: integration tests requiring a database",
 ]

@@ -7,11 +7,9 @@ from migrateit.clients import PsqlClient
 from migrateit.models import Migration
 from tests.conftest import INIT_MIGRATION, TEST_MIGRATIONS_TABLE, create_migration_file
 
-TEST_TABLE = "test_entity"
-
 
 @pytest.mark.postgres
-def test_squash_migrations_marks_old_as_squashed_and_applies_new_fake(pg_client: PsqlClient, temp_dir: Path) -> None:
+def test_squash_migrations_marks_old_as_squashed_and_applies_new(pg_client: PsqlClient, temp_dir: Path) -> None:
     """Test squashing applied migrations across databases."""
     migrations_dir = temp_dir / "migrations"
 

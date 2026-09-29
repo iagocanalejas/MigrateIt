@@ -1,6 +1,7 @@
 -r requirements.txt
 coverage
 mypy
+mysql-connector-python
 psycopg[binary]
 pysqlite3
 pytest

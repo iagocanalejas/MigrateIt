@@ -7,11 +7,9 @@ from migrateit.clients import PsqlClient
 from migrateit.models import Migration
 from migrateit.models.changelog import ChangelogFile
 from migrateit.models.migration import MigrationStatus
-from tests.conftest import (
-    INIT_MIGRATION,
-    TEST_MIGRATIONS_TABLE,
-    create_migration_file,
-)
+from tests.conftest import INIT_MIGRATION, TEST_MIGRATIONS_TABLE, create_migration_file
+
+# --- is_migrations_table_created tests ---
 
 
 @pytest.mark.postgres
@@ -34,6 +32,9 @@ def test_table_missing_returns_false(pg_client: PsqlClient, temp_dir: Path) -> N
         cursor.execute(f"DROP TABLE IF EXISTS {TEST_MIGRATIONS_TABLE}")
     pg_client.connection.commit()
     assert not pg_client.is_migrations_table_created()
+
+
+# --- is_migration_applied tests ---
 
 
 @pytest.mark.postgres

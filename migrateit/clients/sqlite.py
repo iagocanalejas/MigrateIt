@@ -1,4 +1,3 @@
-import hashlib
 import os
 import sqlite3
 from typing import override
@@ -42,19 +41,23 @@ DROP TABLE IF EXISTS {table_name};
     @override
     def is_migrations_table_created(self) -> bool:
         """Check if the migrations table exists in SQLite."""
-        cursor = self.connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
-            (self.table_name,),
-        )
+        query = """
+SELECT name
+FROM sqlite_master
+WHERE type='table' AND name=?;
+"""
+        cursor = self.connection.execute(query, (self.table_name,))
         return cursor.fetchone() is not None
 
     @override
     def is_migration_applied(self, migration: Migration) -> bool:
         """Check if a migration has been applied in SQLite."""
-        cursor = self.connection.execute(
-            f"SELECT EXISTS(SELECT 1 FROM {self.table_name} WHERE migration_name=?);",
-            (migration.name,),
-        )
+        query = f"""
+SELECT EXISTS(
+    SELECT 1 FROM {self.table_name} WHERE migration_name=?
+);
+"""
+        cursor = self.connection.execute(query, (migration.name,))
         result = cursor.fetchone()
         return bool(result[0]) if result else False
 
@@ -67,7 +70,11 @@ DROP TABLE IF EXISTS {table_name};
         if not self.is_migrations_table_created():
             return migrations
 
-        cursor = self.connection.execute(f"SELECT migration_name, change_hash FROM {self.table_name};")
+        query = f"""
+SELECT migration_name, change_hash
+FROM {self.table_name};
+"""
+        cursor = self.connection.execute(query)
         rows = cursor.fetchall()
 
         for row in rows:
@@ -112,18 +119,13 @@ DROP TABLE IF EXISTS {table_name};
     def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
         """Mark migrations as squashed in SQLite."""
         placeholders = ",".join("?" for _ in migrations)
+        query = f"""
+UPDATE {self.table_name} SET squashed=1
+WHERE migration_name IN ({placeholders});
+"""
         with self.connection:
-            self.connection.execute(
-                f"UPDATE {self.table_name} SET squashed=1 WHERE migration_name IN ({placeholders});",
-                migrations,
-            )
-            # Insert the new squashed migration record
-            # Use empty content hash since the file may not exist yet
-            hash = hashlib.sha256(b"").hexdigest()
-            self.connection.execute(
-                f"INSERT INTO {self.table_name} (migration_name, change_hash) VALUES (?, ?);",
-                ((self.migrations_dir / new_migration.name).name, hash),
-            )
+            self.connection.execute(query, migrations)
+        self.apply_migration(new_migration, is_fake=True)
 
     @override
     def update_migration_hash(self, migration: Migration) -> None:
@@ -131,10 +133,12 @@ DROP TABLE IF EXISTS {table_name};
         path = self.get_migration_path(migration)
         _, _, migration_hash = self.get_migration_content_and_hash(path)
 
-        self.connection.execute(
-            f"INSERT OR REPLACE INTO {self.table_name} (migration_name, change_hash) VALUES (?, ?);",
-            (path.name, migration_hash),
-        )
+        query = f"""
+INSERT OR REPLACE INTO {self.table_name} (migration_name, change_hash)
+VALUES (?, ?);
+"""
+        cursor = self.connection.execute(query, (path.name, migration_hash))
+        cursor.fetchall()
 
     @override
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
@@ -173,22 +177,26 @@ DROP TABLE IF EXISTS {table_name};
     def _update_migration_changelog(self, migration: Migration, hash: str, is_rollback: bool) -> None:
         """Insert or delete a migration record in SQLite."""
         if is_rollback and not migration.initial:
-            self.connection.execute(
-                f"DELETE FROM {self.table_name} WHERE migration_name=? AND change_hash=?;",
-                ((self.migrations_dir / migration.name).name, hash),
-            )
+            query = f"""
+DELETE FROM {self.table_name}
+WHERE migration_name=?
+    AND change_hash=?;
+"""
         else:
-            self.connection.execute(
-                f"INSERT INTO {self.table_name} (migration_name, change_hash) VALUES (?, ?);",
-                ((self.migrations_dir / migration.name).name, hash),
-            )
+            query = f"""
+INSERT INTO {self.table_name} (migration_name, change_hash)
+VALUES (?, ?);
+"""
+        self.connection.execute(query, ((self.migrations_dir / migration.name).name, hash))
 
     def _get_database_hash(self, migration_name: str) -> str:
         """Retrieve a migration's hash from the SQLite database."""
-        cursor = self.connection.execute(
-            f"SELECT change_hash FROM {self.table_name} WHERE migration_name=?;",
-            (migration_name,),
-        )
+        query = f"""
+SELECT change_hash
+FROM {self.table_name}
+WHERE migration_name=?;
+"""
+        cursor = self.connection.execute(query, (migration_name,))
         result = cursor.fetchone()
 
         if not result or not result[0]:

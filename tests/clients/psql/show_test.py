@@ -31,8 +31,7 @@ def test_show_migrations_applied_and_not_applied(
     mock_get_migration_content_and_hash.return_value = ("dummy_content", "dummy_reverse_content", "hash1")
     _insert_migration_row(pg_client, "001_init.sql", "hash1")
 
-    changelog = ChangelogFile(version=1, migrations=[migration_applied, migration_not_applied])
-    pg_client.config.changelog = changelog
+    pg_client.config.changelog = ChangelogFile(version=1, migrations=[migration_applied, migration_not_applied])
 
     result = pg_client.retrieve_migration_statuses()
 

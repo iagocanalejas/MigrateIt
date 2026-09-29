@@ -16,14 +16,12 @@ from migrateit.models import SupportedDatabase, get_connection
 
 @pytest.mark.postgres
 def test_get_connection_postgres() -> None:
-    """Test _get_connection returns a psycopg connection for PostgreSQL."""
-    with patch("migrateit.main.psycopg.connect") as mock_connect:
+    with patch("migrateit.models.connection.psycopg.connect") as mock_connect:
         mock_conn: Any = MagicMock()
         mock_connect.return_value = mock_conn
         result = get_connection(SupportedDatabase.POSTGRES)
         assert result == mock_conn
         mock_connect.assert_called_once()
-        mock_conn.autocommit = False
 
 
 @pytest.mark.postgres
@@ -35,11 +33,30 @@ def test_get_environment_url_from_db_url() -> None:
 
 @pytest.mark.sqlite
 def test_get_connection_sqlite() -> None:
-    """Test _get_connection returns a sqlite3 connection for SQLite."""
     with patch.object(SqliteClient, "get_environment_url", return_value="sqlite:///./test.db"):
         result = get_connection(SupportedDatabase.SQLITE)
         assert isinstance(result, sqlite3.Connection)
         result.close()
+
+
+@pytest.mark.mysql
+def test_get_connection_mysql() -> None:
+    with patch("migrateit.models.connection.mysql.connector.connect") as mock_connect:
+        mock_conn: Any = MagicMock()
+        mock_connect.return_value = mock_conn
+        result = get_connection(SupportedDatabase.MYSQL)
+        assert result == mock_conn
+        mock_connect.assert_called_once()
+
+    with (
+        patch("migrateit.models.connection.mysql.connector.connect") as mock_connect,
+        patch("migrateit.models.connection.parse_qs", return_value={"connection_timeout": ["30"]}),
+    ):
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+        result = get_connection(SupportedDatabase.MYSQL)
+        assert result == mock_conn
+        mock_connect.assert_called_once()
 
 
 @pytest.mark.unit
