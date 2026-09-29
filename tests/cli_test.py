@@ -10,8 +10,8 @@ import pytest
 from migrateit.cli import cmd_new
 from migrateit.clients.psql import PsqlClient
 from migrateit.clients.sqlite import SqliteClient
-from migrateit.main import _get_connection, main
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.main import main
+from migrateit.models import SupportedDatabase, get_connection
 
 
 @pytest.mark.postgres
@@ -20,7 +20,7 @@ def test_get_connection_postgres() -> None:
     with patch("migrateit.main.psycopg.connect") as mock_connect:
         mock_conn: Any = MagicMock()
         mock_connect.return_value = mock_conn
-        result = _get_connection(SupportedDatabase.POSTGRES)
+        result = get_connection(SupportedDatabase.POSTGRES)
         assert result == mock_conn
         mock_connect.assert_called_once()
         mock_conn.autocommit = False
@@ -37,7 +37,7 @@ def test_get_environment_url_from_db_url() -> None:
 def test_get_connection_sqlite() -> None:
     """Test _get_connection returns a sqlite3 connection for SQLite."""
     with patch.object(SqliteClient, "get_environment_url", return_value="sqlite:///./test.db"):
-        result = _get_connection(SupportedDatabase.SQLITE)
+        result = get_connection(SupportedDatabase.SQLITE)
         assert isinstance(result, sqlite3.Connection)
         result.close()
 

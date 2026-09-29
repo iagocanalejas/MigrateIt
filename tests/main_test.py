@@ -68,7 +68,7 @@ def test_main_new(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlite
         migrations=[{"name": "0000_init.sql", "parents": [], "initial": True}],
     )
     with (
-        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch("migrateit.main.get_connection", return_value=db_conn),
         patch(f"migrateit.main.{client_class_name}"),
         patch("migrateit.main.commands.cmd_new", return_value=0),
         patch("sys.argv", ["migrateit", "new", "add_users_table", "-d", "0000_init.sql"]),
@@ -85,7 +85,7 @@ def test_main_show(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlit
     db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
     _load_changelog(temp_dir, database=db)
     with (
-        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch("migrateit.main.get_connection", return_value=db_conn),
         patch("migrateit.main.commands.cmd_show", return_value=0),
         patch("sys.argv", ["migrateit", "show", "--list", "--validate-sql"]),
     ):
@@ -101,7 +101,7 @@ def test_main_migrate(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sq
     db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
     _load_changelog(temp_dir, database=db)
     with (
-        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch("migrateit.main.get_connection", return_value=db_conn),
         patch("migrateit.main.commands.cmd_run", return_value=0),
         patch("sys.argv", ["migrateit", "migrate", "0001_add_posts", "--fake", "--update-hash"]),
     ):
@@ -120,7 +120,7 @@ def test_main_rollback(
     db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
     _load_changelog(temp_dir, database=db)
     with (
-        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch("migrateit.main.get_connection", return_value=db_conn),
         patch("migrateit.main.commands.cmd_run", return_value=0),
         patch("sys.argv", ["migrateit", "rollback", "0001_add_posts", "--fake"]),
     ):
@@ -139,7 +139,7 @@ def test_main_squash(
     db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
     _load_changelog(temp_dir, database=db)
     with (
-        patch("migrateit.main._get_connection", return_value=db_conn),
+        patch("migrateit.main.get_connection", return_value=db_conn),
         patch("migrateit.main.commands.cmd_squash", return_value=0),
         patch("sys.argv", ["migrateit", "squash", "0001_a", "0003_c", "-n", "squashed"]),
     ):

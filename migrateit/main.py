@@ -2,19 +2,19 @@ import argparse
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import psycopg
 
 import migrateit.constants as C
 from migrateit import cli as commands
+from migrateit.clients._client import SqlClient
 from migrateit.clients.psql import PsqlClient
 from migrateit.clients.sqlite import SqliteClient
-from migrateit.models import MigrateItConfig, SupportedDatabase
+from migrateit.models import Connection, MigrateItConfig, SupportedDatabase, get_connection
 from migrateit.reporters import FatalError, error_handler, logging_handler, print_logo
 from migrateit.reporters.logs import logger
 from migrateit.tree import load_changelog_file
-
-type Connection = psycopg.Connection | sqlite3.Connection
 
 
 def main() -> int:
@@ -63,7 +63,7 @@ def main() -> int:
                 migrations_dir=root / "migrations",
                 changelog=changelog,
             )
-            with _get_connection(changelog.database) as conn:
+            with get_connection(changelog.database) as conn:
                 logger.debug("Connected to database: %s", changelog.database.value)
                 client = _get_client(config, connection=conn)
                 if args.command == "new":
@@ -202,23 +202,7 @@ def _cmd_show(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     return parser
 
 
-def _get_connection(database: SupportedDatabase) -> Connection:
-    match database:
-        case SupportedDatabase.POSTGRES:
-            db_url = PsqlClient.get_environment_url()
-            pg_conn = psycopg.connect(db_url)
-            pg_conn.autocommit = False
-            return pg_conn
-        case SupportedDatabase.SQLITE:
-            db_url = SqliteClient.get_environment_url()
-            sqlite_conn = sqlite3.connect(db_url.replace("sqlite:///", ""))
-            sqlite_conn.autocommit = False
-            return sqlite_conn
-        case _:
-            raise NotImplementedError(f"Database {database} is not supported")
-
-
-def _get_client(config: MigrateItConfig, connection: Connection) -> PsqlClient | SqliteClient:
+def _get_client(config: MigrateItConfig, connection: Connection) -> SqlClient[Any]:
     match (config.changelog.database, connection):
         case (SupportedDatabase.POSTGRES, psycopg.Connection() as pg_conn):
             return PsqlClient(pg_conn, config)
