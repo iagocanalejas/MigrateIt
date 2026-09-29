@@ -34,14 +34,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest coverage
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
       - name: Install migrateit
         run: |
-          pip install -e ".[dev]"
+          pip install -e .
 
       - name: Copy environment variables (CI requires .env file)
         run: |
-          cat .testenv > .env
+          cat .test.psql.env > .env
+          cat .test.sqlite.env >> .env
 
       - name: Pytest + code coverage
         run: |
