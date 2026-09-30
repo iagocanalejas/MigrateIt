@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from migrateit.clients import PsqlClient, SqlClient, SqliteClient
+from migrateit.clients import MySqlClient, PsqlClient, SqlClient, SqliteClient
 from migrateit.models import (
     MigrationStatus,
     SupportedDatabase,
@@ -34,6 +34,8 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     write_line(f"\tCreating migration for table: {table_name}")
     migration = create_new_migration(changelog=changelog, migrations_dir=migrations_dir, name="migrateit")
     match database:
+        case SupportedDatabase.MYSQL:
+            sql, rollback = MySqlClient.create_migrations_table_str(table_name=table_name)
         case SupportedDatabase.POSTGRES:
             sql, rollback = PsqlClient.create_migrations_table_str(table_name=table_name)
         case SupportedDatabase.SQLITE:

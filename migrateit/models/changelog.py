@@ -14,6 +14,7 @@ from .migration import Migration, MigrationStatus
 class SupportedDatabase(Enum):
     POSTGRES = "postgres"
     SQLITE = "sqlite"
+    MYSQL = "mysql"
 
 
 @dataclass

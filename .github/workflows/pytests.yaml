@@ -6,18 +6,27 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.13", "3.14"]
-        postgres-version: ["17", "18"]
+        postgres-version: ["18"]
+        mysql-version: ["9.7"]
 
     services:
       postgres:
         image: postgres:${{ matrix.postgres-version }}
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: migrateit
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mysql:
+        image: mysql:${{ matrix.mysql-version }}
+        env:
+          MYSQL_DATABASE: migrateit
+          MYSQL_ROOT_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
       - uses: actions/checkout@v7
@@ -42,8 +51,7 @@ jobs:
 
       - name: Copy environment variables (CI requires .env file)
         run: |
-          cat .test.psql.env > .env
-          cat .test.sqlite.env >> .env
+          cat .testenv > .env
 
       - name: Pytest + code coverage
         run: |

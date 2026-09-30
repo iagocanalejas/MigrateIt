@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
+from mysql.connector.abstracts import MySQLConnectionAbstract
+from mysql.connector.pooling import PooledMySQLConnection
 
 import migrateit.constants as C
 from migrateit import cli as commands
+from migrateit.clients import MySqlClient, PsqlClient, SqliteClient
 from migrateit.clients._client import SqlClient
-from migrateit.clients.psql import PsqlClient
-from migrateit.clients.sqlite import SqliteClient
 from migrateit.models import Connection, MigrateItConfig, SupportedDatabase, get_connection
 from migrateit.reporters import FatalError, error_handler, logging_handler, print_logo
 from migrateit.reporters.logs import logger
@@ -204,6 +205,8 @@ def _cmd_show(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 def _get_client(config: MigrateItConfig, connection: Connection) -> SqlClient[Any]:
     match (config.changelog.database, connection):
+        case (SupportedDatabase.MYSQL, (MySQLConnectionAbstract() | PooledMySQLConnection()) as mysql_conn):
+            return MySqlClient(mysql_conn, config)
         case (SupportedDatabase.POSTGRES, psycopg.Connection() as pg_conn):
             return PsqlClient(pg_conn, config)
         case (SupportedDatabase.SQLITE, sqlite3.Connection() as sq_conn):

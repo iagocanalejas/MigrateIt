@@ -2,8 +2,11 @@ import sqlite3
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
+import psycopg
 import pytest
+from mysql.connector.abstracts import MySQLConnectionAbstract
 
 from migrateit.cli import cmd_init
 from migrateit.clients import SqlClient
@@ -66,6 +69,50 @@ def cmd_client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlC
         conn.commit()
         conn.close()
 
+    elif database_type is SupportedDatabase.MYSQL:
+        import mysql.connector
+
+        from migrateit.clients.mysql import MySqlClient
+
+        parsed = urlparse(MySqlClient.get_environment_url())
+        conn = mysql.connector.connect(
+            host=parsed.hostname,
+            port=parsed.port or 3306,
+            user=parsed.username,
+            password=parsed.password,
+            database=parsed.path.lstrip("/"),
+        )
+
+        # Create migrations table
+        sql, _ = MySqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
+        with conn.cursor() as cursor:
+            cursor.execute(sql)  # pyright: ignore
+        conn.commit()
+
+        # Run cmd_init to create the initial migration (includes changelog creation)
+        cmd_init(
+            table_name=TEST_MIGRATIONS_TABLE,
+            migrations_dir=migrations_dir,
+            migrations_file=migrations_file,
+            database=SupportedDatabase.MYSQL,
+        )
+
+        # Reload changelog and create client
+        changelog = load_changelog_file(migrations_file)
+        config = MigrateItConfig(
+            table_name=TEST_MIGRATIONS_TABLE,
+            migrations_dir=migrations_dir,
+            changelog=changelog,
+        )
+        client = MySqlClient(connection=conn, config=config)
+
+        yield client
+
+        # Cleanup
+        with conn.cursor() as cursor:
+            cursor.execute(f"DROP TABLE IF EXISTS {TEST_MIGRATIONS_TABLE}")
+        conn.commit()
+        conn.close()
     elif database_type is SupportedDatabase.SQLITE:
         # SQLite: in-memory connection
         cmd_init(
@@ -104,8 +151,15 @@ def get_query_rows(conn: Any, query: str) -> list[tuple[Any, ...]]:
     if isinstance(conn, sqlite3.Connection):
         # SQLite: execute directly on connection
         return conn.execute(query).fetchall()
-    else:
+    elif isinstance(conn, psycopg.Connection):
         # PostgreSQL: use cursor context manager
         with conn.cursor() as cursor:
-            cursor.execute(query)
+            cursor.execute(query)  # pyright: ignore
             return cursor.fetchall()
+    elif isinstance(conn, MySQLConnectionAbstract):
+        # MySQL: use cursor context manager
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            return cursor.fetchall()  # type: ignore
+    else:
+        raise ValueError(f"Unsupported connection type: {type(conn)}")

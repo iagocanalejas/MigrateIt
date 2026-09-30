@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import mysql.connector
 import psycopg
 import pytest
 
@@ -43,6 +44,13 @@ def _make_psql_conn() -> MagicMock:
     return conn
 
 
+def _make_mysql_conn() -> MagicMock:
+    """Create a MagicMock that satisfies isinstance(x, mysql.connector.MySQLConnection)."""
+    conn: MagicMock = MagicMock()
+    conn.__class__ = mysql.connector.MySQLConnection  # type: ignore[assignment]
+    return conn
+
+
 @pytest.fixture(params=list(SupportedDatabase), ids=lambda db: db.value)
 def mock_conn_and_client(request: pytest.FixtureRequest) -> Generator[tuple[MagicMock | sqlite3.Connection, str]]:
     """Yield (connection, client_class_name) for every SupportedDatabase.
@@ -52,7 +60,12 @@ def mock_conn_and_client(request: pytest.FixtureRequest) -> Generator[tuple[Magi
     """
     conn: Any
 
-    if request.param is SupportedDatabase.POSTGRES:
+    if request.param is SupportedDatabase.MYSQL:
+        conn = _make_mysql_conn()
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=False)
+        yield conn, "MySqlClient"
+    elif request.param is SupportedDatabase.POSTGRES:
         conn = _make_psql_conn()
         conn.__enter__ = MagicMock(return_value=conn)
         conn.__exit__ = MagicMock(return_value=False)

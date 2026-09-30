@@ -1,8 +1,9 @@
 import os
-from typing import override
+from typing import Any, override
 
-import psycopg
-from psycopg.sql import SQL, Identifier
+import mysql.connector
+from mysql.connector.abstracts import MySQLConnectionAbstract
+from mysql.connector.pooling import PooledMySQLConnection
 
 from migrateit.clients._client import SqlClient
 from migrateit.models import Migration, MigrationStatus
@@ -10,7 +11,12 @@ from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
 
-class PsqlClient(SqlClient[psycopg.Connection]):
+def _q(name: str) -> str:
+    """Wrap a table/column name in MySQL backticks (safe: validated by isidentifier)."""
+    return f"`{name}`"
+
+
+class MySqlClient(SqlClient[MySQLConnectionAbstract | PooledMySQLConnection]):
     @override
     @classmethod
     def get_environment_url(cls) -> str:
@@ -19,14 +25,14 @@ class PsqlClient(SqlClient[psycopg.Connection]):
             return db_url
 
         host = os.getenv(cls.VARNAME_DB_HOST, "localhost")
-        port = os.getenv(cls.VARNAME_DB_PORT, "5432")
-        user = os.getenv(cls.VARNAME_DB_USER, "postgres")
+        port = os.getenv(cls.VARNAME_DB_PORT, "3306")
+        user = os.getenv(cls.VARNAME_DB_USER, "root")
         password = os.getenv(cls.VARNAME_DB_PASS, "")
         db_name = os.getenv(cls.VARNAME_DB_NAME, "migrateit")
         db_timeout = os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, "30")
 
         password = f":{password}" if password else ""
-        db_url = f"postgresql://{user}{password}@{host}:{port}/{db_name}?connect_timeout={db_timeout}"
+        db_url = f"mysql://{user}{password}@{host}:{port}/{db_name}?connect_timeout={db_timeout}"
         return db_url
 
     @override
@@ -35,44 +41,45 @@ class PsqlClient(SqlClient[psycopg.Connection]):
         if not table_name.isidentifier():
             raise ValueError(f"Unsafe table name: {table_name}")
         migrations_query = f"""
-CREATE TABLE IF NOT EXISTS {table_name} (
-    id SERIAL PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS {_q(table_name)} (
+    id INT AUTO_INCREMENT PRIMARY KEY,
     migration_name VARCHAR(255) UNIQUE NOT NULL,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     change_hash VARCHAR(64) NOT NULL,
-    squashed BOOLEAN DEFAULT FALSE
+    squashed TINYINT(1) DEFAULT 0
 );
         """
         reverse_query = f"""
-DROP TABLE IF EXISTS {table_name};
+DROP TABLE IF EXISTS {_q(table_name)};
         """
         return migrations_query, reverse_query
 
     @override
     def is_migrations_table_created(self) -> bool:
-        query = """
+        with self.connection.cursor() as cursor:
+            query = """
 SELECT EXISTS (
     SELECT 1
     FROM information_schema.tables
-    WHERE LOWER(table_name) = LOWER(%(table_name)s)
+    WHERE table_schema = DATABASE()
+        AND LOWER(table_name) = LOWER(%s)
 );
-        """
-        with self.connection.cursor() as cursor:
-            cursor.execute(query, {"table_name": self.table_name})
+            """
+            cursor.execute(query, (self.table_name,))
             result = cursor.fetchone()
-            return result[0] if result else False
+            return bool(result[0]) if result else False  # type: ignore
 
     @override
     def is_migration_applied(self, migration: Migration) -> bool:
-        query = SQL("""
-SELECT EXISTS (
-    SELECT 1 FROM {} WHERE migration_name = %(migration_name)s
+        query = f"""
+SELECT EXISTS(
+    SELECT 1 FROM {_q(self.table_name)} WHERE migration_name = %s
 );
-        """)
+"""
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": migration.name})
+            cursor.execute(query, (migration.name,))
             result = cursor.fetchone()
-            return result[0] if result else False
+            return bool(result[0]) if result else False  # type: ignore
 
     @override
     def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
@@ -81,19 +88,19 @@ SELECT EXISTS (
         if not self.is_migrations_table_created():
             return migrations
 
-        query = SQL("""
+        query = f"""
 SELECT migration_name, change_hash
-FROM {};
-        """)
+FROM {_q(self.table_name)};
+"""
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)))
+            cursor.execute(query)
             rows = cursor.fetchall()
 
         for row in rows:
-            migration_name, change_hash = row
+            migration_name: str = row[0]  # type: ignore
+            change_hash: str = row[1]  # type: ignore
             migration = next((m for m in self.changelog.migrations if m.name == migration_name), None)
             if not migration:
-                # migration applied not in changelog
                 migrations[migration_name] = MigrationStatus.REMOVED
                 continue
 
@@ -122,20 +129,24 @@ FROM {};
             with self.connection.cursor() as cursor:
                 if not is_fake:
                     code = migration_code if not is_rollback else reverse_migration_code
-                    cursor.execute(code)  # pyright: ignore
+                    cursor.execute(code)
+                    cursor.fetchall()
                 self._update_migration_changelog(cursor, migration, migration_hash, is_rollback)
-        except (psycopg.DatabaseError, psycopg.ProgrammingError) as e:  # pragma: no cover
+        except mysql.connector.Error as e:
             self.connection.rollback()
             raise e
 
     @override
     def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
-        query = SQL("""
-UPDATE {} SET squashed = TRUE
-WHERE migration_name = ANY(%(migration_name)s);
-        """)
+        placeholders = ", ".join(["%s"] * len(migrations))
+        query = f"""
+UPDATE {_q(self.table_name)}
+SET squashed=1
+WHERE migration_name IN ({placeholders});
+"""
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": migrations})
+            cursor.execute(query, migrations)
+            cursor.fetchall()
         self.apply_migration(new_migration, is_fake=True)
 
     @override
@@ -143,12 +154,14 @@ WHERE migration_name = ANY(%(migration_name)s);
         path = self.get_migration_path(migration)
         _, _, migration_hash = self.get_migration_content_and_hash(path)
 
-        query = SQL("""
-UPDATE {} SET change_hash = %(hash)s
-WHERE migration_name = %(migration)s;
-        """)
+        query = f"""
+UPDATE {_q(self.table_name)}
+SET change_hash = %s
+WHERE migration_name = %s;
+"""
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)), {"migration": path.name, "hash": migration_hash})
+            cursor.execute(query, (migration_hash, path.name))
+            cursor.fetchall()
 
     @override
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
@@ -160,12 +173,10 @@ WHERE migration_name = %(migration)s;
         if len([m for m in self.changelog.migrations if m.initial]) > 1:
             raise ValueError("Multiple initial migrations found in the changelog")
 
-        # check removed migrations
         removed_migrations = [m for m, s in status_map.items() if s == MigrationStatus.REMOVED]
         if removed_migrations:
             raise ValueError(f"Removed migrations found in the database: {removed_migrations}. ")
 
-        # check conflict migrations
         conflict_migrations = [m for m, s in status_map.items() if s == MigrationStatus.CONFLICT]
         if conflict_migrations:
             errors: list[str] = []
@@ -178,7 +189,6 @@ WHERE migration_name = %(migration)s;
                 )
             raise ValueError("\n".join(errors))
 
-        # check for each migration all the parents are applied
         for migration in self.changelog.migrations:
             if status_map[migration.name] != MigrationStatus.APPLIED:
                 continue
@@ -188,37 +198,36 @@ WHERE migration_name = %(migration)s;
 
     def _update_migration_changelog(
         self,
-        cursor: psycopg.Cursor,
+        cursor: Any,
         migration: Migration,
         hash: str,
         is_rollback: bool,
     ) -> None:
         path = self.migrations_dir / migration.name
         if is_rollback and not migration.initial:
-            query = SQL("""
-DELETE FROM {}
-WHERE migration_name = %(migration_name)s
-    AND change_hash = %(change_hash)s;
-                    """)
+            query = f"""
+DELETE FROM {_q(self.table_name)}
+WHERE migration_name = %s
+    AND change_hash = %s;
+"""
         else:
-            query = SQL("""
-INSERT INTO {} (migration_name, change_hash)
-VALUES (%(migration_name)s, %(change_hash)s);
-                    """)
-        cursor.execute(
-            query.format(Identifier(self.table_name)),
-            {"migration_name": path.name, "change_hash": hash},
-        )
+            query = f"""
+INSERT INTO {_q(self.table_name)} (migration_name, change_hash)
+VALUES (%s, %s);
+"""
+        cursor.execute(query, (path.name, hash))
+        cursor.fetchall()
 
     def _get_database_hash(self, migration_name: str) -> str:
-        query = SQL("""
-SELECT change_hash FROM {}
-WHERE migration_name = %(migration_name)s;
-        """)
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": migration_name})
+            query = f"""
+SELECT change_hash
+FROM {_q(self.table_name)}
+WHERE migration_name = %s;
+"""
+            cursor.execute(query, (migration_name,))
             result = cursor.fetchone()
 
-            if not result or not result[0]:
+            if not result or not result[0]:  # type: ignore
                 raise ValueError(f"Migration {migration_name} not found in the database")
-            return result[0]
+            return str(result[0])  # type: ignore

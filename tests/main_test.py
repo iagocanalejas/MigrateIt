@@ -11,6 +11,17 @@ from migrateit.main import main
 from migrateit.models.changelog import SupportedDatabase
 
 
+def _resolve_database(client_class_name: str) -> SupportedDatabase:
+    """Derive database type from a client class name."""
+    if client_class_name == "PsqlClient":
+        return SupportedDatabase.POSTGRES
+    if client_class_name == "MySqlClient":
+        return SupportedDatabase.MYSQL
+    if client_class_name == "SqliteClient":
+        return SupportedDatabase.SQLITE
+    raise NotImplementedError  # pragma: no cover
+
+
 def _load_changelog(
     temp_dir: Path,
     database: SupportedDatabase = SupportedDatabase.SQLITE,
@@ -60,8 +71,7 @@ def test_main_init(temp_dir: Path, database: SupportedDatabase) -> None:
 def test_main_new(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlite3.Connection, str]) -> None:
     """Test main() dispatches the ``new`` command for every database."""
     db_conn, client_class_name = mock_conn_and_client
-    # Derive database type from the client class name
-    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    db = _resolve_database(client_class_name)
     _load_changelog(
         temp_dir,
         database=db,
@@ -82,7 +92,7 @@ def test_main_new(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlite
 def test_main_show(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlite3.Connection, str]) -> None:
     """Test main() dispatches the ``show`` command for every database."""
     db_conn, client_class_name = mock_conn_and_client
-    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    db = _resolve_database(client_class_name)
     _load_changelog(temp_dir, database=db)
     with (
         patch("migrateit.main.get_connection", return_value=db_conn),
@@ -98,7 +108,7 @@ def test_main_show(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlit
 def test_main_migrate(temp_dir: Path, mock_conn_and_client: tuple[MagicMock | sqlite3.Connection, str]) -> None:
     """Test main() dispatches the ``migrate`` command for every database."""
     db_conn, client_class_name = mock_conn_and_client
-    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    db = _resolve_database(client_class_name)
     _load_changelog(temp_dir, database=db)
     with (
         patch("migrateit.main.get_connection", return_value=db_conn),
@@ -117,7 +127,7 @@ def test_main_rollback(
 ) -> None:
     """Test main() dispatches the ``rollback`` command for every database."""
     db_conn, client_class_name = mock_conn_and_client
-    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    db = _resolve_database(client_class_name)
     _load_changelog(temp_dir, database=db)
     with (
         patch("migrateit.main.get_connection", return_value=db_conn),
@@ -136,7 +146,7 @@ def test_main_squash(
 ) -> None:
     """Test main() dispatches the ``squash`` command for every database."""
     db_conn, client_class_name = mock_conn_and_client
-    db = SupportedDatabase.POSTGRES if client_class_name == "PsqlClient" else SupportedDatabase.SQLITE
+    db = _resolve_database(client_class_name)
     _load_changelog(temp_dir, database=db)
     with (
         patch("migrateit.main.get_connection", return_value=db_conn),
