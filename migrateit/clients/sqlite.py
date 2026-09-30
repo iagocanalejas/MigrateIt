@@ -1,7 +1,6 @@
 import hashlib
 import os
 import sqlite3
-from pathlib import Path
 from typing import override
 
 from migrateit.clients._client import SqlClient
@@ -92,7 +91,7 @@ DROP TABLE IF EXISTS {table_name};
     @override
     def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
         """Apply a migration or rollback to SQLite."""
-        path = self._get_migration_path(migration)
+        path = self.get_migration_path(migration)
         if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
             if is_rollback:
                 raise ValueError(f"Migration {path.name} is not applied, cannot undo it")
@@ -129,7 +128,7 @@ DROP TABLE IF EXISTS {table_name};
     @override
     def update_migration_hash(self, migration: Migration) -> None:
         """Update the hash of a migration in SQLite."""
-        path = self._get_migration_path(migration)
+        path = self.get_migration_path(migration)
         _, _, migration_hash = self.get_migration_content_and_hash(path)
 
         self.connection.execute(
@@ -171,36 +170,6 @@ DROP TABLE IF EXISTS {table_name};
                 if status_map[parent] != MigrationStatus.APPLIED:
                     raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
 
-    @override
-    def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
-        """Validate SQL syntax for SQLite by executing in a separate in-memory DB."""
-        path = self._get_migration_path(migration)
-        migration_code, reverse_migration_code, _ = self.get_migration_content_and_hash(path)
-
-        try:
-            memory_conn = sqlite3.connect(":memory:")
-            try:
-                for code in (migration_code, reverse_migration_code):
-                    patched = self._patch_sql_for_validation(code)
-                    memory_conn.executescript(patched)
-            finally:
-                memory_conn.close()
-        except sqlite3.Error as e:
-            sql_for_error = (
-                migration_code if "Rollback" not in (reverse_migration_code or "") else reverse_migration_code
-            )
-            return e, sql_for_error
-        return None
-
-    def _patch_sql_for_validation(self, sql: str) -> str:
-        """Patch SQL for SQLite validation compatibility."""
-        upper_sql = sql.upper()
-        if "CREATE TABLE" in upper_sql and "IF NOT EXISTS" not in upper_sql:
-            return sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
-        if "DROP TABLE" in upper_sql and "DROP TABLE IF EXISTS" not in upper_sql:
-            return sql.replace("DROP TABLE", "DROP TABLE IF EXISTS", 1)
-        return sql
-
     def _update_migration_changelog(self, migration: Migration, hash: str, is_rollback: bool) -> None:
         """Insert or delete a migration record in SQLite."""
         if is_rollback and not migration.initial:
@@ -213,13 +182,6 @@ DROP TABLE IF EXISTS {table_name};
                 f"INSERT INTO {self.table_name} (migration_name, change_hash) VALUES (?, ?);",
                 ((self.migrations_dir / migration.name).name, hash),
             )
-
-    def _get_migration_path(self, migration: Migration) -> Path:
-        """Resolve the migration file path."""
-        path = self.migrations_dir / migration.name
-        if not path.is_file() or not path.name.endswith(".sql"):
-            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
-        return path
 
     def _get_database_hash(self, migration_name: str) -> str:
         """Retrieve a migration's hash from the SQLite database."""

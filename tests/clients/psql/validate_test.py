@@ -19,7 +19,7 @@ def test_validate_simple_select_syntax(pg_client: PsqlClient, temp_dir: Path) ->
     os.makedirs(migrations_dir, exist_ok=True)
 
     filename = "0001_init.sql"
-    create_migration_file(migrations_dir, filename, sql=f"SELECT * FROM {TEST_MIGRATIONS_TABLE};")
+    create_migration_file(migrations_dir, filename, sql="SELECT * FROM non_existing_table;")
     migration = Migration(name=filename, parents=[INIT_MIGRATION])
     assert pg_client.validate_sql_syntax(migration) is None
 
@@ -33,8 +33,8 @@ def test_validate_create_table_syntax(pg_client: PsqlClient, temp_dir: Path) -> 
     create_migration_file(
         migrations_dir,
         filename,
-        sql=f"""
-            CREATE TABLE {TEST_MIGRATIONS_TABLE}_extra (
+        sql="""
+            CREATE TABLE non_existing_table (
                 id SERIAL PRIMARY KEY,
                 data TEXT
             );
@@ -42,11 +42,9 @@ def test_validate_create_table_syntax(pg_client: PsqlClient, temp_dir: Path) -> 
     )
     migration = Migration(name=filename, parents=[INIT_MIGRATION])
     assert pg_client.validate_sql_syntax(migration) is None
-    with (
-        pg_client.connection.cursor() as cursor,
-        pytest.raises(ProgrammingError),
-    ):
-        cursor.execute(f"SELECT * FROM {TEST_MIGRATIONS_TABLE}_extra;")
+    with pg_client.connection.cursor() as cursor:
+        with pytest.raises(ProgrammingError):
+            cursor.execute("SELECT * FROM non_existing_table;")
     pg_client.connection.rollback()
 
 
@@ -61,7 +59,7 @@ def test_invalid_sql_in_migration_code(pg_client: PsqlClient, temp_dir: Path) ->
     error_result = pg_client.validate_sql_syntax(migration)
     assert isinstance(error_result, tuple)
     error, sql = error_result
-    assert isinstance(error, ProgrammingError)
+    assert isinstance(error, SyntaxError)
     assert "SELEKT" in sql
 
 
@@ -74,14 +72,14 @@ def test_invalid_sql_in_rollback_code(pg_client: PsqlClient, temp_dir: Path) -> 
     create_migration_file(
         migrations_dir,
         filename,
-        sql=f"SELECT * FROM {TEST_MIGRATIONS_TABLE};",
+        sql="SELECT * FROM non_existing_table;",
         rollback_sql="ROLLBAK;",
     )
     migration = Migration(name=filename, parents=[INIT_MIGRATION])
     error_result = pg_client.validate_sql_syntax(migration)
     assert isinstance(error_result, tuple)
     error, sql = error_result
-    assert isinstance(error, ProgrammingError)
+    assert isinstance(error, SyntaxError)
     assert "ROLLBAK" in sql
 
 
@@ -140,7 +138,7 @@ def test_validate_drop_table_statement(pg_client: PsqlClient, temp_dir: Path) ->
     os.makedirs(migrations_dir, exist_ok=True)
 
     filename = "0008_drop_table.sql"
-    create_migration_file(migrations_dir, filename, sql=f"DROP TABLE IF EXISTS {TEST_MIGRATIONS_TABLE}_to_drop;")
+    create_migration_file(migrations_dir, filename, sql="DROP TABLE IF EXISTS non_existing_table;")
     migration = Migration(name=filename, parents=[INIT_MIGRATION])
     assert pg_client.validate_sql_syntax(migration) is None
 
@@ -200,7 +198,7 @@ def test_invalid_drop_table_statement(pg_client: PsqlClient, temp_dir: Path) -> 
     error_result = pg_client.validate_sql_syntax(migration)
     assert isinstance(error_result, tuple)
     error, sql = error_result
-    assert isinstance(error, ProgrammingError)
+    assert isinstance(error, SyntaxError)
     assert "DROP TABL" in sql
 
 
@@ -215,7 +213,7 @@ def test_invalid_alter_table_statement(pg_client: PsqlClient, temp_dir: Path) ->
     error_result = pg_client.validate_sql_syntax(migration)
     assert isinstance(error_result, tuple)
     error, sql = error_result
-    assert isinstance(error, ProgrammingError)
+    assert isinstance(error, SyntaxError)
     assert "ADD COLUM" in sql
 
 

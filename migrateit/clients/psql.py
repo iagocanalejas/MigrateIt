@@ -1,6 +1,4 @@
 import os
-import re
-from pathlib import Path
 from typing import override
 
 import psycopg
@@ -111,7 +109,7 @@ SELECT migration_name, change_hash FROM {};
 
     @override
     def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
-        path = self._get_migration_path(migration)
+        path = self.get_migration_path(migration)
         if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
             if is_rollback:
                 raise ValueError(f"Migration {path.name} is not applied, cannot undo it")
@@ -140,7 +138,7 @@ UPDATE {} SET squashed = TRUE WHERE migration_name = ANY(%(migration_name)s);
 
     @override
     def update_migration_hash(self, migration: Migration) -> None:
-        path = self._get_migration_path(migration)
+        path = self.get_migration_path(migration)
         _, _, migration_hash = self.get_migration_content_and_hash(path)
 
         with self.connection.cursor() as cursor:
@@ -188,22 +186,6 @@ UPDATE {} SET change_hash = %(hash)s WHERE migration_name = %(migration)s;
                 if status_map[parent] != MigrationStatus.APPLIED:
                     raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
 
-    @override
-    def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
-        path = self._get_migration_path(migration)
-        migration_code, reverse_migration_code, _ = self.get_migration_content_and_hash(path)
-
-        for code in (migration_code, reverse_migration_code):
-            try:
-                with self.connection.cursor() as cursor:
-                    patched = self._patch_sql_statement(code)
-                    cursor.execute(patched)  # pyright: ignore
-            except psycopg.ProgrammingError as e:
-                return e, code
-            finally:
-                self.connection.rollback()
-        return None
-
     def _update_migration_changelog(
         self,
         cursor: psycopg.Cursor,
@@ -227,31 +209,6 @@ VALUES (%(migration_name)s, %(change_hash)s);
             query.format(Identifier(self.table_name)),
             {"migration_name": path.name, "change_hash": hash},
         )
-
-    def _get_migration_path(self, migration: Migration) -> Path:
-        path = self.migrations_dir / migration.name
-        if not path.is_file() or not path.name.endswith(".sql"):
-            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
-        return path
-
-    def _patch_sql_statement(self, sql: str) -> str:
-        sql = sql.upper()
-        # remove comments
-        sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
-        sql = re.sub(r"--.*(?=\n|$)", "", sql).strip()
-
-        if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
-            return sql
-        if "CREATE TABLE" in sql and "IF NOT EXISTS" not in sql:
-            return sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
-        if "DROP TABLE" in sql and "IF EXISTS" not in sql:
-            return sql.replace("DROP TABLE", "DROP TABLE IF EXISTS", 1)
-        if "ALTER TABLE" in sql:
-            if "ADD COLUMN" in sql and "IF NOT EXISTS" not in sql:
-                return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", 1)
-            if "DROP COLUMN" in sql and "IF EXISTS" not in sql:
-                return sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS", 1)
-        return sql
 
     def _get_database_hash(self, migration_name: str) -> str:
         with self.connection.cursor() as cursor:

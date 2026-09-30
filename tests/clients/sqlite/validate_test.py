@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from pathlib import Path
 
@@ -7,23 +8,40 @@ from migrateit.clients.sqlite import SqliteClient
 from migrateit.models import Migration
 from migrateit.models.changelog import ChangelogFile
 from migrateit.models.migration import MigrationStatus
-from tests.conftest import TEST_MIGRATIONS_TABLE, create_migration_file
+from tests.conftest import INIT_MIGRATION, TEST_MIGRATIONS_TABLE, create_migration_file
 
 
 @pytest.mark.sqlite
 def test_validate_valid_sql(sqlite_client: SqliteClient, temp_dir: Path) -> None:
-    """Test SQL syntax validation with valid SQL."""
-    create_migration_file(
-        temp_dir / "migrations",
-        "0001_valid.sql",
-        sql="CREATE TABLE t (id INTEGER PRIMARY KEY);",
-        rollback_sql="DROP TABLE t;",
-    )
+    migrations_dir = temp_dir / "migrations"
+    os.makedirs(migrations_dir, exist_ok=True)
 
-    sqlite_client.changelog.migrations.append(
-        Migration(name="0001_valid.sql", initial=False, parents=["0000_migrateit.sql"])
+    filename = "0001_init.sql"
+    create_migration_file(migrations_dir, filename, sql="SELECT * FROM non_existing_table;")
+    migration = Migration(name=filename, parents=[INIT_MIGRATION])
+    assert sqlite_client.validate_sql_syntax(migration) is None
+
+
+@pytest.mark.sqlite
+def test_validate_create_table_syntax(sqlite_client: SqliteClient, temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+    os.makedirs(migrations_dir, exist_ok=True)
+
+    filename = "0002_create_table.sql"
+    create_migration_file(
+        migrations_dir,
+        filename,
+        sql="""
+            CREATE TABLE non_existing_table (
+                id SERIAL PRIMARY KEY,
+                data TEXT
+            );
+        """,
     )
-    assert sqlite_client.validate_sql_syntax(sqlite_client.changelog.migrations[1]) is None
+    migration = Migration(name=filename, parents=[INIT_MIGRATION])
+    assert sqlite_client.validate_sql_syntax(migration) is None
+    with pytest.raises(sqlite3.Error):
+        sqlite_client.connection.execute("SELECT * FROM non_existing_table;")
 
 
 @pytest.mark.sqlite
@@ -41,7 +59,18 @@ def test_validate_invalid_sql(sqlite_client: SqliteClient, temp_dir: Path) -> No
     )
     result = sqlite_client.validate_sql_syntax(sqlite_client.changelog.migrations[1])
     assert result is not None
-    assert isinstance(result[0], sqlite3.Error)
+    assert isinstance(result[0], SyntaxError)
+
+
+@pytest.mark.sqlite
+def test_validate_drop_table_statement(sqlite_client: SqliteClient, temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+    os.makedirs(migrations_dir, exist_ok=True)
+
+    filename = "0008_drop_table.sql"
+    create_migration_file(migrations_dir, filename, sql="DROP TABLE non_existing_table;")
+    migration = Migration(name=filename, parents=[INIT_MIGRATION])
+    assert sqlite_client.validate_sql_syntax(migration) is None
 
 
 # --- validate_migrations conflict path ---
