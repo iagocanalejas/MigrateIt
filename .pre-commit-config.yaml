@@ -39,5 +39,6 @@ repos:
         args:
           - --config-file=pyproject.toml
         additional_dependencies:
-          - psycopg[binary]
+          - sqlfluff
           - pytest
+          - psycopg[binary]

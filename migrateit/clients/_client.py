@@ -3,9 +3,13 @@ import os
 import re
 from abc import ABC
 from pathlib import Path
+from typing import override
+
+import sqlfluff
 
 from migrateit.clients._protocol import SqlClientProtocol
 from migrateit.models import ChangelogFile, MigrateItConfig
+from migrateit.models.migration import Migration
 from migrateit.tree import ROLLBACK_SPLIT_TAG
 
 WHITESPACE_RE = re.compile(r"\s+")
@@ -76,3 +80,45 @@ class SqlClient[T](ABC, SqlClientProtocol):
             WHITESPACE_RE.sub(" ", reverse_migration).strip(),
             hashlib.sha256(content.encode("utf-8")).hexdigest(),
         )
+
+    def get_migration_path(self, migration: Migration) -> Path:
+        path = self.migrations_dir / migration.name
+        if not path.is_file() or not path.name.endswith(".sql"):
+            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
+        return path
+
+    @override
+    def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
+        path = self.get_migration_path(migration)
+        migration_code, reverse_migration_code, _ = self.get_migration_content_and_hash(path)
+
+        for code in (migration_code, reverse_migration_code):
+            patched = self._patch_sql_statement(code)
+            # Filter specifically for syntax/parsing errors
+            lint_errors = sqlfluff.lint(patched, dialect=self.changelog.database.value)
+            syntax_errors = [e for e in lint_errors if e["code"] == "PRS"]
+
+            if syntax_errors:
+                err_msg = syntax_errors[0]["description"]
+                return SyntaxError(f"SQL Syntax Error: {err_msg}"), code
+
+        return None
+
+    def _patch_sql_statement(self, sql: str) -> str:
+        sql = sql.upper()
+        # remove comments
+        sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+        sql = re.sub(r"--.*(?=\n|$)", "", sql).strip()
+
+        if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
+            return sql
+        if "CREATE TABLE" in sql and "IF NOT EXISTS" not in sql:
+            return sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
+        if "DROP TABLE" in sql and "IF EXISTS" not in sql:
+            return sql.replace("DROP TABLE", "DROP TABLE IF EXISTS", 1)
+        if "ALTER TABLE" in sql:
+            if "ADD COLUMN" in sql and "IF NOT EXISTS" not in sql:
+                return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", 1)
+            if "DROP COLUMN" in sql and "IF EXISTS" not in sql:
+                return sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS", 1)
+        return sql
