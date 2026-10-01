@@ -3,12 +3,13 @@ import os
 import re
 from abc import ABC
 from pathlib import Path
-from typing import override
+from typing import TYPE_CHECKING, Any, override
 
 import sqlfluff
 
 from migrateit.clients._protocol import SqlClientProtocol
-from migrateit.models import ChangelogFile, MigrateItConfig
+from migrateit.models.changelog import ChangelogFile, SupportedDatabase
+from migrateit.models.config import MigrateItConfig
 from migrateit.models.migration import Migration
 from migrateit.tree import ROLLBACK_SPLIT_TAG
 
@@ -104,6 +105,7 @@ class SqlClient[T](ABC, SqlClientProtocol):
 
         return None
 
+    @override
     def _patch_sql_statement(self, sql: str) -> str:
         sql = sql.upper()
         # remove comments
@@ -116,9 +118,26 @@ class SqlClient[T](ABC, SqlClientProtocol):
             return sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
         if "DROP TABLE" in sql and "IF EXISTS" not in sql:
             return sql.replace("DROP TABLE", "DROP TABLE IF EXISTS", 1)
-        if "ALTER TABLE" in sql:
-            if "ADD COLUMN" in sql and "IF NOT EXISTS" not in sql:
-                return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", 1)
-            if "DROP COLUMN" in sql and "IF EXISTS" not in sql:
-                return sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS", 1)
         return sql
+
+
+if TYPE_CHECKING:
+    from migrateit.models.connection import Connection
+
+
+def get_client(config: MigrateItConfig, connection: "Connection") -> SqlClient[Any]:
+    match (config.changelog.database, connection):
+        case (SupportedDatabase.MYSQL, _ as mysql_conn):
+            from .mysql import MySqlClient
+
+            return MySqlClient(mysql_conn, config)  # type: ignore
+        case (SupportedDatabase.POSTGRES, _ as pg_conn):
+            from .psql import PsqlClient
+
+            return PsqlClient(pg_conn, config)  # type: ignore
+        case (SupportedDatabase.SQLITE, _ as sq_conn):
+            from .sqlite import SqliteClient
+
+            return SqliteClient(sq_conn, config)  # type: ignore
+        case _:
+            raise NotImplementedError(f"Database {config.changelog.database} is not supported")

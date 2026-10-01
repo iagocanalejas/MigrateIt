@@ -1,18 +1,13 @@
 import argparse
-import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any
-
-import psycopg
-from mysql.connector.abstracts import MySQLConnectionAbstract
-from mysql.connector.pooling import PooledMySQLConnection
 
 import migrateit.constants as C
-from migrateit import cli as commands
-from migrateit.clients import MySqlClient, PsqlClient, SqliteClient
-from migrateit.clients._client import SqlClient
-from migrateit.models import Connection, MigrateItConfig, SupportedDatabase, get_connection
+from migrateit import cmd as commands
+from migrateit.clients._client import get_client
+from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.config import MigrateItConfig
+from migrateit.models.connection import get_connection
 from migrateit.reporters import FatalError, error_handler, logging_handler, print_logo
 from migrateit.reporters.logs import logger
 from migrateit.tree import load_changelog_file
@@ -66,7 +61,7 @@ def main() -> int:
             )
             with get_connection(changelog.database) as conn:
                 logger.debug("Connected to database: %s", changelog.database.value)
-                client = _get_client(config, connection=conn)
+                client = get_client(config, connection=conn)
                 if args.command == "new":
                     return commands.cmd_new(
                         client,
@@ -201,18 +196,6 @@ def _cmd_show(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     )
     parser.set_defaults(func=commands.cmd_show)
     return parser
-
-
-def _get_client(config: MigrateItConfig, connection: Connection) -> SqlClient[Any]:
-    match (config.changelog.database, connection):
-        case (SupportedDatabase.MYSQL, (MySQLConnectionAbstract() | PooledMySQLConnection()) as mysql_conn):
-            return MySqlClient(mysql_conn, config)
-        case (SupportedDatabase.POSTGRES, psycopg.Connection() as pg_conn):
-            return PsqlClient(pg_conn, config)
-        case (SupportedDatabase.SQLITE, sqlite3.Connection() as sq_conn):
-            return SqliteClient(sq_conn, config)
-        case _:
-            raise NotImplementedError(f"Database {config.changelog.database} is not supported")
 
 
 if __name__ == "__main__":

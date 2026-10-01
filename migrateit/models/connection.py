@@ -6,6 +6,7 @@ import psycopg
 from mysql.connector.abstracts import MySQLConnectionAbstract
 from mysql.connector.pooling import PooledMySQLConnection
 
+from migrateit import constants as C
 from migrateit.clients.mysql import MySqlClient
 from migrateit.clients.psql import PsqlClient
 from migrateit.clients.sqlite import SqliteClient
@@ -43,9 +44,11 @@ def get_connection(database: SupportedDatabase) -> Connection:
             }
 
             # Extract connection_timeout (or timeout) if present in the URL
-            timeout_val = query_params.get("connection_timeout") or query_params.get("timeout")
-            if timeout_val:
-                conn_kwargs["connection_timeout"] = int(timeout_val[0])
+            timeout_val = query_params.get(
+                "connection_timeout",
+                query_params.get("timeout", [f"{C.DEFAULT_TIMEOUT_SECONDS}"]),
+            )
+            conn_kwargs["connection_timeout"] = int(timeout_val[0])
 
             mysql_conn = mysql.connector.connect(**conn_kwargs)
             setattr(mysql_conn, "autocommit", False)

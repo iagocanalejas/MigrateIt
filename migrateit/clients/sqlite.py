@@ -3,7 +3,7 @@ import sqlite3
 from typing import override
 
 from migrateit.clients._client import SqlClient
-from migrateit.models import Migration, MigrationStatus
+from migrateit.models.migration import Migration, MigrationStatus
 from migrateit.reporters.logs import logger
 
 
@@ -97,7 +97,9 @@ FROM {self.table_name};
 
     @override
     def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
-        """Apply a migration or rollback to SQLite."""
+        if is_fake and is_rollback:
+            raise ValueError("Cannot fake a rollback migration")
+
         path = self.get_migration_path(migration)
         if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
             if is_rollback:

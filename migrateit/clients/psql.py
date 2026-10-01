@@ -4,8 +4,9 @@ from typing import override
 import psycopg
 from psycopg.sql import SQL, Identifier
 
+from migrateit import constants as C
 from migrateit.clients._client import SqlClient
-from migrateit.models import Migration, MigrationStatus
+from migrateit.models.migration import Migration, MigrationStatus
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
@@ -23,7 +24,7 @@ class PsqlClient(SqlClient[psycopg.Connection]):
         user = os.getenv(cls.VARNAME_DB_USER, "postgres")
         password = os.getenv(cls.VARNAME_DB_PASS, "")
         db_name = os.getenv(cls.VARNAME_DB_NAME, "migrateit")
-        db_timeout = os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, "30")
+        db_timeout = os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, C.DEFAULT_TIMEOUT_SECONDS)
 
         password = f":{password}" if password else ""
         db_url = f"postgresql://{user}{password}@{host}:{port}/{db_name}?connect_timeout={db_timeout}"
@@ -110,6 +111,9 @@ FROM {};
 
     @override
     def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
+        if is_fake and is_rollback:
+            raise ValueError("Cannot fake a rollback migration")
+
         path = self.get_migration_path(migration)
         if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
             if is_rollback:
@@ -185,6 +189,18 @@ WHERE migration_name = %(migration)s;
             for parent in migration.parents:
                 if status_map[parent] != MigrationStatus.APPLIED:
                     raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
+
+    @override
+    def _patch_sql_statement(self, sql: str) -> str:
+        sql = super()._patch_sql_statement(sql)
+        if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
+            return sql
+        if "ALTER TABLE" in sql:
+            if "ADD COLUMN" in sql and "IF NOT EXISTS" not in sql:
+                return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", 1)
+            if "DROP COLUMN" in sql and "IF EXISTS" not in sql:
+                return sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS", 1)
+        return sql
 
     def _update_migration_changelog(
         self,
