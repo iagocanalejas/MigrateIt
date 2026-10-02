@@ -41,9 +41,18 @@ DB_USER=postgres
 DB_PASS=postgres
 
 # sqlite
-DB_URL=sqlite://migrateit.db
+DB_URL=sqlite:///migrateit.db
 # or
 DB_FILE=migrateit.db
+
+# mysql
+DB_URL=mysql://root:@localhost:3306/migrateit
+# or
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=migrateit
+DB_USER=root
+DB_PASS=
 
 # common
 DB_TIMEOUT_SECONDS=30
@@ -57,8 +66,8 @@ DB_TIMEOUT_SECONDS=30
 #   - 'changelog.json' file
 #   - first migration file (table creation + rollback)
 migrateit init postgres
-# or
 migrateit init sqlite
+migrateit init mysql
 
 # Create a new migration file
 migrateit new first_migration
@@ -73,6 +82,10 @@ echo "CREATE TABLE users (id SERIAL PRIMARY KEY, email TEXT);" > migrateit/0001_
 migrateit show
 migrateit show -l
 
+# Export the full database schema to a migration file
+migrateit export
+migrateit export my_full_export    # with a custom name
+
 # Run the migrations
 migrateit migrate
 
@@ -86,10 +99,13 @@ migrateit rollback 0001
 migrateit squash 0001 0005
 
 # Fake a migration (mark as applied without running SQL)
-migrateit migrate --fake
+migrateit migrate --fake 0001
+
+# Fake a rollback (mark as undone without running SQL)
+migrateit rollback --fake 0001
 
 # Update migration hash without re-running
-migrateit migrate --update-hash
+migrateit migrate --update-hash 0001
 ```
 
 # Example
@@ -115,10 +131,10 @@ DROP TABLE IF EXISTS users;
 # Help
 
 ```sh
-usage: migrateit init [-h] {postgres,sqlite}
+usage: migrateit init [-h] {postgres,sqlite,mysql}
 
 positional arguments:
-  {postgres,sqlite}   Database type to use
+  {postgres,sqlite,mysql}   Database type to use
 
 options:
   -h, --help          show this help message and exit
@@ -150,6 +166,16 @@ options:
 ```
 
 ```sh
+usage: migrateit export [-h] [name]
+
+positional arguments:
+  name           Name of the migration containing the database SQL dump.
+
+options:
+  -h, --help     show this help message and exit
+```
+
+```sh
 usage: migrateit show [-h] [-l] [--validate-sql]
 
 options:
@@ -159,13 +185,14 @@ options:
 ```
 
 ```sh
-usage: migrateit rollback [-h] [name]
+usage: migrateit rollback [-h] [--fake] [name]
 
 positional arguments:
   name          Name of the migration to rollback
 
 options:
   -h, --help    show this help message and exit
+  --fake        Fakes the rollback marking it as undone.
 ```
 
 ```sh
