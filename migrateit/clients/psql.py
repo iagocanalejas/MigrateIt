@@ -3,7 +3,6 @@ from collections import defaultdict
 from typing import override
 
 import psycopg
-from psycopg.sql import SQL, Identifier
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
@@ -44,10 +43,10 @@ CREATE TABLE IF NOT EXISTS {table_name} (
     change_hash VARCHAR(64) NOT NULL,
     squashed BOOLEAN DEFAULT FALSE
 );
-        """
+"""
         reverse_query = f"""
 DROP TABLE IF EXISTS {table_name};
-        """
+"""
         return migrations_query, reverse_query
 
     @override
@@ -58,7 +57,7 @@ SELECT EXISTS (
     FROM information_schema.tables
     WHERE LOWER(table_name) = LOWER(%(table_name)s)
 );
-        """
+"""
         with self.connection.cursor() as cursor:
             cursor.execute(query, {"table_name": self.table_name})
             result = cursor.fetchone()
@@ -66,13 +65,13 @@ SELECT EXISTS (
 
     @override
     def is_migration_applied(self, migration: Migration) -> bool:
-        query = SQL("""
+        query = f"""
 SELECT EXISTS (
-    SELECT 1 FROM {} WHERE migration_name = %(migration_name)s
+    SELECT 1 FROM {self.table_name} WHERE migration_name = %(migration_name)s
 );
-        """)
+"""
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": migration.name})
+            cursor.execute(query, {"migration_name": migration.name})  # pyright: ignore
             result = cursor.fetchone()
             return result[0] if result else False
 
@@ -83,12 +82,12 @@ SELECT EXISTS (
         if not self.is_migrations_table_created():
             return migrations
 
-        query = SQL("""
+        query = f"""
 SELECT migration_name, change_hash
-FROM {};
-        """)
+FROM {self.table_name};
+        """
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)))
+            cursor.execute(query)  # pyright: ignore
             rows = cursor.fetchall()
 
         for row in rows:
@@ -135,12 +134,12 @@ FROM {};
 
     @override
     def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
-        query = SQL("""
-UPDATE {} SET squashed = TRUE
+        query = f"""
+UPDATE {self.table_name} SET squashed = TRUE
 WHERE migration_name = ANY(%(migration_name)s);
-        """)
+"""
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": migrations})
+            cursor.execute(query, {"migration_name": migrations})  # pyright: ignore
         self.apply_migration(new_migration, is_fake=True)
 
     @override
@@ -148,12 +147,12 @@ WHERE migration_name = ANY(%(migration_name)s);
         path = self.get_migration_path(migration)
         _, _, migration_hash = self.get_migration_content_and_hash(path)
 
-        query = SQL("""
-UPDATE {} SET change_hash = %(hash)s
+        query = f"""
+UPDATE {self.table_name} SET change_hash = %(hash)s
 WHERE migration_name = %(migration)s;
-        """)
+        """
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)), {"migration": path.name, "hash": migration_hash})
+            cursor.execute(query, {"migration": path.name, "hash": migration_hash})  # pyright: ignore
 
     @override
     def export_database_schema(self, migration: Migration) -> None:
@@ -397,28 +396,25 @@ WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND NOT trig.tgisint
     ) -> None:
         path = self.migrations_dir / migration.name
         if is_rollback and not migration.initial:
-            query = SQL("""
-DELETE FROM {}
+            query = f"""
+DELETE FROM {self.table_name}
 WHERE migration_name = %(migration_name)s
     AND change_hash = %(change_hash)s;
-                    """)
+"""
         else:
-            query = SQL("""
-INSERT INTO {} (migration_name, change_hash)
+            query = f"""
+INSERT INTO {self.table_name} (migration_name, change_hash)
 VALUES (%(migration_name)s, %(change_hash)s);
-                    """)
-        cursor.execute(
-            query.format(Identifier(self.table_name)),
-            {"migration_name": path.name, "change_hash": hash},
-        )
+"""
+        cursor.execute(query, {"migration_name": path.name, "change_hash": hash})  # pyright: ignore
 
     def _get_database_hash(self, migration_name: str) -> str:
-        query = SQL("""
-SELECT change_hash FROM {}
+        query = f"""
+SELECT change_hash FROM {self.table_name}
 WHERE migration_name = %(migration_name)s;
-        """)
+"""
         with self.connection.cursor() as cursor:
-            cursor.execute(query.format(Identifier(self.table_name)), {"migration_name": migration_name})
+            cursor.execute(query, {"migration_name": migration_name})  # pyright: ignore
             result = cursor.fetchone()
 
             if not result or not result[0]:

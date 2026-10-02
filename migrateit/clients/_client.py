@@ -75,12 +75,19 @@ class SqlClient[T](ABC, SqlClientProtocol):
         if len(parts) > 2:
             raise ValueError("Too many rollback tags in migration file")
 
-        migration, reverse_migration = parts
+        migration = SqlClient._remove_sql_comments(parts[0])
+        reverse_migration = SqlClient._remove_sql_comments(parts[1])
         return (
             WHITESPACE_RE.sub(" ", migration).strip(),
             WHITESPACE_RE.sub(" ", reverse_migration).strip(),
             hashlib.sha256(content.encode("utf-8")).hexdigest(),
         )
+
+    @staticmethod
+    def _remove_sql_comments(sql: str) -> str:
+        sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+        sql = re.sub(r"--.*(?=\n|$)", "", sql).strip()
+        return sql
 
     def get_migration_path(self, migration: Migration) -> Path:
         path = self.migrations_dir / migration.name
@@ -107,10 +114,7 @@ class SqlClient[T](ABC, SqlClientProtocol):
 
     @override
     def _patch_sql_statement(self, sql: str) -> str:
-        sql = sql.upper()
-        # remove comments
-        sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
-        sql = re.sub(r"--.*(?=\n|$)", "", sql).strip()
+        sql = self._remove_sql_comments(sql.upper())
 
         if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
             return sql

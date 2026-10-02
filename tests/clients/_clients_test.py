@@ -169,6 +169,18 @@ def test_get_migration_content_and_hash_more_than_one_rollback(temp_dir: Path) -
         SqlClient.get_migration_content_and_hash(migrations_dir / MIGRATION_NAME)
 
 
+@pytest.mark.unit
+def test_get_migration_content_clean_comments(temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    with open(migrations_dir / MIGRATION_NAME, "w") as f:
+        f.write("-- Comment\n" + "SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;")
+
+    code, _, _ = SqlClient.get_migration_content_and_hash(migrations_dir / MIGRATION_NAME)
+    assert "--" not in code
+
+
 # --- create_migrations_table tests ---
 
 
