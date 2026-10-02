@@ -22,6 +22,10 @@ def create_migration_directory(migrations_dir: Path) -> None:
 ROLLBACK_SPLIT_TAG = "-- Rollback migration"
 
 
+def get_migration_header(full_path: Path) -> str:
+    return f"-- Migration {full_path.name}\n-- Created on {datetime.now().isoformat()}\n\n\n"
+
+
 def create_new_migration(
     changelog: ChangelogFile,
     migrations_dir: Path,
@@ -59,9 +63,8 @@ def create_new_migration(
         raise FileExistsError(f"Migration file {new_filepath.name} already exists")
 
     # create the new migration file with a header and rollback tag
-    content = f"-- Migration {new_filepath.name}\n-- Created on {datetime.now().isoformat()}\n\n\n{ROLLBACK_SPLIT_TAG}"
-    new_filepath.write_text(content)
-    logger.info("Created migration file: %s", new_filepath.name)
+    new_filepath.write_text(get_migration_header(new_filepath) + ROLLBACK_SPLIT_TAG + "\n\n")
+    logger.debug("Created migration file: %s", new_filepath.name)
 
     new_migration = Migration(
         name=new_filepath.name,
@@ -188,7 +191,7 @@ def save_changelog_file(changelog: ChangelogFile) -> None:
     if not changelog.path.exists():
         raise FileNotFoundError(f"File {changelog.path.name} does not exist")
     changelog.path.write_text(changelog.to_json())
-    logger.info("Saved changelog: %s (%d migration(s))", changelog.path, len(changelog.migrations))
+    logger.debug("Saved changelog: %s (%d migration(s))", changelog.path, len(changelog.migrations))
     write_line(f"\tMigrations file updated: {changelog.path}")
 
 
