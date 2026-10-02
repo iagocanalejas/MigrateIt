@@ -5,11 +5,9 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from migrateit.clients import MySqlClient, PsqlClient, SqlClient, SqliteClient
-from migrateit.models import (
-    MigrationStatus,
-    SupportedDatabase,
-)
+from migrateit.clients._client import SqlClient
+from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.migration import MigrationStatus
 from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, write_line
 from migrateit.reporters.logs import logger
 from migrateit.tree import (
@@ -35,10 +33,16 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     migration = create_new_migration(changelog=changelog, migrations_dir=migrations_dir, name="migrateit")
     match database:
         case SupportedDatabase.MYSQL:
+            from migrateit.clients.mysql import MySqlClient
+
             sql, rollback = MySqlClient.create_migrations_table_str(table_name=table_name)
         case SupportedDatabase.POSTGRES:
+            from migrateit.clients.psql import PsqlClient
+
             sql, rollback = PsqlClient.create_migrations_table_str(table_name=table_name)
         case SupportedDatabase.SQLITE:
+            from migrateit.clients.sqlite import SqliteClient
+
             sql, rollback = SqliteClient.create_migrations_table_str(table_name=table_name)
         case _:
             raise NotImplementedError(f"Database {database} is not supported yet")

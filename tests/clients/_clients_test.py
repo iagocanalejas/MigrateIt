@@ -1,0 +1,285 @@
+import os
+import sqlite3
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pytest
+import sqlfluff
+
+from migrateit.clients._client import SqlClient
+from migrateit.models.changelog import ChangelogFile, SupportedDatabase
+from migrateit.models.config import MigrateItConfig
+from migrateit.models.connection import get_connection
+from migrateit.models.migration import Migration, MigrationStatus
+from migrateit.tree import ROLLBACK_SPLIT_TAG
+from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file, _drop_test_table
+
+MIGRATION_NAME = "0001_test_table.sql"
+
+# --- get_connection tests ---
+
+
+@pytest.mark.unit
+def test_get_connection_postgres() -> None:
+    with patch("migrateit.models.connection.psycopg.connect") as mock_connect:
+        mock_conn: Any = MagicMock()
+        mock_connect.return_value = mock_conn
+        result = get_connection(SupportedDatabase.POSTGRES)
+        assert result == mock_conn
+        mock_connect.assert_called_once()
+
+
+@pytest.mark.unit
+def test_get_connection_sqlite() -> None:
+    from migrateit.clients.sqlite import SqliteClient
+
+    # With SQLITE we can create a real connection
+    f = Path(SqliteClient.get_environment_url().replace("sqlite:///", ""))
+    result = get_connection(SupportedDatabase.SQLITE)
+    assert isinstance(result, sqlite3.Connection)
+    result.close()
+    f.unlink()
+
+
+@pytest.mark.unit
+def test_get_connection_mysql() -> None:
+    with patch("migrateit.models.connection.mysql.connector.connect") as mock_connect:
+        mock_conn: Any = MagicMock()
+        mock_connect.return_value = mock_conn
+        result = get_connection(SupportedDatabase.MYSQL)
+        assert result == mock_conn
+        mock_connect.assert_called_once()
+
+
+@pytest.mark.unit
+def test_get_environment_url_from_db_url_psql() -> None:
+    from migrateit.clients.psql import PsqlClient
+
+    with patch.dict(os.environ, {"DB_URL": "postgresql://user:pass@host:5432/mydb"}):
+        url = PsqlClient.get_environment_url()
+        assert url == "postgresql://user:pass@host:5432/mydb"
+
+
+@pytest.mark.unit
+def test_get_environment_url_from_db_url_mysql() -> None:
+    from migrateit.clients.mysql import MySqlClient
+
+    with patch.dict(os.environ, {"DB_URL": "mysql://user:pass@host:3306/mydb"}):
+        url = MySqlClient.get_environment_url()
+        assert url == "mysql://user:pass@host:3306/mydb"
+
+
+@pytest.mark.unit
+def test_get_environment_url_from_db_url_sqlite() -> None:
+    from migrateit.clients.sqlite import SqliteClient
+
+    with patch.dict(os.environ, {"DB_URL": "sqlite:///mydb"}):
+        url = SqliteClient.get_environment_url()
+        assert url == "sqlite:///mydb"
+
+
+@pytest.mark.unit
+def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
+    config = MigrateItConfig(
+        table_name="migrations",
+        migrations_dir=temp_dir,
+        changelog=ChangelogFile(version=1, path=temp_dir / "changelog.json"),
+    )
+    with pytest.raises(ValueError, match="connection cannot be None"):
+        SqlClient[None](None, config)  # type: ignore[abstract]
+
+
+# --- config tests ---
+
+
+@pytest.mark.unit
+def test_sql_client_valid_config(temp_dir: Path) -> None:
+    config = MigrateItConfig(
+        table_name="migrations",
+        migrations_dir=temp_dir,
+        changelog=ChangelogFile(version=1, path=temp_dir / "changelog.json"),
+    )
+    mock_conn = MagicMock()
+    client: SqlClient[MagicMock] = SqlClient(mock_conn, config)  # type: ignore[abstract]
+    assert client.config == config
+    assert client.connection == mock_conn
+    assert client.table_name == "migrations"
+    assert client.migrations_dir == temp_dir
+    assert isinstance(client.changelog, ChangelogFile)
+
+
+@pytest.mark.unit
+def test_validate_config_empty_table_name() -> None:
+    config = MigrateItConfig(
+        table_name="",
+        migrations_dir=Path("/tmp/migrations"),
+        changelog=ChangelogFile(version=1, path=Path("/tmp/changelog.json")),
+    )
+    with pytest.raises(ValueError, match="Table name is required"):
+        SqlClient.validate_config(config)
+
+
+@pytest.mark.unit
+def test_validate_config_non_string_table_name() -> None:
+    config = MigrateItConfig(
+        table_name=int(123),  # type: ignore[arg-type]
+        migrations_dir=Path("/tmp/migrations"),
+        changelog=ChangelogFile(version=1, path=Path("/tmp/changelog.json")),
+    )
+    with pytest.raises(TypeError):
+        SqlClient.validate_config(config)
+
+
+@pytest.mark.unit
+def test_validate_config_invalid_identifier() -> None:
+    config = MigrateItConfig(
+        table_name="invalid-name",
+        migrations_dir=Path("/tmp/migrations"),
+        changelog=ChangelogFile(version=1, path=Path("/tmp/changelog.json")),
+    )
+    with pytest.raises(ValueError, match="valid identifier"):
+        SqlClient.validate_config(config)
+
+
+# --- get_migration_content_and_hash tests ---
+
+
+@pytest.mark.unit
+def test_get_migration_content_and_hash_no_rollback(temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    with open(migrations_dir / MIGRATION_NAME, "w") as f:
+        f.write("SELECT 1;")
+
+    with pytest.raises(ValueError, match="No rollback"):
+        SqlClient.get_migration_content_and_hash(migrations_dir / MIGRATION_NAME)
+
+
+@pytest.mark.unit
+def test_get_migration_content_and_hash_more_than_one_rollback(temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    with open(migrations_dir / MIGRATION_NAME, "w") as f:
+        f.write("SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;" + ROLLBACK_SPLIT_TAG + "SELECT 3;")
+
+    with pytest.raises(ValueError, match="Too many rollback"):
+        SqlClient.get_migration_content_and_hash(migrations_dir / MIGRATION_NAME)
+
+
+# --- create_migrations_table tests ---
+
+
+def test_create_migrations_table(client: SqlClient[Any]) -> None:
+    """Test that the migrations table SQL is generated correctly."""
+    table_name = "test_migrations"
+    sql, rollback = client.create_migrations_table_str(table_name)
+
+    lint_errors = sqlfluff.lint(sql, dialect=client.changelog.database.value)
+    assert not [e for e in lint_errors if e["code"] == "PRS"]
+
+    lint_errors = sqlfluff.lint(rollback, dialect=client.changelog.database.value)
+    assert not [e for e in lint_errors if e["code"] == "PRS"]
+
+
+def test_safety_table_name(client: SqlClient[Any]) -> None:
+    """Test unsafe table name rejection."""
+    with pytest.raises(ValueError, match="Unsafe table name"):
+        client.create_migrations_table_str("invalid-name")
+
+
+# --- is_migrations_table_created tests ---
+
+
+def test_table_exists_returns_true(client: SqlClient[Any]) -> None:
+    # table is created in the fixture
+    assert client.is_migrations_table_created()
+
+
+def test_table_missing_returns_false(client: SqlClient[Any]) -> None:
+    # drop the table first as is being created in pytest fixtures
+    _drop_test_table(client, TEST_MIGRATIONS_TABLE)
+    assert not client.is_migrations_table_created()
+
+
+# --- is_migration_applied tests ---
+
+
+def test_applied_migration_returns_true(client: SqlClient[Any], temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+
+    _create_migration_file(migrations_dir, MIGRATION_NAME)
+    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    client.changelog.migrations.append(migration)
+
+    client.apply_migration(migration, is_fake=False)
+    assert client.is_migration_applied(migration)
+
+
+def test_applied_migration_returns_true_for_fake(client: SqlClient[Any], temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+
+    _create_migration_file(migrations_dir, MIGRATION_NAME)
+    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    client.changelog.migrations.append(migration)
+
+    client.apply_migration(migration, is_fake=True)
+    assert client.is_migration_applied(migration)
+
+
+def test_not_applied_migration_returns_false(client: SqlClient[Any], temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+
+    _create_migration_file(migrations_dir, MIGRATION_NAME)
+    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    client.changelog.migrations.append(migration)
+
+    assert not client.is_migration_applied(migration)
+
+
+# --- retrieve_migration_statuses tests ---
+
+
+def test_no_table_returns_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+    _drop_test_table(client, TEST_MIGRATIONS_TABLE)
+
+    _create_migration_file(migrations_dir, "0001_test.sql")
+    migrations = [Migration(name="0001_test.sql", parents=[INITIAL_MIGRATION])]
+    client.config.changelog = ChangelogFile(version=1, migrations=[Migration(name=INITIAL_MIGRATION), *migrations])
+
+    statuses = client.retrieve_migration_statuses()
+    assert statuses["0001_test.sql"] == MigrationStatus.NOT_APPLIED
+
+
+# --- update_migration_hash tests ---
+
+
+def test_update_migration_hash(client: SqlClient[Any], temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+
+    _create_migration_file(migrations_dir, MIGRATION_NAME)
+    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    client.config.changelog = ChangelogFile(version=1, migrations=[Migration(name=INITIAL_MIGRATION), migration])
+
+    client.apply_migration(migration, is_fake=False)
+
+    old_hash = client._get_database_hash(MIGRATION_NAME)  # type: ignore
+
+    # Update the hash
+    client.update_migration_hash(migration)
+    client.connection.commit()
+
+    new_hash = client._get_database_hash(MIGRATION_NAME)  # type: ignore
+
+    assert old_hash == new_hash  # same file, same hash
+
+
+# --- _get_database_hash tests ---
+
+
+def test_get_database_hash_not_found(client: SqlClient[Any]) -> None:
+    with pytest.raises(ValueError, match="not found in the database"):
+        client._get_database_hash("nonexistent.sql")  # type: ignore

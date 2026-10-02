@@ -2,10 +2,12 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from migrateit.models import ChangelogFile, Migration
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.changelog import ChangelogFile, SupportedDatabase
+from migrateit.models.migration import Migration
 from migrateit.reporters import write_line
 from migrateit.reporters.logs import logger
+
+# TODO: move all this functions to models
 
 
 def create_migration_directory(migrations_dir: Path) -> None:
@@ -142,10 +144,11 @@ def create_changelog_file(migrations_file: Path, database: SupportedDatabase) ->
         database: The database type.
     """
     if migrations_file.exists():
-        raise ValueError(f"File {migrations_file.name} already exists")
+        raise FileExistsError(f"File {migrations_file.name} already exists")
     if not migrations_file.name.endswith(".json"):
         raise ValueError(f"File {migrations_file.name} must be a JSON file")
     changelog = ChangelogFile(version=1, database=database)
+    migrations_file.parent.mkdir(parents=True, exist_ok=True)
     migrations_file.write_text(changelog.to_json())
     return load_changelog_file(migrations_file)
 

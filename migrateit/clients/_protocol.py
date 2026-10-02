@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from migrateit.models import Migration, MigrationStatus
+from migrateit.models.migration import Migration, MigrationStatus
 
 
 class SqlClientProtocol(Protocol):
@@ -109,3 +109,5 @@ class SqlClientProtocol(Protocol):
             A tuple containing the error and the SQL query if there is a syntax error, None otherwise.
         """
         ...
+
+    def _patch_sql_statement(self, sql: str) -> str: ...
