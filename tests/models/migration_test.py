@@ -3,8 +3,14 @@ from pathlib import Path
 
 import pytest
 
+from migrateit.constants import ROLLBACK_SPLIT_TAG
 from migrateit.models.changelog import ChangelogFile, SupportedDatabase
-from migrateit.models.migration import Migration
+from migrateit.models.migration import (
+    Migration,
+    create_migration_directory,
+    retrieve_migration_sqls,
+    write_into_migration_file,
+)
 
 # --- migration.is_valid_name tests ---
 
@@ -135,3 +141,170 @@ def test_migration_is_same_migration_name_empty_second() -> None:
 @pytest.mark.unit
 def test_migration_is_same_migration_name_both_empty() -> None:
     assert Migration.is_same_migration_name("", "") is False
+
+
+# --- create_migration_directory tests ---
+
+
+@pytest.mark.unit
+def test_create_migration_directory(temp_dir: Path) -> None:
+    d = temp_dir / "migrations"
+    create_migration_directory(d)
+    assert d.is_dir()
+
+
+@pytest.mark.unit
+def test_create_migration_directory_already_exists(temp_dir: Path) -> None:
+    d = temp_dir / "migrations"
+    d.mkdir(exist_ok=True)
+    create_migration_directory(d)
+    assert d.is_dir()
+
+
+# --- retrieve_migration_sqls tests ---
+
+
+@pytest.mark.unit
+def test_retrieve_sql_with_both_sections(temp_dir: Path) -> None:
+    file_path = temp_dir / "test.sql"
+    content = (
+        "-- Migration 0001_test.sql\n"
+        "-- Created on 2024-01-01\n\n"
+        "CREATE TABLE test (id INT);\n\n"
+        "-- Rollback migration\n\n"
+        "DROP TABLE test;\n"
+    )
+    file_path.write_text(content)
+    sql, rollback = retrieve_migration_sqls(file_path)
+    assert sql == "CREATE TABLE test (id INT);"
+    assert rollback == "DROP TABLE test;"
+
+
+@pytest.mark.unit
+def test_retrieve_sql_only_forward(temp_dir: Path) -> None:
+    file_path = temp_dir / "test.sql"
+    content = "-- Migration 0001_test.sql\nSELECT 1;\n"
+    file_path.write_text(content)
+    sql, rollback = retrieve_migration_sqls(file_path)
+    assert sql == "SELECT 1;"
+    assert rollback is None
+
+
+@pytest.mark.unit
+def test_retrieve_sql_empty_forward(temp_dir: Path) -> None:
+    file_path = temp_dir / "test.sql"
+    content = f"\n\n{ROLLBACK_SPLIT_TAG}\n\nDROP TABLE test;\n"
+    file_path.write_text(content)
+    sql, rollback = retrieve_migration_sqls(file_path)
+    assert sql == ""
+    assert rollback == "DROP TABLE test;"
+
+
+@pytest.mark.unit
+def test_retrieve_sql_multiple_statements(temp_dir: Path) -> None:
+    file_path = temp_dir / "test.sql"
+    content = (
+        "-- Migration\n"
+        "CREATE TABLE a (id INT);\n"
+        "CREATE TABLE b (id INT);\n\n"
+        "-- Rollback migration\n\n"
+        "DROP TABLE b; DROP TABLE a;"
+    )
+    file_path.write_text(content)
+    sql, rollback = retrieve_migration_sqls(file_path)
+    assert sql == "CREATE TABLE a (id INT);\nCREATE TABLE b (id INT);"
+    assert rollback == "DROP TABLE b; DROP TABLE a;"
+
+
+@pytest.mark.unit
+def test_retrieve_sql_nonexistent_file(temp_dir: Path) -> None:
+    bad_path = temp_dir / "nonexistent.sql"
+    with pytest.raises(ValueError, match="is not a valid SQL file"):
+        retrieve_migration_sqls(bad_path)
+
+
+@pytest.mark.unit
+def test_retrieve_sql_non_sql_file(temp_dir: Path) -> None:
+    bad_path = temp_dir / "test.txt"
+    bad_path.write_text("SELECT 1;")
+    with pytest.raises(ValueError, match="is not a valid SQL file"):
+        retrieve_migration_sqls(bad_path)
+
+
+@pytest.mark.unit
+def test_retrieve_sql_no_rollback_tag_removes_comments(temp_dir: Path) -> None:
+    file_path = temp_dir / "test.sql"
+    content = "-- Migration 0001_test.sql\n-- Created on 2024-01-01\n\nSELECT 1;\n"
+    file_path.write_text(content)
+    sql, rollback = retrieve_migration_sqls(file_path)
+    assert sql is not None
+    assert rollback is None
+    assert "-- Migration" not in sql
+    assert "-- Created on" not in sql
+    assert sql == "SELECT 1;"
+
+
+# --- write_into_migration_file tests ---
+
+
+@pytest.mark.unit
+def _make_migration_file(temp_dir: Path, filename: str = "0001_test.sql") -> Path:
+    file_path = temp_dir / filename
+    template = f"-- Migration {file_path.name}\n-- Created on 2024-01-01\n\n{ROLLBACK_SPLIT_TAG}"
+    file_path.write_text(template)
+    return file_path
+
+
+@pytest.mark.unit
+def test_write_sql_and_rollback(temp_dir: Path) -> None:
+    file_path = _make_migration_file(temp_dir)
+    write_into_migration_file(file_path, sql="CREATE TABLE test (id INT);", rollback="DROP TABLE test;")
+    content = file_path.read_text()
+    assert "CREATE TABLE test (id INT);" in content
+    assert "DROP TABLE test;" in content
+
+
+@pytest.mark.unit
+def test_write_sql_only(temp_dir: Path) -> None:
+    file_path = _make_migration_file(temp_dir)
+    write_into_migration_file(file_path, sql="SELECT 1;", rollback=None)
+    content = file_path.read_text()
+    assert "SELECT 1;" in content
+
+
+@pytest.mark.unit
+def test_write_rollback_only(temp_dir: Path) -> None:
+    file_path = _make_migration_file(temp_dir)
+    write_into_migration_file(file_path, sql=None, rollback="SELECT 2;")
+    content = file_path.read_text()
+    assert "SELECT 2;" in content
+
+
+@pytest.mark.unit
+def test_write_both_none_raises(temp_dir: Path) -> None:
+    file_path = _make_migration_file(temp_dir)
+    with pytest.raises(ValueError, match="At least one of sql or rollback must be provided"):
+        write_into_migration_file(file_path, sql=None, rollback=None)
+
+
+@pytest.mark.unit
+def test_write_no_rollback_tag_raises(temp_dir: Path) -> None:
+    bad_path = temp_dir / "bad.sql"
+    bad_path.write_text("SELECT 1;")
+    with pytest.raises(ValueError, match="does not contain a rollback section"):
+        write_into_migration_file(bad_path, sql="SELECT 1;", rollback=None)
+
+
+@pytest.mark.unit
+def test_write_sql_strips_newlines(temp_dir: Path) -> None:
+    file_path = _make_migration_file(temp_dir)
+    write_into_migration_file(
+        file_path,
+        sql="\n\n  CREATE TABLE test (id INT);  \n\n",
+        rollback="\n\n  DROP TABLE test;  \n\n",
+    )
+    content = file_path.read_text()
+    assert "CREATE TABLE test (id INT);" in content
+    assert "DROP TABLE test;" in content
+    # Verify excessive blank lines are collapsed
+    assert "\n\n\n\n" not in content

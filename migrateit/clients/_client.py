@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any, override
 
 import sqlfluff
 
+from migrateit import constants as C
 from migrateit.clients._protocol import SqlClientProtocol
 from migrateit.models.changelog import ChangelogFile, SupportedDatabase
 from migrateit.models.config import MigrateItConfig
 from migrateit.models.migration import Migration
-from migrateit.tree import ROLLBACK_SPLIT_TAG
 
 WHITESPACE_RE = re.compile(r"\s+")
 
@@ -69,7 +69,7 @@ class SqlClient[T](ABC, SqlClientProtocol):
     @staticmethod
     def get_migration_content_and_hash(path: Path) -> tuple[str, str, str]:
         content = path.read_text()
-        parts = content.split(ROLLBACK_SPLIT_TAG)
+        parts = content.split(C.ROLLBACK_SPLIT_TAG)
         if len(parts) == 1:
             raise ValueError("No rollback tag in migration file")
         if len(parts) > 2:

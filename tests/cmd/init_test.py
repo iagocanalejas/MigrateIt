@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from migrateit.cmd import cmd_init
+from migrateit.constants import ROLLBACK_SPLIT_TAG
 from migrateit.models.changelog import SupportedDatabase
-from migrateit.tree import ROLLBACK_SPLIT_TAG
 from tests.conftest import (
     INITIAL_MIGRATION,
     TEST_MIGRATIONS_TABLE,

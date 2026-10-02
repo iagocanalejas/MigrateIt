@@ -2,10 +2,10 @@ from typing import Any
 
 import pytest
 
+from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.constants import MIGRATEIT_MIGRATIONS_TABLE
 from migrateit.models.changelog import SupportedDatabase
-from migrateit.tree import ROLLBACK_SPLIT_TAG, create_new_migration
 
 
 def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
@@ -15,7 +15,7 @@ def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
     migration_path = client.migrations_dir / client.changelog.migrations[1].name
     assert migration_path.is_file()
 
-    forward_part, rollback_part = content.split(ROLLBACK_SPLIT_TAG)
+    forward_part, rollback_part = content.split(C.ROLLBACK_SPLIT_TAG)
     forward_part = forward_part.lower()
     rollback_part = rollback_part.lower()
 
@@ -53,8 +53,7 @@ def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
 
 
 def test_export_invalid_parents(client: SqlClient[Any]) -> None:
-    migration = create_new_migration(
-        changelog=client.changelog,
+    migration = client.changelog.create_new_migration(
         migrations_dir=client.migrations_dir,
         name="full_export",
         dependencies=["0000_migrateit.sql"],
@@ -67,8 +66,7 @@ def test_export_invalid_parents(client: SqlClient[Any]) -> None:
 
 def _export_and_read(client: SqlClient[Any], migration_name: str = "full_export") -> str:
     root = client.changelog.root
-    migration = create_new_migration(
-        changelog=client.changelog,
+    migration = client.changelog.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=migration_name,
         dependencies=[root.name],

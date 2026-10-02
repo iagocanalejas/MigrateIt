@@ -6,19 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.changelog import SupportedDatabase
-from migrateit.models.migration import MigrationStatus
-from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, write_line
-from migrateit.reporters.logs import logger
-from migrateit.tree import (
-    create_changelog_file,
+from migrateit.models.changelog import SupportedDatabase, create_changelog_file
+from migrateit.models.migration import (
+    MigrationStatus,
     create_migration_directory,
-    create_new_migration,
-    find_path,
     retrieve_migration_sqls,
-    save_changelog_file,
     write_into_migration_file,
 )
+from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, write_line
+from migrateit.reporters.logs import logger
 
 
 def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, database: SupportedDatabase) -> int:
@@ -30,7 +26,7 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     create_migration_directory(migrations_dir)
 
     write_line(f"\tCreating migration for table: {table_name}")
-    migration = create_new_migration(changelog=changelog, migrations_dir=migrations_dir, name="migrateit")
+    migration = changelog.create_new_migration(migrations_dir=migrations_dir, name="migrateit")
     match database:
         case SupportedDatabase.MYSQL:
             from migrateit.clients.mysql import MySqlClient
@@ -58,8 +54,7 @@ def cmd_export(client: SqlClient[Any], name: str | None) -> int:
         name = f"{client.changelog.database.value}_backup"
 
     write_line(f"Creating new migration: {name}")
-    migration = create_new_migration(
-        changelog=client.changelog,
+    migration = client.changelog.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=name,
         dependencies=[client.changelog.root.name],
@@ -81,8 +76,7 @@ def cmd_new(
         raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
 
     write_line(f"Creating new migration: {name}")
-    migration = create_new_migration(
-        changelog=client.changelog,
+    migration = client.changelog.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=name,
         dependencies=dependencies,
@@ -179,7 +173,7 @@ def cmd_squash(
     end_migration = client.changelog.get_migration_by_name(end_migration).name
     write_line(f"Squashing migrations from {start_migration} to {end_migration}.")
 
-    to_squash = find_path(client.changelog.migrations_tree, start_migration, end_migration)
+    to_squash = client.changelog.find_path(start_migration, end_migration)
     write_line(f"Following migrations will be squashed: {', '.join(to_squash)}")
     if not to_squash:
         raise ValueError(f"No path found from {start_migration} to {end_migration}.")
@@ -190,8 +184,7 @@ def cmd_squash(
     if not all(statuses[m] == statuses[to_squash[0]] for m in to_squash):
         raise ValueError("Cannot squash migrations that are not in the same state.")
 
-    squashed_migration = create_new_migration(
-        changelog=client.changelog,
+    squashed_migration = client.changelog.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=name if name else f"squashed_{start_migration}_{end_migration}",
         dependencies=client.changelog.get_migration_by_name(start_migration).parents,
@@ -215,7 +208,7 @@ def cmd_squash(
         write_line(f"Squashed migration {squashed_migration.name} applied in the database.")
 
     client.changelog.migrations = [m for m in client.changelog.migrations if m.name not in to_squash]
-    save_changelog_file(client.changelog)
+    client.changelog.save()
     write_line(f"Changelog updated: removed {len(to_squash)} migration(s), added {squashed_migration.name}")
 
     return 0

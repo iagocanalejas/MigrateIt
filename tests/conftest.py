@@ -9,12 +9,12 @@ from urllib.parse import urlparse
 
 import pytest
 
+from migrateit import constants as C
 from migrateit.clients._client import SqlClient, get_client
 from migrateit.clients.sqlite import SqliteClient
 from migrateit.cmd import cmd_init
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.changelog import SupportedDatabase, load_changelog_file
 from migrateit.models.config import MigrateItConfig
-from migrateit.tree import ROLLBACK_SPLIT_TAG, load_changelog_file
 
 INITIAL_MIGRATION = "0000_migrateit.sql"
 TEST_MIGRATIONS_TABLE = "migrations"
@@ -162,7 +162,7 @@ def _create_migration_file(
     path = migrations_dir / filename
     with open(path, "w") as f:
         f.write(sql or f"-- Migration {filename}\n")
-        f.write(f"{ROLLBACK_SPLIT_TAG}")
+        f.write(f"{C.ROLLBACK_SPLIT_TAG}")
         f.write(f"\n\n{rollback_sql}")
     return path
 

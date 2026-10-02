@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import pytest
 
-from migrateit.models.changelog import ChangelogFile, SupportedDatabase
+from migrateit.models.changelog import ChangelogFile, SupportedDatabase, create_changelog_file, load_changelog_file
 from migrateit.models.migration import Migration, MigrationStatus
 
 # --- changelog.to_dict tests ---
@@ -268,6 +270,211 @@ def test_build_plan_rollback_no_target() -> None:
     statuses: dict[str, MigrationStatus] = {"0000_init.sql": MigrationStatus.APPLIED}
     with pytest.raises(ValueError, match="Target migration is required for rollback"):
         changelog.build_migration_plan(statuses, is_rollback=True)
+
+
+# --- save_changelog_file tests ---
+
+
+@pytest.mark.unit
+def test_save_changelog_file(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    path.touch()
+    cl = ChangelogFile(version=2, path=path)
+    cl.save()
+    assert '"version": 2' in path.read_text()
+
+
+@pytest.mark.unit
+def test_save_changelog_file_not_exists(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    cl = ChangelogFile(version=1, path=path)
+    with pytest.raises(FileNotFoundError):
+        cl.save()
+
+
+# --- create_new_migration tests ---
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_new_migration_success(temp_dir: Path, database: SupportedDatabase) -> None:
+    migrations_dir = temp_dir / "migrations"
+    migrations_dir.mkdir(exist_ok=True)
+    path = temp_dir / "changelog.json"
+    cl = create_changelog_file(path, database)
+
+    cl.create_new_migration(migrations_dir, "init")
+    created_files = sorted(migrations_dir.iterdir())
+    assert len(created_files) == 1
+    assert created_files[0].name == "0000_init.sql"
+
+    migrations = load_changelog_file(path)
+    assert len(migrations.migrations) == 1
+    assert migrations.migrations[0].name.endswith("init.sql")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_new_migration_with_dependencies(temp_dir: Path, database: SupportedDatabase) -> None:
+    migrations_dir = temp_dir / "migrations"
+    migrations_dir.mkdir(exist_ok=True)
+    path = temp_dir / "changelog.json"
+    cl = create_changelog_file(path, database)
+
+    cl.create_new_migration(migrations_dir, "init")
+    cl.create_new_migration(migrations_dir, "add_users", dependencies=["0000"])
+    created_files = sorted(migrations_dir.iterdir())
+    assert len(created_files) == 2
+    assert created_files[0].name == "0000_init.sql"
+    assert created_files[1].name == "0001_add_users.sql"
+
+    migrations = load_changelog_file(path)
+    assert len(migrations.migrations) == 2
+    assert "init" in migrations.migrations[1].parents[0]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_new_migration_invalid_name(temp_dir: Path, database: SupportedDatabase) -> None:
+    migrations_dir = temp_dir / "migrations"
+    migrations_dir.mkdir(exist_ok=True)
+    path = temp_dir / "changelog.json"
+    cl = create_changelog_file(path, database)
+
+    with pytest.raises(ValueError, match="not a valid identifier"):
+        cl.create_new_migration(migrations_dir, "123-bad-name")
+
+    with pytest.raises(ValueError, match="not a valid identifier"):
+        cl.create_new_migration(migrations_dir, "")
+
+
+# --- create_changelog_file tests ---
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_changelog_file(temp_dir: Path, database: SupportedDatabase) -> None:
+    path = temp_dir / "changelog.json"
+    cl = create_changelog_file(path, database)
+    assert path.exists()
+    assert cl.version == 1
+    assert cl.database == database
+    assert cl.path == path
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_changelog_file_invalid_extension(temp_dir: Path, database: SupportedDatabase) -> None:
+    bad_path = temp_dir / "migrations.txt"
+    with pytest.raises(ValueError, match="must be a JSON file"):
+        create_changelog_file(bad_path, database)
+
+
+# --- load_changelog_file tests ---
+
+
+@pytest.mark.unit
+def test_load_changelog_file_not_exists(temp_dir: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        load_changelog_file(temp_dir / "changelog.json")
+
+
+@pytest.mark.unit
+def test_load_changelog_file_valid(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    cl = ChangelogFile(version=1, migrations=[], path=path)
+    path.write_text(cl.to_json())
+    loaded = load_changelog_file(path)
+    assert loaded.version == 1
+
+
+@pytest.mark.unit
+def test_load_changelog_file_multiple_initial_raises(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    migrations = [
+        Migration(name="0000_a.sql", initial=True, parents=[]),
+        Migration(name="0001_b.sql", initial=True, parents=[]),
+    ]
+    cl = ChangelogFile(version=1, migrations=migrations, path=path)
+    path.write_text(cl.to_json())
+    with pytest.raises(ValueError, match="exactly one initial migration"):
+        load_changelog_file(path)
+
+
+@pytest.mark.unit
+def test_load_changelog_file_initial_with_parents_raises(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    migrations = [Migration(name="0000_a.sql", initial=True, parents=["0001_b.sql"])]
+    cl = ChangelogFile(version=1, migrations=migrations, path=path)
+    path.write_text(cl.to_json())
+    with pytest.raises(ValueError, match="cannot have parents"):
+        load_changelog_file(path)
+
+
+@pytest.mark.unit
+def test_load_changelog_file_non_initial_without_parents_raises(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    migrations = [Migration(name="0000_a.sql", initial=True, parents=[])]
+    cl = ChangelogFile(version=1, migrations=migrations, path=path)
+    path.write_text(cl.to_json())
+    # Single initial migration is valid; adding a non-initial without parents
+    migrations.append(Migration(name="0001_b.sql", parents=[]))
+    cl.migrations = migrations
+    path.write_text(cl.to_json())
+    with pytest.raises(ValueError, match="must have parents"):
+        load_changelog_file(path)
+
+
+# --- find_path tests ---
+
+
+@pytest.mark.unit
+def test_find_path_same_node() -> None:
+    cl = ChangelogFile(version=1, migrations=[Migration(name="0001_a")])
+    path = cl.find_path("0001_a", "0001_a")
+    assert path == ["0001_a"]
+
+
+@pytest.mark.unit
+def test_find_path_linear() -> None:
+    cl = ChangelogFile(
+        version=1,
+        migrations=[
+            Migration(name="0001_a"),
+            Migration(name="0002_b", parents=["0001_a"]),
+            Migration(name="0003_c", parents=["0002_b"]),
+        ],
+    )
+    path = cl.find_path("0001_a", "0003_c")
+    assert path == ["0001_a", "0002_b", "0003_c"]
+
+
+@pytest.mark.unit
+def test_find_path_no_path() -> None:
+    cl = ChangelogFile(
+        version=1,
+        migrations=[
+            Migration(name="0001_a"),
+            Migration(name="0002_b"),
+        ],
+    )
+    path = cl.find_path("0001_a", "0002_b")
+    assert path == []
+
+
+@pytest.mark.unit
+def test_find_path_branching() -> None:
+    cl = ChangelogFile(
+        version=1,
+        migrations=[
+            Migration(name="0001_a"),
+            Migration(name="0002_b", parents=["0001_a"]),
+            Migration(name="0003_c", parents=["0001_a"]),
+            Migration(name="0004_d", parents=["0003_c"]),
+        ],
+    )
+    path = cl.find_path("0001_a", "0004_d")
+    assert path == ["0001_a", "0003_c", "0004_d"]
 
 
 # --- print_list / print_dag tests ---

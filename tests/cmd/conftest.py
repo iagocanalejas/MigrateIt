@@ -3,9 +3,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.changelog import SupportedDatabase, create_changelog_file
 from migrateit.models.migration import Migration
-from migrateit.tree import create_changelog_file
 from tests.conftest import INITIAL_MIGRATION
 
 

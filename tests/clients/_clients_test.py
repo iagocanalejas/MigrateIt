@@ -8,11 +8,11 @@ import pytest
 import sqlfluff
 
 from migrateit.clients._client import SqlClient
+from migrateit.constants import ROLLBACK_SPLIT_TAG
 from migrateit.models.changelog import ChangelogFile, SupportedDatabase
 from migrateit.models.config import MigrateItConfig
 from migrateit.models.connection import get_connection
 from migrateit.models.migration import Migration, MigrationStatus
-from migrateit.tree import ROLLBACK_SPLIT_TAG
 from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file, _drop_test_table
 
 MIGRATION_NAME = "0001_test_table.sql"

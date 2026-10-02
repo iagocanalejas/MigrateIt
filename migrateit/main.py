@@ -5,12 +5,11 @@ from pathlib import Path
 import migrateit.constants as C
 from migrateit import cmd as commands
 from migrateit.clients._client import get_client
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.changelog import SupportedDatabase, load_changelog_file
 from migrateit.models.config import MigrateItConfig
 from migrateit.models.connection import get_connection
 from migrateit.reporters import FatalError, error_handler, logging_handler, print_logo
 from migrateit.reporters.logs import logger
-from migrateit.tree import load_changelog_file
 
 
 def main() -> int:

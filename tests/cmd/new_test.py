@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from migrateit.cmd import cmd_new
-from migrateit.tree import load_changelog_file
+from migrateit.models.changelog import load_changelog_file
 
 from .conftest import _mock_client
 
