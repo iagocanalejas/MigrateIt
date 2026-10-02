@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from typing import override
 
 import psycopg
@@ -9,6 +10,7 @@ from migrateit.clients._client import SqlClient
 from migrateit.models.migration import Migration, MigrationStatus
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
+from migrateit.tree import ROLLBACK_SPLIT_TAG, get_migration_header
 
 
 class PsqlClient(SqlClient[psycopg.Connection]):
@@ -153,6 +155,191 @@ WHERE migration_name = %(migration)s;
         """)
         with self.connection.cursor() as cursor:
             cursor.execute(query.format(Identifier(self.table_name)), {"migration": path.name, "hash": migration_hash})
+
+    @override
+    def export_database_schema(self, migration: Migration) -> None:
+        if len(migration.parents) != 1 or migration.parents[0] != self.changelog.root.name:
+            raise ValueError("Full database export must depend only on the initial migration")
+
+        forward_ddl = []
+        rollback_ddl = []
+        write_line(f"Exporting full database schema to '{migration.name}'...")
+        with self.connection.cursor() as cursor:
+            # -------------------------------------------------------------
+            # 1. SCHEMAS
+            # -------------------------------------------------------------
+            write_line("\tExporting schemas...")
+            cursor.execute("""
+SELECT schema_name
+FROM information_schema.schemata
+WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast') AND schema_name NOT LIKE 'pg_temp%';
+            """)
+            for (schema,) in cursor.fetchall():
+                if schema != "public":
+                    forward_ddl.append(f"CREATE SCHEMA IF NOT EXISTS {schema};")
+                    rollback_ddl.append(f"DROP SCHEMA IF EXISTS {schema} CASCADE;")
+
+            # -------------------------------------------------------------
+            # 2. ENUM TYPES
+            # -------------------------------------------------------------
+            write_line("\tExporting enum types...")
+            cursor.execute("""
+SELECT n.nspname, t.typname, array_agg(e.enumlabel ORDER BY e.enumsortorder)
+FROM pg_type t
+    JOIN pg_enum e ON t.oid = e.enumtypid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+GROUP BY n.nspname, t.typname;
+            """)
+            for schema, typname, labels in cursor.fetchall():
+                formatted_labels = ", ".join(f"'{lbl}'" for lbl in labels)
+                forward_ddl.append(f"CREATE TYPE {schema}.{typname} AS ENUM ({formatted_labels});")
+                rollback_ddl.append(f"DROP TYPE IF EXISTS {schema}.{typname};")
+
+            # -------------------------------------------------------------
+            # 3. SEQUENCES
+            # -------------------------------------------------------------
+            write_line("\tExporting sequences...")
+            cursor.execute("""
+SELECT sequence_schema, sequence_name
+FROM information_schema.sequences
+WHERE sequence_schema NOT IN ('pg_catalog', 'information_schema');
+            """)
+            for schema, seq_name in cursor.fetchall():
+                forward_ddl.append(f"CREATE SEQUENCE IF NOT EXISTS {schema}.{seq_name};")
+                rollback_ddl.append(f"DROP SEQUENCE IF EXISTS {schema}.{seq_name} CASCADE;")
+
+            # -------------------------------------------------------------
+            # 4. TABLES & COLUMNS
+            # -------------------------------------------------------------
+            write_line("\tExporting tables and columns...")
+            cursor.execute("""
+SELECT c.table_schema, c.table_name, c.column_name, c.data_type, c.udt_name,
+    c.character_maximum_length, c.is_nullable, c.column_default
+FROM information_schema.columns c
+    JOIN information_schema.tables t ON c.table_schema = t.table_schema AND c.table_name = t.table_name
+WHERE t.table_type = 'BASE TABLE' AND c.table_schema NOT IN ('pg_catalog', 'information_schema')
+ORDER BY c.table_schema, c.table_name, c.ordinal_position;
+            """)
+            table_columns = defaultdict(list)
+            for row in cursor.fetchall():
+                (schema, table, col, dtype, udt_name, char_len, nullable, default) = row
+
+                if char_len and dtype in ("character varying", "character"):
+                    col_type = f"{dtype}({char_len})"
+                elif dtype == "USER-DEFINED":
+                    col_type = f"{schema}.{udt_name}"
+                else:
+                    col_type = dtype
+
+                col_def = f"    {col} {col_type}"
+                if nullable == "NO":
+                    col_def += " NOT NULL"
+                if default is not None:
+                    col_def += f" DEFAULT {default}"
+
+                table_columns[(schema, table)].append(col_def)
+
+            tables_list = []
+            for (schema, table), cols in table_columns.items():
+                if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+                    continue
+                cols_str = ",\n".join(cols)
+                forward_ddl.append(f"CREATE TABLE IF NOT EXISTS {schema}.{table} (\n{cols_str}\n);")
+                tables_list.append((schema, table))
+            for schema, table in reversed(tables_list):
+                rollback_ddl.append(f"DROP TABLE IF EXISTS {schema}.{table} CASCADE;")
+
+            # -------------------------------------------------------------
+            # 5. FUNCTIONS & PROCEDURES
+            # -------------------------------------------------------------
+            write_line("\tExporting functions and procedures...")
+            cursor.execute("""
+SELECT n.nspname, p.proname, pg_get_functiondef(p.oid)
+FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND p.prokind IN ('f', 'p');
+            """)
+            for schema, name, func_def in cursor.fetchall():
+                forward_ddl.append(f"{func_def};")
+                # Extract argument signature for precise DROP FUNCTION matching
+                cursor.execute("SELECT pg_get_function_identity_arguments(%s::regproc)", [f"{schema}.{name}"])
+                args_sig = cursor.fetchone()
+                if args_sig is None or len(args_sig) == 0:
+                    raise ValueError(f"Could not extract argument signature for function {schema}.{name}")
+                rollback_ddl.append(f"DROP FUNCTION IF EXISTS {schema}.{name}({args_sig[0]}) CASCADE;")
+
+            # -------------------------------------------------------------
+            # 6. VIEWS
+            # -------------------------------------------------------------
+            write_line("\tExporting views...")
+            cursor.execute("""
+SELECT table_schema, table_name, view_definition
+FROM information_schema.views
+WHERE table_schema NOT IN ('pg_catalog', 'information_schema');
+            """)
+            for schema, view_name, view_def in cursor.fetchall():
+                forward_ddl.append(f"CREATE OR REPLACE VIEW {schema}.{view_name} AS\n{view_def.strip()};")
+                rollback_ddl.append(f"DROP VIEW IF EXISTS {schema}.{view_name};")
+
+            # -------------------------------------------------------------
+            # 7. CONSTRAINTS (Primary Keys, Foreign Keys, Unique, Check)
+            # Added via ALTER TABLE to avoid foreign key dependency ordering issues
+            # -------------------------------------------------------------
+            write_line("\tExporting constraints...")
+            cursor.execute("""
+SELECT n.nspname, c.relname, con.conname, pg_get_constraintdef(con.oid)
+FROM pg_constraint con
+    JOIN pg_class c ON c.oid = con.conrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname NOT IN ('pg_catalog', 'information_schema');
+            """)
+            for schema, table, conname, condef in cursor.fetchall():
+                if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+                    continue
+                forward_ddl.append(f"ALTER TABLE ONLY {schema}.{table} ADD CONSTRAINT {conname} {condef};")
+                # automatically drop constraints in DROP TABLE
+
+            # -------------------------------------------------------------
+            # 8. INDEXES (Excluding indexes created automatically by constraints)
+            # -------------------------------------------------------------
+            write_line("\tExporting indexes...")
+            cursor.execute("""
+SELECT schemaname, tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+  AND indexname NOT IN (SELECT conname FROM pg_constraint WHERE contype IN ('p', 'u'));
+            """)
+            for schema, table, indexname, indexdef in cursor.fetchall():
+                if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+                    continue
+                forward_ddl.append(f"{indexdef};")
+                # automatically drop indexes in DROP TABLE
+
+            # -------------------------------------------------------------
+            # 9. TRIGGERS
+            # -------------------------------------------------------------
+            write_line("\tExporting triggers...")
+            cursor.execute("""
+SELECT n.nspname, c.relname, trig.tgname, pg_get_triggerdef(trig.oid)
+FROM pg_trigger trig
+    JOIN pg_class c ON c.oid = trig.tgrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND NOT trig.tgisinternal;
+            """)
+            for schema, table, tgname, tgdef in cursor.fetchall():
+                if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+                    continue
+                forward_ddl.append(f"{tgdef};")
+                # automatically drop triggers in DROP TABLE
+
+        migration_path = self.migrations_dir / migration.name
+        with open(migration_path, "w", encoding="utf-8") as f:
+            f.write(get_migration_header(migration_path))
+            f.write("-- Migration automatically generated by migrateit\n\n")
+            f.write("\n\n".join(forward_ddl) + "\n\n\n")
+            f.write(ROLLBACK_SPLIT_TAG + "\n\n\n")
+            f.write("\n\n".join(reversed(rollback_ddl)) + "\n")
 
     @override
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:

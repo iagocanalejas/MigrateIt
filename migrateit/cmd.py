@@ -53,6 +53,24 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     return 0
 
 
+def cmd_export(client: SqlClient[Any], name: str | None) -> int:
+    if not name:
+        name = f"{client.changelog.database.value}_backup"
+
+    write_line(f"Creating new migration: {name}")
+    migration = create_new_migration(
+        changelog=client.changelog,
+        migrations_dir=client.migrations_dir,
+        name=name,
+        dependencies=[client.changelog.root.name],
+    )
+    write_line(f"Migration file created: {migration.name}")
+
+    client.export_database_schema(migration)
+    write_line(f"Full database exported to: {migration.name}")
+    return 0
+
+
 def cmd_new(
     client: SqlClient[Any],
     name: str,
@@ -149,6 +167,9 @@ def cmd_squash(
     end_migration: str | None = None,
     name: str | None = None,
 ) -> int:
+    if not client.is_migrations_table_created():
+        raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
+
     if not end_migration:
         if len(client.changelog.migrations) < 3:
             raise ValueError("Cannot squash less than 3 migrations.")

@@ -50,7 +50,9 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
                 yield pg_conn
             finally:
                 with pg_conn.cursor() as cursor:
-                    cursor.execute(f"DROP TABLE IF EXISTS {TEST_MIGRATIONS_TABLE}")
+                    cursor.execute("DROP SCHEMA public CASCADE;")
+                    cursor.execute("DROP SCHEMA IF EXISTS app_schema CASCADE;")
+                    cursor.execute("CREATE SCHEMA public;")
                 pg_conn.commit()
                 pg_conn.close()
 
@@ -60,18 +62,20 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
             from migrateit.clients.mysql import MySqlClient
 
             parsed = urlparse(MySqlClient.get_environment_url())
+            db_name = parsed.path.lstrip("/")
             mysql_conn = mysql.connector.connect(
                 host=parsed.hostname,
                 port=parsed.port,
                 user=parsed.username,
                 password=parsed.password,
-                database=parsed.path.lstrip("/"),
+                database=db_name,
             )
             try:
                 yield mysql_conn
             finally:
                 with mysql_conn.cursor() as cursor:
-                    cursor.execute(f"DROP TABLE IF EXISTS {TEST_MIGRATIONS_TABLE}")
+                    cursor.execute(f"DROP DATABASE IF EXISTS `{db_name}`;")
+                    cursor.execute(f"CREATE DATABASE `{db_name}`;")
                 mysql_conn.commit()
                 mysql_conn.close()
 

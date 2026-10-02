@@ -31,6 +31,7 @@ def main() -> int:
         return parser
 
     _cmd_init(_add_cmd("init", help="Initialize the migration directory and database"))
+    _cmd_export(_add_cmd("export", help="Export the current database schema to a migration file"))
     _cmd_new(_add_cmd("new", help="Create a new migration"))
     _cmd_migrate(_add_cmd("migrate", help="Run migrations"))
     _cmd_rollback(_add_cmd("rollback", help="Rollback migrations"))
@@ -62,7 +63,10 @@ def main() -> int:
             with get_connection(changelog.database) as conn:
                 logger.debug("Connected to database: %s", changelog.database.value)
                 client = get_client(config, connection=conn)
-                if args.command == "new":
+
+                if args.command == "export":
+                    return commands.cmd_export(client, args.name)
+                elif args.command == "new":
                     return commands.cmd_new(
                         client,
                         name=args.name,
@@ -109,13 +113,24 @@ def _cmd_init(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     return parser
 
 
+def _cmd_export(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument(
+        "name",
+        type=str,
+        nargs="?",
+        help="Name of the migration containing the database SQL dump.",
+    )
+    parser.set_defaults(func=commands.cmd_export)
+    return parser
+
+
 def _cmd_new(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument(
         "name",
         type=str,
         nargs="?",
         default=f"auto_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-        help="Name of the new migration",
+        help="Name of the new migration.",
     )
     parser.add_argument(
         "-d",
