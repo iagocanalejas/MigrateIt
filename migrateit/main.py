@@ -71,6 +71,7 @@ def main() -> int:
                         name=args.name,
                         dependencies=args.dependencies,
                         no_edit=args.no_edit,
+                        interactive=args.interactive,
                     )
                 elif args.command == "show":
                     return commands.cmd_show(
@@ -136,6 +137,13 @@ def _cmd_new(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         "--dependencies",
         nargs="*",
         help="List of migration names that this migration depends on.",
+    )
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        default=False,
+        help="Allow to interactively select the migration dependencies.",
     )
     parser.add_argument(
         "--no-edit",

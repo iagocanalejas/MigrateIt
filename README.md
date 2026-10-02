@@ -75,6 +75,9 @@ migrateit new first_migration
 # Create a migration with dependencies
 migrateit new add_email -d 0000
 
+# Create a migration choosing dependencies interactively
+migrateit new add_email -i
+
 # Add your SQL commands to the migration file
 echo "CREATE TABLE users (id SERIAL PRIMARY KEY, email TEXT);" > migrateit/0001_first_migration.sql
 
@@ -150,6 +153,7 @@ options:
   -h, --help            show this help message and exit
   -d, --dependencies [DEPENDENCIES ...]
                         List of migration names that this migration depends on.
+  -i, --interactive     Choose dependencies interactively.
   --no-edit             Avoid opening the migration file in an editor after creation.
 ```
 

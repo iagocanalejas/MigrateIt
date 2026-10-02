@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import inquirer
+
 from migrateit.clients._client import SqlClient
 from migrateit.models.changelog import SupportedDatabase, create_changelog_file
 from migrateit.models.migration import (
@@ -71,9 +73,24 @@ def cmd_new(
     name: str,
     dependencies: list[str] | None = None,
     no_edit: bool = False,
+    interactive: bool = False,
 ) -> int:
     if not client.is_migrations_table_created():
         raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
+    if interactive and dependencies is not None and len(dependencies) > 0:
+        raise ValueError("Cannot specify both `--interactive` and `--dependencies`")
+
+    if interactive:
+        choices = inquirer.prompt(
+            [
+                inquirer.Checkbox(
+                    "dependencies",
+                    message="Select dependencies for the migration",
+                    choices=[m.name for m in client.changelog.migrations],
+                )
+            ],
+        )
+        dependencies = choices.get("dependencies", None) if choices else None
 
     write_line(f"Creating new migration: {name}")
     migration = client.changelog.create_new_migration(
