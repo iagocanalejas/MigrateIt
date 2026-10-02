@@ -20,7 +20,7 @@ WHERE migration_name = ANY(%(migrations)s) AND squashed = TRUE
                 result = cursor.fetchone()
                 assert result is not None
                 return result[0] == len(migrations)
-        case SupportedDatabase.MYSQL:
+        case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 query = f"""
 SELECT COUNT(*) FROM {TEST_MIGRATIONS_TABLE}

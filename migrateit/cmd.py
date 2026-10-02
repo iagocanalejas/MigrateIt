@@ -30,7 +30,7 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
     write_line(f"\tCreating migration for table: {table_name}")
     migration = changelog.create_new_migration(migrations_dir=migrations_dir, name="migrateit")
     match database:
-        case SupportedDatabase.MYSQL:
+        case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             from migrateit.clients.mysql import MySqlClient
 
             sql, rollback = MySqlClient.create_migrations_table_str(table_name=table_name)

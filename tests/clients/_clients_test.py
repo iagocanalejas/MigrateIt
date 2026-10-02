@@ -53,6 +53,16 @@ def test_get_connection_mysql() -> None:
 
 
 @pytest.mark.unit
+def test_get_connection_mariadb() -> None:
+    with patch("migrateit.models.connection.mysql.connector.connect") as mock_connect:
+        mock_conn: Any = MagicMock()
+        mock_connect.return_value = mock_conn
+        result = get_connection(SupportedDatabase.MARIADB)
+        assert result == mock_conn
+        mock_connect.assert_called_once()
+
+
+@pytest.mark.unit
 def test_get_environment_url_from_db_url_psql() -> None:
     from migrateit.clients.psql import PsqlClient
 

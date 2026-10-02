@@ -12,7 +12,7 @@ from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_mig
 
 def _insert_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -> None:
     match client.changelog.database:
-        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL:
+        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
                     f"INSERT INTO {TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES (%s, %s)",
