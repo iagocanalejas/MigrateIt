@@ -39,6 +39,7 @@ repos:
         args:
           - --config-file=pyproject.toml
         additional_dependencies:
+          - inquirer
           - mysql-connector-python
           - sqlfluff
           - pytest
