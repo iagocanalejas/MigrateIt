@@ -6,9 +6,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from migrateit.models.migration import Migration, MigrationStatus
 from migrateit.reporters.output import STATUS_COLORS, write_line
-
-from .migration import Migration, MigrationStatus
 
 
 class SupportedDatabase(Enum):
@@ -23,6 +22,14 @@ class ChangelogFile:
     database: SupportedDatabase = SupportedDatabase.POSTGRES
     migrations: list[Migration] = field(default_factory=list)
     path: Path = field(default_factory=Path)
+
+    @property
+    def root(self) -> Migration:
+        if len(self.migrations) == 0:
+            raise ValueError("No migrations found. Changelog is not initialized.")
+        if not self.migrations[0].initial:
+            raise ValueError("Initial migration is not defined in the changelog")
+        return self.migrations[0]
 
     @property
     def migrations_tree(self) -> OrderedDict[str, list[Migration]]:
@@ -97,7 +104,7 @@ class ChangelogFile:
         """
         plan: list[Migration] = []
         visited: set[str] = set()
-        queue: deque[Migration] = deque([self.migrations[0]])
+        queue: deque[Migration] = deque([self.root])
         is_bottom_up = target_migration is not None and not is_rollback
         is_normal_order = not is_bottom_up and not is_rollback
 

@@ -172,7 +172,7 @@ WHERE migration_name = %s;
         if len(self.changelog.migrations) == 0:
             return
 
-        if not self.changelog.migrations[0].initial:
+        if not self.changelog.root.initial:
             raise ValueError("Initial migration is not defined in the changelog")
         if len([m for m in self.changelog.migrations if m.initial]) > 1:
             raise ValueError("Multiple initial migrations found in the changelog")
