@@ -103,7 +103,11 @@ class SqlClient[T](ABC, SqlClientProtocol):
         for code in (migration_code, reverse_migration_code):
             patched = self._patch_sql_statement(code)
             # Filter specifically for syntax/parsing errors
-            lint_errors = sqlfluff.lint(patched, dialect=self.changelog.database.value)
+            dialect = self.changelog.database.value
+            if dialect == SupportedDatabase.MARIADB.value:
+                # NOTE: MariaDB uses same syntax as MySQL
+                dialect = SupportedDatabase.MYSQL.value
+            lint_errors = sqlfluff.lint(patched, dialect=dialect)
             syntax_errors = [e for e in lint_errors if e["code"] == "PRS"]
 
             if syntax_errors:
@@ -131,7 +135,7 @@ if TYPE_CHECKING:
 
 def get_client(config: MigrateItConfig, connection: "Connection") -> SqlClient[Any]:
     match (config.changelog.database, connection):
-        case (SupportedDatabase.MYSQL, _ as mysql_conn):
+        case (SupportedDatabase.MYSQL | SupportedDatabase.MARIADB, _ as mysql_conn):
             from .mysql import MySqlClient
 
             return MySqlClient(mysql_conn, config)  # type: ignore

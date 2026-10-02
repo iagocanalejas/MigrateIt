@@ -10,7 +10,7 @@ from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, TEST_TABLE,
 
 def _update_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -> None:
     match client.changelog.database:
-        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL:
+        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
                     f"UPDATE {TEST_MIGRATIONS_TABLE} SET change_hash = %s WHERE migration_name = %s",

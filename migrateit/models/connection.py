@@ -29,7 +29,7 @@ def get_connection(database: SupportedDatabase) -> Connection:
             sqlite_conn = sqlite3.connect(db_url.replace("sqlite:///", ""))
             sqlite_conn.autocommit = False
             return sqlite_conn
-        case SupportedDatabase.MYSQL:
+        case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             db_url = MySqlClient.get_environment_url()
             parsed = urlparse(db_url)
             query_params = parse_qs(parsed.query)

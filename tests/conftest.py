@@ -56,7 +56,7 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
                 pg_conn.commit()
                 pg_conn.close()
 
-        case SupportedDatabase.MYSQL:
+        case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             import mysql.connector
 
             from migrateit.clients.mysql import MySqlClient
@@ -95,6 +95,7 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
     params=[
         pytest.param(SupportedDatabase.POSTGRES, marks=pytest.mark.postgres, id="postgres"),
         pytest.param(SupportedDatabase.MYSQL, marks=pytest.mark.mysql, id="mysql"),
+        pytest.param(SupportedDatabase.MARIADB, marks=pytest.mark.mariadb, id="mariadb"),
         pytest.param(SupportedDatabase.SQLITE, marks=pytest.mark.sqlite, id="sqlite"),
     ]
 )
@@ -117,7 +118,7 @@ def client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlClien
             with conn.cursor() as cursor:
                 cursor.execute(sql)  # pyright: ignore
             conn.commit()
-        elif database_type is SupportedDatabase.MYSQL:
+        elif database_type is SupportedDatabase.MYSQL or database_type is SupportedDatabase.MARIADB:
             from migrateit.clients.mysql import MySqlClient
 
             # Create migrations table
@@ -170,7 +171,7 @@ def _create_migration_file(
 def _get_query_rows(client: SqlClient[Any], query: str) -> list[tuple[Any, ...]]:
     """Execute a query and return rows, handling cursor vs direct execution."""
     match client.changelog.database:
-        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL:
+        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(query)
                 return cursor.fetchall()
@@ -182,7 +183,7 @@ def _get_query_rows(client: SqlClient[Any], query: str) -> list[tuple[Any, ...]]
 
 def _migration_is_applied(client: SqlClient[Any], migration_name: str) -> bool:
     match client.changelog.database:
-        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL:
+        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
                     f"SELECT COUNT(*) FROM {TEST_MIGRATIONS_TABLE} WHERE migration_name = %s",
@@ -205,7 +206,7 @@ def _migration_is_applied(client: SqlClient[Any], migration_name: str) -> bool:
 
 def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
     match client.changelog.database:
-        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL:
+        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
                     "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = %s)",
@@ -227,7 +228,7 @@ def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
 
 def _drop_test_table(client: SqlClient[Any], table_name: str = TEST_TABLE) -> None:
     match client.changelog.database:
-        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL:
+        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
         case SupportedDatabase.SQLITE:
