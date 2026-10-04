@@ -32,6 +32,7 @@ markers = [
     "postgres: tests requiring a PostgreSQL connection",
     "sqlite: tests requiring a SQLite connection",
     "mysql: tests requiring a MySQL connection",
+    "mariadb: tests requiring a MariaDB connection",
     "unit: fast unit tests with no database",
 ]
 

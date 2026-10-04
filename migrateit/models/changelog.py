@@ -16,6 +16,7 @@ class SupportedDatabase(Enum):
     POSTGRES = "postgres"
     SQLITE = "sqlite"
     MYSQL = "mysql"
+    MARIADB = "mariadb"
 
 
 @dataclass

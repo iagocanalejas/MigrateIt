@@ -131,7 +131,7 @@ EXECUTE FUNCTION audit_user_update_fn();
                 # Add enum type and USER-DEFINED column type
                 cursor.execute("CREATE TYPE status_enum AS ENUM ('pending', 'active', 'inactive', 'archived');")
                 cursor.execute("ALTER TABLE users ADD COLUMN status status_enum;")
-        case SupportedDatabase.MYSQL:
+        case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute("""
 CREATE TABLE users (
@@ -252,7 +252,7 @@ AFTER INSERT ON {MIGRATEIT_MIGRATIONS_TABLE}
 FOR EACH ROW
 EXECUTE FUNCTION mig_changelog_audit_fn();
 """)
-        case SupportedDatabase.MYSQL:
+        case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(f"CREATE TABLE {MIGRATEIT_MIGRATIONS_TABLE} (id INT PRIMARY KEY);")
                 cursor.execute(f"CREATE INDEX idx_mig_changelog ON {MIGRATEIT_MIGRATIONS_TABLE}(id);")
