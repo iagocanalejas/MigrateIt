@@ -455,6 +455,20 @@ def test_load_changelog_file_non_initial_without_parents_raises(temp_dir: Path) 
         load_changelog_file(path)
 
 
+@pytest.mark.unit
+def test_load_changelog_with_non_existing_parent(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    migrations = [
+        Migration(name="0000_init.sql", initial=True, parents=[]),
+        Migration(name="0001_test.sql", parents=["9999_missing.sql"]),
+    ]
+    changelog = ChangelogFile(version=1, migrations=migrations)
+    path.write_text(changelog.to_json())
+
+    with pytest.raises(ValueError, match="non-existent parent"):
+        load_changelog_file(path)
+
+
 # --- find_path tests ---
 
 
