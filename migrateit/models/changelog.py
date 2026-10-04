@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from enum import Enum
@@ -302,12 +303,21 @@ def load_changelog_file(file_path: Path) -> ChangelogFile:
         return changelog
 
     # Check if the migrations are valid
-    if len([m for m in changelog.migrations if m.initial]) > 1:
+    if len([m for m in changelog.migrations if m.initial]) != 1:
         raise ValueError("Changelog must have exactly one initial migration")
+    indexes = []
     for m in changelog.migrations:
         if m.initial and len(m.parents) > 0:
             raise ValueError(f"Initial migration {m.name} cannot have parents")
         if not m.initial and len(m.parents) == 0:
             raise ValueError(f"Migration {m.name} must have parents")
+        if not re.match(C.MIGRATION_PATTERN, m.name):
+            raise ValueError(f"Migration name {m.name} does not match the pattern")
+
+        # Check if the migration index is unique
+        index = int(m.name.split("_")[0])
+        if index in indexes:
+            raise ValueError(f"Migration name {m.name} has a duplicated index")
+        indexes.append(index)
 
     return changelog

@@ -99,6 +99,21 @@ def test_changelog_file_get_migration_by_name_abs_path() -> None:
     assert result.name == "0001_test.sql"
 
 
+@pytest.mark.unit
+def test_get_migration_by_name_prefix_collision_returns_first(temp_dir: Path) -> None:
+    m1 = Migration(name="0001_init.sql", initial=True, parents=[])
+    m2 = Migration(name="0001_test.sql", parents=["0000_init.sql"])
+
+    changelog_path = temp_dir / "changelog.json"
+    changelog_path.touch()
+
+    changelog = ChangelogFile(version=1, migrations=[m1, m2], path=changelog_path)
+    changelog.save()
+
+    with pytest.raises(ValueError, match="duplicated index"):
+        load_changelog_file(changelog_path)
+
+
 # --- changelog.migrations_tree tests ---
 
 
@@ -208,7 +223,7 @@ def test_build_plan_unvisited_parents() -> None:
 
 
 @pytest.mark.unit
-def test_build_plan_already_visited_neighbor(capsys: pytest.CaptureFixture[str]) -> None:
+def test_build_plan_already_visited_neighbor() -> None:
     """
     Structure: A → B, A → C, B → C
     is_bottom_up=True
