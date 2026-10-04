@@ -348,6 +348,21 @@ def test_create_new_migration_invalid_name(temp_dir: Path, database: SupportedDa
         cl.create_new_migration(migrations_dir, "")
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_create_new_migration_filename_collides_with_disk_file(temp_dir: Path, database: SupportedDatabase) -> None:
+    migrations_dir = temp_dir / "migrations"
+    migrations_dir.mkdir(exist_ok=True)
+    path = temp_dir / "changelog.json"
+
+    (migrations_dir / "0000_init.sql").touch()
+
+    cl = create_changelog_file(path, database)
+
+    with pytest.raises(FileExistsError, match="already exists"):
+        cl.create_new_migration(migrations_dir, "new")
+
+
 # --- create_changelog_file tests ---
 
 

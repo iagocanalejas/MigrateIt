@@ -128,9 +128,12 @@ class ChangelogFile:
             raise ValueError("Initial migration cannot have dependencies")
 
         # check if the name already exists (only can happen if a file was manually created)
-        new_filepath = migrations_dir / f"{len(migration_files):04d}_{name}.sql"
+        migration_index = f"{len(migration_files):04d}"
+        new_filepath = migrations_dir / f"{migration_index}_{name}.sql"
         if new_filepath.exists():
             raise FileExistsError(f"Migration file {new_filepath.name} already exists")
+        if len(list(migrations_dir.glob(f"{migration_index}_*.sql"))) > 0:
+            raise FileExistsError(f"Migration with index {migration_index} already exists")
 
         # create the new migration file with a header and rollback tag
         new_filepath.write_text(get_migration_header(new_filepath) + C.ROLLBACK_SPLIT_TAG + "\n\n")
