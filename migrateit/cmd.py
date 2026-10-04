@@ -268,11 +268,12 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
 
     if validate_sql:
         write_line("\nValidating SQL migrations...")
-        err = None
+        has_err = False
         for migration in client.changelog.migrations:
             err = client.validate_sql_syntax(migration)
             if err:
+                has_err = True
                 pretty_print_sql_error(err[0], err[1])
-        msg = "failed. Please fix the errors above." if err else "passed. No errors found."
+        msg = "failed. Please fix the errors above." if has_err else "passed. No errors found."
         write_line("SQL validation " + msg)
     return 0
