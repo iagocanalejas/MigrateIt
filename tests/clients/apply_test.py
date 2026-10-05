@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from migrateit.clients._client import SqlClient
+from migrateit.clients.sqlite import _split_sql_statements
 from migrateit.models.migration import Migration, MigrationStatus
 from tests.clients._clients_test import MIGRATION_NAME
 from tests.conftest import (
@@ -185,3 +186,35 @@ def test_apply_missing_migration(client: SqlClient[Any], temp_dir: Path) -> None
     client.changelog.migrations.append(migration)
     with pytest.raises(FileNotFoundError):
         client.apply_migration(migration)
+
+
+def test_split_sql_statements() -> None:
+    sql = "INSERT INTO t VALUES ('a;b'); INSERT INTO t VALUES ('c');"
+    result = _split_sql_statements(sql)
+    assert len(result) == 2
+    assert result[0] == "INSERT INTO t VALUES ('a;b')"
+    assert result[1] == "INSERT INTO t VALUES ('c')"
+
+    sql = 'SELECT "col;1" FROM t; SELECT "col;2" FROM t;'
+    result = _split_sql_statements(sql)
+    assert len(result) == 2
+    assert result[0] == 'SELECT "col;1" FROM t'
+    assert result[1] == 'SELECT "col;2" FROM t'
+
+    sql = "CREATE TABLE t1 (id INTEGER); CREATE TABLE t2 (id INTEGER);"
+    result = _split_sql_statements(sql)
+    assert len(result) == 2
+    assert result[0] == "CREATE TABLE t1 (id INTEGER)"
+    assert result[1] == "CREATE TABLE t2 (id INTEGER)"
+
+    sql = "SELECT 1;; SELECT 2;"
+    result = _split_sql_statements(sql)
+    assert len(result) == 2
+    assert result[0] == "SELECT 1"
+    assert result[1] == "SELECT 2"
+
+    sql = "INSERT INTO t VALUES ('a \"b;c\" d'); INSERT INTO t VALUES ('e');"
+    result = _split_sql_statements(sql)
+    assert len(result) == 2
+    assert result[0] == "INSERT INTO t VALUES ('a \"b;c\" d')"
+    assert result[1] == "INSERT INTO t VALUES ('e')"

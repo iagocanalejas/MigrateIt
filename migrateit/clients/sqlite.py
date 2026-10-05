@@ -17,6 +17,35 @@ def _q(name: str) -> str:
     return f'"{name}"'
 
 
+def _split_sql_statements(sql: str) -> list[str]:
+    """Split SQL into individual statements, respecting semicolons inside strings."""
+    statements: list[str] = []
+    current: list[str] = []
+    in_single_quote = False
+    in_double_quote = False
+    i = 0
+    while i < len(sql):
+        char = sql[i]
+        if char == "'" and not in_double_quote:
+            in_single_quote = not in_single_quote
+            current.append(char)
+        elif char == '"' and not in_single_quote:
+            in_double_quote = not in_double_quote
+            current.append(char)
+        elif char == ";" and not in_single_quote and not in_double_quote:
+            stmt = "".join(current).strip()
+            if stmt:
+                statements.append(stmt)
+            current = []
+        else:
+            current.append(char)
+        i += 1
+    trailing = "".join(current).strip()
+    if trailing:
+        statements.append(trailing)
+    return statements
+
+
 class SqliteClient(SqlClient[sqlite3.Connection]):
     @override
     @classmethod
@@ -119,9 +148,12 @@ FROM {self.table_name};
         migration_code, reverse_migration_code, migration_hash = self.get_migration_content_and_hash(path)
 
         try:
-            if not is_fake:
-                code = migration_code if not is_rollback else reverse_migration_code
-                self.connection.executescript(code)
+            code = migration_code if not is_rollback else reverse_migration_code
+            if not is_fake and code.strip():
+                # NOTE: avoid executescript() which implicitly commits and cannot be rolled back.
+                statements = _split_sql_statements(code)
+                for stmt in statements:
+                    self.connection.execute(stmt)
             self._update_migration_changelog(migration, migration_hash, is_rollback)
         except sqlite3.Error as e:
             self.connection.rollback()
@@ -194,7 +226,7 @@ ORDER BY name;
 
         # Rollback tables in reverse order
         for name in reversed(tables_list):
-            rollback_ddl.append(f'DROP TABLE IF EXISTS {_q(name)};')
+            rollback_ddl.append(f"DROP TABLE IF EXISTS {_q(name)};")
 
         # -------------------------------------------------------------
         # 2. VIEWS
@@ -224,7 +256,7 @@ ORDER BY name;
             views_list.append(name)
 
         for name in reversed(views_list):
-            rollback_ddl.append(f'DROP VIEW IF EXISTS {_q(name)};')
+            rollback_ddl.append(f"DROP VIEW IF EXISTS {_q(name)};")
 
         # -------------------------------------------------------------
         # 3. INDEXES
