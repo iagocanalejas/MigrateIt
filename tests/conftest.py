@@ -73,8 +73,7 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
                 mysql_conn.close()
 
         case SupportedDatabase.SQLITE:
-            sqlite_conn: sqlite3.Connection = sqlite3.connect(":memory:")
-            sqlite_conn.isolation_level = "DEFERRED"
+            sqlite_conn: sqlite3.Connection = sqlite3.connect(":memory:", autocommit=False)
             try:
                 yield sqlite_conn
             finally:

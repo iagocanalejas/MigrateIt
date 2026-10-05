@@ -20,20 +20,18 @@ def get_connection(database: SupportedDatabase) -> Connection:
     match database:
         case SupportedDatabase.POSTGRES:
             params = PsqlClient.get_connection_params()
-            pg_conn = psycopg.connect(**params)
-            pg_conn.autocommit = False
+            pg_conn = psycopg.connect(**params, autocommit=False)
             return pg_conn
         case SupportedDatabase.SQLITE:
             params = SqliteClient.get_connection_params()
             file_name = params.get("file_name", params.get("url", "").replace("sqlite:///", ""))
-            sqlite_conn = sqlite3.connect(file_name)
-            sqlite_conn.autocommit = False
+            sqlite_conn = sqlite3.connect(file_name, autocommit=False)
             return sqlite_conn
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             params = MySqlClient.get_connection_params()
             if "connection_string" in params:
                 # DB_URL was provided — use it directly
-                mysql_conn = mysql.connector.connect(connection_string=params["connection_string"])
+                mysql_conn = mysql.connector.connect(connection_string=params["connection_string"], autocommit=False)
             else:
                 # Build kwargs without the password being in a URL string
                 conn_kwargs = {
