@@ -80,6 +80,9 @@ def cmd_new(
     if interactive and dependencies is not None and len(dependencies) > 0:
         raise ValueError("Cannot specify both `--interactive` and `--dependencies`")
 
+    # NOTE: required in case-sensitive OSs
+    name = name.lower()
+
     if interactive:
         choices = inquirer.prompt(
             [
