@@ -48,21 +48,19 @@ def _extract_show_create(show_row: Any) -> str:  # pragma: no cover
 class MySqlClient(SqlClient[MySQLConnectionAbstract | PooledMySQLConnection]):
     @override
     @classmethod
-    def get_environment_url(cls) -> str:
+    def get_connection_params(cls) -> dict[str, Any]:
         db_url = os.getenv(cls.VARNAME_DB_URL)
         if db_url:
-            return db_url
+            return {"connection_string": db_url}
 
-        host = os.getenv(cls.VARNAME_DB_HOST, "localhost")
-        port = os.getenv(cls.VARNAME_DB_PORT, "3306")
-        user = os.getenv(cls.VARNAME_DB_USER, "root")
-        password = os.getenv(cls.VARNAME_DB_PASS, "")
-        db_name = os.getenv(cls.VARNAME_DB_NAME, "migrateit")
-        db_timeout = os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, C.DEFAULT_TIMEOUT_SECONDS)
-
-        password = f":{password}" if password else ""
-        db_url = f"mysql://{user}{password}@{host}:{port}/{db_name}?connect_timeout={db_timeout}"
-        return db_url
+        return {
+            "host": os.getenv(cls.VARNAME_DB_HOST, "localhost"),
+            "port": int(os.getenv(cls.VARNAME_DB_PORT, "3306")),
+            "user": os.getenv(cls.VARNAME_DB_USER, "root"),
+            "password": os.getenv(cls.VARNAME_DB_PASS, ""),
+            "database": os.getenv(cls.VARNAME_DB_NAME, "migrateit"),
+            "connection_timeout": int(os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, C.DEFAULT_TIMEOUT_SECONDS)),
+        }
 
     @override
     @classmethod

@@ -35,7 +35,7 @@ def test_get_connection_sqlite() -> None:
     from migrateit.clients.sqlite import SqliteClient
 
     # With SQLITE we can create a real connection
-    f = Path(SqliteClient.get_environment_url().replace("sqlite:///", ""))
+    f = Path(SqliteClient.get_connection_params()["file_name"])
     result = get_connection(SupportedDatabase.SQLITE)
     assert isinstance(result, sqlite3.Connection)
     result.close()
@@ -45,6 +45,19 @@ def test_get_connection_sqlite() -> None:
 @pytest.mark.unit
 def test_get_connection_mysql() -> None:
     with patch("migrateit.models.connection.mysql.connector.connect") as mock_connect:
+        mock_conn: Any = MagicMock()
+        mock_connect.return_value = mock_conn
+        result = get_connection(SupportedDatabase.MYSQL)
+        assert result == mock_conn
+        mock_connect.assert_called_once()
+
+
+@pytest.mark.unit
+def test_get_connection_mysql_connection_string() -> None:
+    with (
+        patch("migrateit.models.connection.mysql.connector.connect") as mock_connect,
+        patch.dict(os.environ, {"DB_URL": "mysql://user:pass@host:3306/mydb"}),
+    ):
         mock_conn: Any = MagicMock()
         mock_connect.return_value = mock_conn
         result = get_connection(SupportedDatabase.MYSQL)
@@ -67,7 +80,7 @@ def test_get_environment_url_from_db_url_psql() -> None:
     from migrateit.clients.psql import PsqlClient
 
     with patch.dict(os.environ, {"DB_URL": "postgresql://user:pass@host:5432/mydb"}):
-        url = PsqlClient.get_environment_url()
+        url = PsqlClient.get_connection_params()["conninfo"]
         assert url == "postgresql://user:pass@host:5432/mydb"
 
 
@@ -76,7 +89,7 @@ def test_get_environment_url_from_db_url_mysql() -> None:
     from migrateit.clients.mysql import MySqlClient
 
     with patch.dict(os.environ, {"DB_URL": "mysql://user:pass@host:3306/mydb"}):
-        url = MySqlClient.get_environment_url()
+        url = MySqlClient.get_connection_params()["connection_string"]
         assert url == "mysql://user:pass@host:3306/mydb"
 
 
@@ -85,7 +98,7 @@ def test_get_environment_url_from_db_url_sqlite() -> None:
     from migrateit.clients.sqlite import SqliteClient
 
     with patch.dict(os.environ, {"DB_URL": "sqlite:///mydb"}):
-        url = SqliteClient.get_environment_url()
+        url = SqliteClient.get_connection_params()["url"]
         assert url == "sqlite:///mydb"
 
 

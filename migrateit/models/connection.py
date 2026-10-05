@@ -1,12 +1,10 @@
 import sqlite3
-from urllib.parse import parse_qs, urlparse
 
 import mysql.connector
 import psycopg
 from mysql.connector.abstracts import MySQLConnectionAbstract
 from mysql.connector.pooling import PooledMySQLConnection
 
-from migrateit import constants as C
 from migrateit.clients.mysql import MySqlClient
 from migrateit.clients.psql import PsqlClient
 from migrateit.clients.sqlite import SqliteClient
@@ -21,37 +19,37 @@ type Connection = _PsqlConnection | _SqliteConnection | _MySqlConnection
 def get_connection(database: SupportedDatabase) -> Connection:
     match database:
         case SupportedDatabase.POSTGRES:
-            pg_conn = psycopg.connect(PsqlClient.get_environment_url())
+            params = PsqlClient.get_connection_params()
+            pg_conn = psycopg.connect(**params)
             pg_conn.autocommit = False
             return pg_conn
         case SupportedDatabase.SQLITE:
-            db_url = SqliteClient.get_environment_url()
-            sqlite_conn = sqlite3.connect(db_url.replace("sqlite:///", ""))
+            params = SqliteClient.get_connection_params()
+            file_name = params.get("file_name", params.get("url", "").replace("sqlite:///", ""))
+            sqlite_conn = sqlite3.connect(file_name)
             sqlite_conn.autocommit = False
             return sqlite_conn
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
-            db_url = MySqlClient.get_environment_url()
-            parsed = urlparse(db_url)
-            query_params = parse_qs(parsed.query)
+            params = MySqlClient.get_connection_params()
+            if "connection_string" in params:
+                # DB_URL was provided — use it directly
+                mysql_conn = mysql.connector.connect(connection_string=params["connection_string"])
+            else:
+                # Build kwargs without the password being in a URL string
+                conn_kwargs = {
+                    "host": params["host"],
+                    "port": params["port"],
+                    "user": params["user"],
+                    "password": params["password"],
+                    "database": params["database"],
+                    "autocommit": False,
+                }
 
-            # Base connection dictionary
-            conn_kwargs = {
-                "host": parsed.hostname,
-                "port": parsed.port,
-                "user": parsed.username,
-                "password": parsed.password,
-                "database": parsed.path.lstrip("/"),
-                "autocommit": False,
-            }
+                # Extract connection_timeout
+                timeout_val = params["connection_timeout"]
+                conn_kwargs["connection_timeout"] = int(timeout_val)
 
-            # Extract connection_timeout (or timeout) if present in the URL
-            timeout_val = query_params.get(
-                "connection_timeout",
-                query_params.get("timeout", [f"{C.DEFAULT_TIMEOUT_SECONDS}"]),
-            )
-            conn_kwargs["connection_timeout"] = int(timeout_val[0])
-
-            mysql_conn = mysql.connector.connect(**conn_kwargs)
+                mysql_conn = mysql.connector.connect(**conn_kwargs)
             return mysql_conn
         case _:
             raise NotImplementedError(f"Database {database} is not supported")

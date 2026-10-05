@@ -1,6 +1,6 @@
 import os
 from collections import defaultdict
-from typing import override
+from typing import Any, override
 
 import psycopg
 
@@ -21,21 +21,19 @@ def _q(name: str) -> str:
 class PsqlClient(SqlClient[psycopg.Connection]):
     @override
     @classmethod
-    def get_environment_url(cls) -> str:
+    def get_connection_params(cls) -> dict[str, Any]:
         db_url = os.getenv(cls.VARNAME_DB_URL)
         if db_url:
-            return db_url
+            return {"conninfo": db_url}
 
-        host = os.getenv(cls.VARNAME_DB_HOST, "localhost")
-        port = os.getenv(cls.VARNAME_DB_PORT, "5432")
-        user = os.getenv(cls.VARNAME_DB_USER, "postgres")
-        password = os.getenv(cls.VARNAME_DB_PASS, "")
-        db_name = os.getenv(cls.VARNAME_DB_NAME, "migrateit")
-        db_timeout = os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, C.DEFAULT_TIMEOUT_SECONDS)
-
-        password = f":{password}" if password else ""
-        db_url = f"postgresql://{user}{password}@{host}:{port}/{db_name}?connect_timeout={db_timeout}"
-        return db_url
+        return {
+            "host": os.getenv(cls.VARNAME_DB_HOST, "localhost"),
+            "port": int(os.getenv(cls.VARNAME_DB_PORT, "5432")),
+            "user": os.getenv(cls.VARNAME_DB_USER, "postgres"),
+            "password": os.getenv(cls.VARNAME_DB_PASS, ""),
+            "dbname": os.getenv(cls.VARNAME_DB_NAME, "migrateit"),
+            "connect_timeout": int(os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, C.DEFAULT_TIMEOUT_SECONDS)),
+        }
 
     @override
     @classmethod

@@ -5,7 +5,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
-from urllib.parse import urlparse
 
 import pytest
 
@@ -45,7 +44,7 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
 
             from migrateit.clients.psql import PsqlClient
 
-            pg_conn: psycopg.Connection = psycopg.connect(PsqlClient.get_environment_url())
+            pg_conn: psycopg.Connection = psycopg.connect(**PsqlClient.get_connection_params())
             try:
                 yield pg_conn
             finally:
@@ -61,15 +60,9 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
 
             from migrateit.clients.mysql import MySqlClient
 
-            parsed = urlparse(MySqlClient.get_environment_url())
-            db_name = parsed.path.lstrip("/")
-            mysql_conn = mysql.connector.connect(
-                host=parsed.hostname,
-                port=parsed.port,
-                user=parsed.username,
-                password=parsed.password,
-                database=db_name,
-            )
+            params = MySqlClient.get_connection_params()
+            db_name = params["database"].lstrip("/")
+            mysql_conn = mysql.connector.connect(**params)
             try:
                 yield mysql_conn
             finally:

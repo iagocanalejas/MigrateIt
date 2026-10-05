@@ -1,7 +1,7 @@
 import os
 import re
 import sqlite3
-from typing import override
+from typing import Any, override
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
@@ -49,13 +49,11 @@ def _split_sql_statements(sql: str) -> list[str]:
 class SqliteClient(SqlClient[sqlite3.Connection]):
     @override
     @classmethod
-    def get_environment_url(cls) -> str:
+    def get_connection_params(cls) -> dict[str, Any]:
         db_url = os.getenv(cls.VARNAME_DB_URL)
         if db_url:
-            return db_url
-
-        db_file = os.getenv(cls.VARNAME_DB_FILE, "migrateit.db")
-        return f"sqlite:///{os.path.abspath(db_file)}"
+            return {"url": db_url}
+        return {"file_name": os.getenv(cls.VARNAME_DB_FILE, "migrateit.db")}
 
     @override
     @classmethod

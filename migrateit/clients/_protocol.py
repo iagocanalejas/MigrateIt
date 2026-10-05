@@ -1,11 +1,11 @@
-from typing import Protocol
+from typing import Any, Protocol
 
 from migrateit.models.migration import Migration, MigrationStatus
 
 
 class SqlClientProtocol(Protocol):
     @classmethod
-    def get_environment_url(cls) -> str:
+    def get_connection_params(cls) -> dict[str, Any]:
         """
         Get the database URL from the environment variables.
 
