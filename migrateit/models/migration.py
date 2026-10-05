@@ -29,7 +29,7 @@ class Migration:
 
     @staticmethod
     def is_valid_name(path: Path) -> bool:
-        return path.is_file() and path.name.endswith(".sql") and re.match(r"^\d{4}_", path.name) is not None
+        return path.is_file() and re.match(C.MIGRATION_PATTERN, path.name) is not None
 
     @staticmethod
     def is_same_migration_name(name1: str, name2: str) -> bool:
