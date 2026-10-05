@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
 
 import sqlfluff
+from sqlfluff.core import Linter
 
 from migrateit import constants as C
 from migrateit.clients._protocol import SqlClientProtocol
@@ -85,9 +86,9 @@ class SqlClient[T](ABC, SqlClientProtocol):
 
     @staticmethod
     def _remove_sql_comments(sql: str) -> str:
-        sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
-        sql = re.sub(r"--.*(?=\n|$)", "", sql).strip()
-        return sql
+        linter = Linter(dialect="ansi")
+        parsed = linter.parse_string(sql)
+        return "".join(segment.raw for segment in parsed.tree.raw_segments if not segment.is_type("comment")).strip()
 
     def get_migration_path(self, migration: Migration) -> Path:
         path = self.migrations_dir / migration.name
