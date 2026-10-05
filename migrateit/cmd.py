@@ -2,6 +2,7 @@ import os
 import platform
 import shlex
 import subprocess
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -236,10 +237,8 @@ def cmd_squash(
 
 def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool = False) -> int:
     status_map = client.retrieve_migration_statuses()
-    status_count = {status: 0 for status in MigrationStatus}
-
-    for status in status_map.values():
-        status_count[status] += 1
+    status_count = Counter({status: 0 for status in MigrationStatus})
+    status_count.update(status_map.values())
 
     write_line("\nMigration Precedence DAG:\n")
     write_line(f"{'Migration File':<40} | {'Status'}")
