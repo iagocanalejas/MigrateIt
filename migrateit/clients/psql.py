@@ -11,6 +11,13 @@ from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
 
+def _q(name: str) -> str:
+    """Wrap a PostgreSQL identifier in double quotes (safe: rejects double quotes and null bytes)."""
+    if '"' in name or "\x00" in name:
+        raise ValueError(f"Invalid PostgreSQL identifier: {name!r}")
+    return f'"{name}"'
+
+
 class PsqlClient(SqlClient[psycopg.Connection]):
     @override
     @classmethod
@@ -174,8 +181,8 @@ WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast') AND sc
             """)
             for (schema,) in cursor.fetchall():
                 if schema != "public":
-                    forward_ddl.append(f"CREATE SCHEMA IF NOT EXISTS {schema};")
-                    rollback_ddl.append(f"DROP SCHEMA IF EXISTS {schema} CASCADE;")
+                    forward_ddl.append(f"CREATE SCHEMA IF NOT EXISTS {_q(schema)};")
+                    rollback_ddl.append(f"DROP SCHEMA IF EXISTS {_q(schema)} CASCADE;")
 
             # -------------------------------------------------------------
             # 2. ENUM TYPES
@@ -191,8 +198,8 @@ GROUP BY n.nspname, t.typname;
             """)
             for schema, typname, labels in cursor.fetchall():
                 formatted_labels = ", ".join(f"'{lbl}'" for lbl in labels)
-                forward_ddl.append(f"CREATE TYPE {schema}.{typname} AS ENUM ({formatted_labels});")
-                rollback_ddl.append(f"DROP TYPE IF EXISTS {schema}.{typname};")
+                forward_ddl.append(f"CREATE TYPE {_q(schema)}.{_q(typname)} AS ENUM ({formatted_labels});")
+                rollback_ddl.append(f"DROP TYPE IF EXISTS {_q(schema)}.{_q(typname)};")
 
             # -------------------------------------------------------------
             # 3. SEQUENCES
@@ -204,8 +211,8 @@ FROM information_schema.sequences
 WHERE sequence_schema NOT IN ('pg_catalog', 'information_schema');
             """)
             for schema, seq_name in cursor.fetchall():
-                forward_ddl.append(f"CREATE SEQUENCE IF NOT EXISTS {schema}.{seq_name};")
-                rollback_ddl.append(f"DROP SEQUENCE IF EXISTS {schema}.{seq_name} CASCADE;")
+                forward_ddl.append(f"CREATE SEQUENCE IF NOT EXISTS {_q(schema)}.{_q(seq_name)};")
+                rollback_ddl.append(f"DROP SEQUENCE IF EXISTS {_q(schema)}.{_q(seq_name)} CASCADE;")
 
             # -------------------------------------------------------------
             # 4. TABLES & COLUMNS
@@ -226,11 +233,11 @@ ORDER BY c.table_schema, c.table_name, c.ordinal_position;
                 if char_len and dtype in ("character varying", "character"):
                     col_type = f"{dtype}({char_len})"
                 elif dtype == "USER-DEFINED":
-                    col_type = f"{schema}.{udt_name}"
+                    col_type = f"{_q(schema)}.{_q(udt_name)}"
                 else:
                     col_type = dtype
 
-                col_def = f"    {col} {col_type}"
+                col_def = f"    {_q(col)} {col_type}"
                 if nullable == "NO":
                     col_def += " NOT NULL"
                 if default is not None:
@@ -243,10 +250,10 @@ ORDER BY c.table_schema, c.table_name, c.ordinal_position;
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
                 cols_str = ",\n".join(cols)
-                forward_ddl.append(f"CREATE TABLE IF NOT EXISTS {schema}.{table} (\n{cols_str}\n);")
+                forward_ddl.append(f"CREATE TABLE IF NOT EXISTS {_q(schema)}.{_q(table)} (\n{cols_str}\n);")
                 tables_list.append((schema, table))
             for schema, table in reversed(tables_list):
-                rollback_ddl.append(f"DROP TABLE IF EXISTS {schema}.{table} CASCADE;")
+                rollback_ddl.append(f"DROP TABLE IF EXISTS {_q(schema)}.{_q(table)} CASCADE;")
 
             # -------------------------------------------------------------
             # 5. FUNCTIONS & PROCEDURES
@@ -265,7 +272,7 @@ WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND p.prokind IN ('f
                 args_sig = cursor.fetchone()
                 if args_sig is None or len(args_sig) == 0:
                     raise ValueError(f"Could not extract argument signature for function {schema}.{name}")
-                rollback_ddl.append(f"DROP FUNCTION IF EXISTS {schema}.{name}({args_sig[0]}) CASCADE;")
+                rollback_ddl.append(f"DROP FUNCTION IF EXISTS {_q(schema)}.{_q(name)}({args_sig[0]}) CASCADE;")
 
             # -------------------------------------------------------------
             # 6. VIEWS
@@ -277,8 +284,8 @@ FROM information_schema.views
 WHERE table_schema NOT IN ('pg_catalog', 'information_schema');
             """)
             for schema, view_name, view_def in cursor.fetchall():
-                forward_ddl.append(f"CREATE OR REPLACE VIEW {schema}.{view_name} AS\n{view_def.strip()};")
-                rollback_ddl.append(f"DROP VIEW IF EXISTS {schema}.{view_name};")
+                forward_ddl.append(f"CREATE OR REPLACE VIEW {_q(schema)}.{_q(view_name)} AS\n{view_def.strip()};")
+                rollback_ddl.append(f"DROP VIEW IF EXISTS {_q(schema)}.{_q(view_name)};")
 
             # -------------------------------------------------------------
             # 7. CONSTRAINTS (Primary Keys, Foreign Keys, Unique, Check)
@@ -295,7 +302,7 @@ WHERE n.nspname NOT IN ('pg_catalog', 'information_schema');
             for schema, table, conname, condef in cursor.fetchall():
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
-                forward_ddl.append(f"ALTER TABLE ONLY {schema}.{table} ADD CONSTRAINT {conname} {condef};")
+                forward_ddl.append(f"ALTER TABLE ONLY {_q(schema)}.{_q(table)} ADD CONSTRAINT {_q(conname)} {condef};")
                 # automatically drop constraints in DROP TABLE
 
             # -------------------------------------------------------------

@@ -14,7 +14,9 @@ from migrateit.reporters.output import write_line
 
 
 def _q(name: str) -> str:
-    """Wrap a table/column name in MySQL backticks (safe: validated by isidentifier)."""
+    """Wrap a MySQL identifier in backticks (safe: rejects backticks and null bytes)."""
+    if "`" in name or "\x00" in name:
+        raise ValueError(f"Invalid MySQL identifier: {name!r}")
     return f"`{name}`"
 
 
@@ -218,8 +220,8 @@ WHERE schema_name NOT IN (%s, %s, %s, %s);
             )
             for row in cursor.fetchall():
                 schema = _to_str(row[0])  # type: ignore
-                forward_ddl.append(f"CREATE DATABASE IF NOT EXISTS `{schema}`;")
-                rollback_ddl.append(f"DROP DATABASE IF EXISTS `{schema}`;")
+                forward_ddl.append(f"CREATE DATABASE IF NOT EXISTS {_q(schema)};")
+                rollback_ddl.append(f"DROP DATABASE IF EXISTS {_q(schema)};")
 
             # -------------------------------------------------------------
             # 2. TABLES & COLUMNS
@@ -247,7 +249,7 @@ ORDER BY c.table_schema, c.table_name, c.ordinal_position;
                 default = row[5]  # type: ignore
                 extra = _to_str(row[6])  # type: ignore
 
-                col_def = f"    `{col}` {col_type}"
+                col_def = f"    {_q(col)} {col_type}"
                 if nullable == "NO":
                     col_def += " NOT NULL"
                 if default is not None:
@@ -266,11 +268,11 @@ ORDER BY c.table_schema, c.table_name, c.ordinal_position;
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
                 cols_str = ",\n".join(table_col_defs)
-                forward_ddl.append(f"CREATE TABLE IF NOT EXISTS `{schema}`.`{table}` (\n{cols_str}\n);")
+                forward_ddl.append(f"CREATE TABLE IF NOT EXISTS {_q(schema)}.{_q(table)} (\n{cols_str}\n);")
                 tables_list.append((schema, table))
 
             for schema, table in reversed(tables_list):
-                rollback_ddl.append(f"DROP TABLE IF EXISTS `{schema}`.`{table}`;")
+                rollback_ddl.append(f"DROP TABLE IF EXISTS {_q(schema)}.{_q(table)};")
 
             # -------------------------------------------------------------
             # 3. FUNCTIONS & PROCEDURES
@@ -290,11 +292,11 @@ WHERE routine_schema NOT IN (%s, %s, %s, %s);
                 r_name = _to_str(row[1])  # type: ignore
                 r_type = _to_str(row[2])  # type: ignore
 
-                cursor.execute(f"SHOW CREATE {r_type} `{schema}`.`{r_name}`")
+                cursor.execute(f"SHOW CREATE {r_type} {_q(schema)}.{_q(r_name)}")
                 show_row = cursor.fetchone()
                 func_def = _extract_show_create(show_row)
                 forward_ddl.append(f"{func_def};")
-                rollback_ddl.append(f"DROP {r_type} IF EXISTS `{schema}`.`{r_name}`;")
+                rollback_ddl.append(f"DROP {r_type} IF EXISTS {_q(schema)}.{_q(r_name)};")
 
             # -------------------------------------------------------------
             # 4. VIEWS
@@ -312,8 +314,8 @@ WHERE table_schema NOT IN (%s, %s, %s, %s);
                 schema = _to_str(row[0])  # type: ignore
                 view_name = _to_str(row[1])  # type: ignore
                 view_def = _to_str(row[2])  # type: ignore
-                forward_ddl.append(f"CREATE OR REPLACE VIEW `{schema}`.`{view_name}` AS\n{view_def.strip()};")
-                rollback_ddl.append(f"DROP VIEW IF EXISTS `{schema}`.`{view_name}`;")
+                forward_ddl.append(f"CREATE OR REPLACE VIEW {_q(schema)}.{_q(view_name)} AS\n{view_def.strip()};")
+                rollback_ddl.append(f"DROP VIEW IF EXISTS {_q(schema)}.{_q(view_name)};")
 
             # -------------------------------------------------------------
             # 5. CONSTRAINTS (Primary Keys, Foreign Keys, Unique)
@@ -345,10 +347,10 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type;
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
                 if contype == "PRIMARY KEY":
-                    forward_ddl.append(f"ALTER TABLE `{schema}`.`{table}` ADD PRIMARY KEY ({con_cols});")
+                    forward_ddl.append(f"ALTER TABLE {_q(schema)}.{_q(table)} ADD PRIMARY KEY ({con_cols});")
                 elif contype == "UNIQUE":
                     forward_ddl.append(
-                        f"ALTER TABLE `{schema}`.`{table}` ADD CONSTRAINT `{conname}` UNIQUE ({con_cols});"
+                        f"ALTER TABLE {_q(schema)}.{_q(table)} ADD CONSTRAINT {_q(conname)} UNIQUE ({con_cols});"
                     )
                 else:  # pragma: no cover[safety]
                     raise ValueError(f"Unsupported constraint type: {contype}")
@@ -389,8 +391,8 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, kcu.referenced_tabl
                 del_rule = _to_str(row[8])  # type: ignore
 
                 fk_def = (
-                    f"ALTER TABLE `{schema}`.`{table}` ADD CONSTRAINT `{conname}` "
-                    f"FOREIGN KEY ({fk_cols}) REFERENCES `{ref_schema}`.`{ref_table}` ({ref_cols_str}) "
+                    f"ALTER TABLE {_q(schema)}.{_q(table)} ADD CONSTRAINT {_q(conname)} "
+                    f"FOREIGN KEY ({fk_cols}) REFERENCES {_q(ref_schema)}.{_q(ref_table)} ({ref_cols_str}) "
                     f"ON UPDATE {up_rule} ON DELETE {del_rule};"
                 )
                 forward_ddl.append(fk_def)
@@ -419,7 +421,7 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, kcu.referenced_tabl
                 check_clause = _to_str(row[3])  # type: ignore
 
                 forward_ddl.append(
-                    f"ALTER TABLE `{schema}`.`{table}` ADD CONSTRAINT `{conname}` CHECK ({check_clause});"
+                    f"ALTER TABLE {_q(schema)}.{_q(table)} ADD CONSTRAINT {_q(conname)} CHECK ({check_clause});"
                 )
 
             # -------------------------------------------------------------
@@ -447,7 +449,7 @@ GROUP BY table_schema, table_name, index_name, non_unique;
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
                 unique_kw = "" if non_unique else "UNIQUE "
-                forward_ddl.append(f"CREATE {unique_kw}INDEX `{indexname}` ON `{schema}`.`{table}` ({idx_cols});")
+                forward_ddl.append(f"CREATE {unique_kw}INDEX {_q(indexname)} ON {_q(schema)}.{_q(table)} ({idx_cols});")
 
             # -------------------------------------------------------------
             # 7. TRIGGERS
@@ -469,10 +471,10 @@ WHERE trigger_schema NOT IN (%s, %s, %s, %s);
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
 
-                cursor.execute(f"SHOW CREATE TRIGGER `{schema}`.`{tgname}`")
+                cursor.execute(f"SHOW CREATE TRIGGER {_q(schema)}.{_q(tgname)}")
                 show_row = cursor.fetchone()
                 forward_ddl.append(f"{_extract_show_create(show_row)};")
-                rollback_ddl.append(f"DROP TRIGGER IF EXISTS `{schema}`.`{tgname}`;")
+                rollback_ddl.append(f"DROP TRIGGER IF EXISTS {_q(schema)}.{_q(tgname)};")
 
         migration_path = self.migrations_dir / migration.name
         with open(migration_path, "w", encoding="utf-8") as f:

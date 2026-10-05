@@ -10,6 +10,13 @@ from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
 
+def _q(name: str) -> str:
+    """Wrap a SQLite identifier in double quotes (safe: rejects double quotes and null bytes)."""
+    if '"' in name or "\x00" in name:
+        raise ValueError(f"Invalid SQLite identifier: {name!r}")
+    return f'"{name}"'
+
+
 class SqliteClient(SqlClient[sqlite3.Connection]):
     @override
     @classmethod
@@ -187,7 +194,7 @@ ORDER BY name;
 
         # Rollback tables in reverse order
         for name in reversed(tables_list):
-            rollback_ddl.append(f'DROP TABLE IF EXISTS "{name}";')
+            rollback_ddl.append(f'DROP TABLE IF EXISTS {_q(name)};')
 
         # -------------------------------------------------------------
         # 2. VIEWS
@@ -217,7 +224,7 @@ ORDER BY name;
             views_list.append(name)
 
         for name in reversed(views_list):
-            rollback_ddl.append(f'DROP VIEW IF EXISTS "{name}";')
+            rollback_ddl.append(f'DROP VIEW IF EXISTS {_q(name)};')
 
         # -------------------------------------------------------------
         # 3. INDEXES
