@@ -9,6 +9,7 @@ from typing import Any
 import inquirer
 
 from migrateit.clients._client import SqlClient
+from migrateit.constants import VALID_EDITORS
 from migrateit.models.changelog import SupportedDatabase, create_changelog_file
 from migrateit.models.migration import (
     MigrationStatus,
@@ -18,6 +19,19 @@ from migrateit.models.migration import (
 )
 from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, write_line
 from migrateit.reporters.logs import logger
+
+
+def _validate_editor(editor: str) -> str:
+    basename = os.path.basename(editor)
+    if basename not in VALID_EDITORS:
+        if os.path.isabs(editor) and os.path.isfile(editor) and os.access(editor, os.X_OK):
+            return editor
+        raise ValueError(
+            f"Unsafe editor: {editor!r}. "
+            f"Known safe editors: {', '.join(sorted(VALID_EDITORS))}. "
+            f"Or provide an absolute path to a valid executable."
+        )
+    return editor
 
 
 def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, database: SupportedDatabase) -> int:
@@ -108,6 +122,7 @@ def cmd_new(
         return 0
 
     editor = os.getenv("EDITOR", "notepad.exe" if platform.system() == "Windows" else "vim")
+    editor = _validate_editor(editor)
     cmd = shlex.split(editor) + [str(client.migrations_dir / migration.name)]
     return subprocess.call(cmd)
 

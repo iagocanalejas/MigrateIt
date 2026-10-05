@@ -119,3 +119,33 @@ def test_cmd_new_interactive_cancelled(temp_dir: Path) -> None:
 
     changelog = load_changelog_file(mock_client.changelog.path)
     assert changelog.migrations[-1].name == "0001_cancelled_migration.sql"
+
+
+def test_validate_editor_known_safe() -> None:
+    """Test that known safe editors pass validation."""
+    from migrateit.cmd import _validate_editor
+
+    for editor in ("vim", "nano", "code", "subl", "emacs", "atom", "zed", "vi"):
+        result = _validate_editor(editor)
+        assert result == editor
+
+
+def test_validate_editor_absolute_path_valid() -> None:
+    """Test that absolute paths to valid executables pass validation."""
+
+    from migrateit.cmd import _validate_editor
+
+    # /bin/sh is a valid executable
+    result = _validate_editor("/bin/sh")
+    assert result == "/bin/sh"
+
+
+def test_validate_editor_unknown_raises() -> None:
+    """Test that unknown editors raise ValueError."""
+    from migrateit.cmd import _validate_editor
+
+    with pytest.raises(ValueError, match="Unsafe editor"):
+        _validate_editor("malicious-editor")
+
+    with pytest.raises(ValueError, match="Unsafe editor"):
+        _validate_editor("/tmp/nonexistent-editor")
