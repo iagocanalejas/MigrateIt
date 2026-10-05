@@ -41,6 +41,7 @@ def get_connection(database: SupportedDatabase) -> Connection:
                 "user": parsed.username,
                 "password": parsed.password,
                 "database": parsed.path.lstrip("/"),
+                "autocommit": False,
             }
 
             # Extract connection_timeout (or timeout) if present in the URL
@@ -51,7 +52,6 @@ def get_connection(database: SupportedDatabase) -> Connection:
             conn_kwargs["connection_timeout"] = int(timeout_val[0])
 
             mysql_conn = mysql.connector.connect(**conn_kwargs)
-            setattr(mysql_conn, "autocommit", False)
             return mysql_conn
         case _:
             raise NotImplementedError(f"Database {database} is not supported")
