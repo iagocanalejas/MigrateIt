@@ -180,12 +180,14 @@ def cmd_run(
     if target_migration:
         write_line(f"Target: {target_migration.name}")
     write_line(f"{action} {len(migration_plan)} migration(s)")
-
-    for migration in migration_plan:
-        write_line(f"{action.lower().capitalize()} migration: {migration.name}")
-        client.apply_migration(migration, is_rollback=is_rollback)
-
-    client.connection.commit()
+    try:
+        for migration in migration_plan:
+            write_line(f"{action.lower().capitalize()} migration: {migration.name}")
+            client.apply_migration(migration, is_rollback=is_rollback)
+        client.connection.commit()
+    except Exception as e:
+        client.connection.rollback()
+        raise e
     direction = "Migration" if not is_rollback else "Rollback"
     write_line(f"{direction} complete: {len(migration_plan)} migration(s) applied")
     return 0
