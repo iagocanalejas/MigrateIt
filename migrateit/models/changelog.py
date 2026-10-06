@@ -7,6 +7,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import inquirer
+
 from migrateit import constants as C
 from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
 from migrateit.reporters.logs import logger
@@ -118,25 +120,15 @@ class ChangelogFile:
         if not name.isidentifier():
             raise ValueError(f"Migration name '{name}' is not a valid identifier")
 
-        migration_files = [m.name for m in self.migrations]
-
-        # check if the name already exists and retrieve the full name
         if dependencies and not all(self.exist_migration_by_name(dep) for dep in dependencies):
             raise ValueError(f"Some dependencies {dependencies} do not exist in the changelog")
         dependencies = [self.get_migration_by_name(dep).name for dep in dependencies] if dependencies else None
 
-        # check if this is the initial migration
-        is_initial = len(migration_files) == 0
+        is_initial = len(self.migrations) == 0
         if is_initial and dependencies:
             raise ValueError("Initial migration cannot have dependencies")
 
-        # check if the name already exists (only can happen if a file was manually created)
-        migration_index = f"{len(migration_files):04d}"
-        new_filepath = migrations_dir / f"{migration_index}_{name}.sql"
-        if new_filepath.exists():
-            raise FileExistsError(f"Migration file {new_filepath.name} already exists")
-        if len(list(migrations_dir.glob(f"{migration_index}_*.sql"))) > 0:
-            raise FileExistsError(f"Migration with index {migration_index} already exists")
+        new_filepath = self._get_next_migration_path(migrations_dir, name)
 
         # create the new migration file with a header and rollback tag
         new_filepath.write_text(get_migration_header(new_filepath) + C.ROLLBACK_SPLIT_TAG + "\n\n")
@@ -145,7 +137,7 @@ class ChangelogFile:
         new_migration = Migration(
             name=new_filepath.name,
             initial=is_initial,
-            parents=[] if is_initial else (dependencies or [migration_files[-1]]),
+            parents=[] if is_initial else (dependencies or [self.migrations[-1].name]),
         )
         self.migrations.append(new_migration)
         self.save()
@@ -275,6 +267,21 @@ class ChangelogFile:
 
         for child in children.get(name, []):
             ChangelogFile._print_dag_rec(child.name, children, status_map, level + 1, seen)
+
+    def _get_next_migration_path(self, migrations_dir: Path, name: str) -> Path:
+        migration_index = f"{len(self.migrations):04d}"
+        new_filepath = migrations_dir / f"{migration_index}_{name}.sql"
+        if new_filepath.exists():
+            if not inquirer.confirm(f"Migration file {new_filepath.name} already exists. Overwrite?"):
+                raise FileExistsError(f"Migration file {new_filepath.name} already exists")
+            new_filepath.unlink()
+        if len(list(migrations_dir.glob(f"{migration_index}_*.sql"))) > 0:
+            if not inquirer.confirm(f"Migration index {migration_index} already exists. Overwrite?"):
+                raise FileExistsError(f"Migration index {migration_index} already exists")
+            for f in migrations_dir.glob(f"{migration_index}_*.sql"):
+                write_line(f"Deleting {f.name}")
+                f.unlink()
+        return new_filepath
 
 
 def create_changelog_file(migrations_file: Path, database: SupportedDatabase) -> ChangelogFile:
