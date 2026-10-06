@@ -109,6 +109,9 @@ migrateit rollback --fake 0001
 
 # Update migration hash without re-running
 migrateit migrate --update-hash 0001
+
+# Drop a migration
+migrateit drop 0001
 ```
 
 # Example
@@ -209,4 +212,14 @@ positional arguments:
 options:
   -h, --help       show this help message and exit
   -n, --name NAME  Name of the new squashed migration file. If not provided, a default name will be generated.
+```
+
+```sh
+usage: migrateit drop [-h] name
+
+positional arguments:
+  name        Name of the migration to drop.
+
+options:
+  -h, --help  show this help message and exit
 ```

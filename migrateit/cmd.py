@@ -136,17 +136,17 @@ def cmd_run(
     is_hash_update: bool = False,
 ) -> int:
     if sum(op for op in [is_fake, is_rollback, is_hash_update] if op) > 1:
-        raise ValueError("Cannot run multiple operations at once, {is_fake=}, {is_rollback=}, {is_hash_update=}")
+        raise ValueError(f"Cannot run multiple operations at once, {is_fake=}, {is_rollback=}, {is_hash_update=}")
 
     if is_hash_update:
         if name is None:
             raise ValueError("Hash update requires a target migration name")
-        return _cmd_hash_update(client, client.changelog.get_migration_by_name(name))
+        return _cmd_run_hash_update(client, client.changelog.get_migration_by_name(name))
 
     if is_fake:
         if name is None:
             raise ValueError("Fake migration requires a target migration name")
-        return _cmd_fake_run(client, client.changelog.get_migration_by_name(name), is_fake=True, is_rollback=False)
+        return _cmd_run_fake(client, client.changelog.get_migration_by_name(name), is_fake=True, is_rollback=False)
 
     if is_rollback and not name:
         raise ValueError("Rollback requires a target migration name")
@@ -291,7 +291,32 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
     return 0
 
 
-def _cmd_hash_update(client: SqlClient[Any], target_migration: Migration) -> int:
+def cmd_drop(client: SqlClient[Any], name: str) -> int:
+    target_migration = client.changelog.get_migration_by_name(name)
+    if any(target_migration.name in m.parents for m in client.changelog.migrations):
+        raise ValueError(f"Cannot drop migration {name}, it is a parent of other migrations.")
+    if target_migration.initial:
+        raise ValueError(f"Cannot drop the initial migration {name}.")
+
+    path = client.get_migration_path(target_migration)
+    if not path.exists():
+        raise FileNotFoundError(f"Migration file {path.name} does not exist.")
+
+    statuses = client.retrieve_migration_statuses()
+    if statuses[target_migration.name] == MigrationStatus.APPLIED:
+        client.apply_migration(target_migration, is_rollback=True)
+        write_line(f"Migration {target_migration.name} rolled back from the database.")
+
+    path.unlink()
+    write_line(f"Migration file removed: {path.name}")
+
+    client.changelog.migrations.remove(target_migration)
+    client.changelog.save()
+    write_line(f"Migration {target_migration.name} dropped and removed from changelog.")
+    return 0
+
+
+def _cmd_run_hash_update(client: SqlClient[Any], target_migration: Migration) -> int:
     if target_migration.initial:
         raise ValueError("Cannot update hash for the initial migration")
     write_line(f"Updating hash for migration: {target_migration.name}")
@@ -301,7 +326,7 @@ def _cmd_hash_update(client: SqlClient[Any], target_migration: Migration) -> int
     return 0
 
 
-def _cmd_fake_run(
+def _cmd_run_fake(
     client: SqlClient[Any],
     target_migration: Migration,
     is_fake: bool = False,
