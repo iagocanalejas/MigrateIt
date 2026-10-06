@@ -116,7 +116,7 @@ FROM {self.table_name};
 
         for row in rows:
             migration_name = row[0]
-            change_hash = row[1]
+            db_hash = row[1]
             migration = next((m for m in self.changelog.migrations if m.name == migration_name), None)
             if not migration:
                 migrations[migration_name] = MigrationStatus.REMOVED
@@ -124,9 +124,10 @@ FROM {self.table_name};
 
             _, _, migration_hash = self.get_migration_content_and_hash(self.migrations_dir / migration.name)
             status = MigrationStatus.APPLIED
-            if migration_hash != change_hash:
+            if migration_hash != db_hash:
                 status = MigrationStatus.CONFLICT
-                logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, change_hash)
+                write_line(f"Hash mismatch for {migration_name}: file={migration_hash} db={db_hash}")
+                logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, db_hash)
 
             migrations[migration.name] = status
 

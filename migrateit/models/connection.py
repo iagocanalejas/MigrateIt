@@ -30,24 +30,16 @@ def get_connection(database: SupportedDatabase) -> Connection:
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             params = MySqlClient.get_connection_params()
             if "connection_string" in params:
-                # DB_URL was provided — use it directly
-                mysql_conn = mysql.connector.connect(connection_string=params["connection_string"], autocommit=False)
-            else:
-                # Build kwargs without the password being in a URL string
-                conn_kwargs = {
-                    "host": params["host"],
-                    "port": params["port"],
-                    "user": params["user"],
-                    "password": params["password"],
-                    "database": params["database"],
-                    "autocommit": False,
-                }
-
-                # Extract connection_timeout
-                timeout_val = params["connection_timeout"]
-                conn_kwargs["connection_timeout"] = int(timeout_val)
-
-                mysql_conn = mysql.connector.connect(**conn_kwargs)
-            return mysql_conn
+                return mysql.connector.connect(connection_string=params["connection_string"], autocommit=False)
+            conn_kwargs = {
+                "host": params["host"],
+                "port": params["port"],
+                "user": params["user"],
+                "password": params["password"],
+                "database": params["database"],
+                "autocommit": False,
+                "connection_timeout": int(params["connection_timeout"]) if "connection_timeout" in params else None,
+            }
+            return mysql.connector.connect(**conn_kwargs)
         case _:
             raise NotImplementedError(f"Database {database} is not supported")

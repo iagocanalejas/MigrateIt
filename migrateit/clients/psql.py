@@ -60,11 +60,11 @@ DROP TABLE IF EXISTS {table_name};
 SELECT EXISTS (
     SELECT 1
     FROM information_schema.tables
-    WHERE LOWER(table_name) = LOWER(%(table_name)s)
+    WHERE LOWER(table_name) = LOWER(%s)
 );
 """
         with self.connection.cursor() as cursor:
-            cursor.execute(query, {"table_name": self.table_name})
+            cursor.execute(query, (self.table_name,))
             result = cursor.fetchone()
             return result[0] if result else False
 
@@ -72,11 +72,11 @@ SELECT EXISTS (
     def is_migration_applied(self, migration: Migration) -> bool:
         query = f"""
 SELECT EXISTS (
-    SELECT 1 FROM {self.table_name} WHERE migration_name = %(migration_name)s
+    SELECT 1 FROM {_q(self.table_name)} WHERE migration_name = %s
 );
 """
         with self.connection.cursor() as cursor:
-            cursor.execute(query, {"migration_name": migration.name})  # pyright: ignore
+            cursor.execute(query, (migration.name,))  # pyright: ignore
             result = cursor.fetchone()
             return result[0] if result else False
 
@@ -89,14 +89,14 @@ SELECT EXISTS (
 
         query = f"""
 SELECT migration_name, change_hash
-FROM {self.table_name};
+FROM {_q(self.table_name)};
         """
         with self.connection.cursor() as cursor:
             cursor.execute(query)  # pyright: ignore
             rows = cursor.fetchall()
 
         for row in rows:
-            migration_name, change_hash = row
+            migration_name, db_hash = row
             migration = next((m for m in self.changelog.migrations if m.name == migration_name), None)
             if not migration:
                 # migration applied not in changelog
@@ -105,10 +105,10 @@ FROM {self.table_name};
 
             _, _, migration_hash = self.get_migration_content_and_hash(self.migrations_dir / migration.name)
             status = MigrationStatus.APPLIED
-            if migration_hash != change_hash:
+            if migration_hash != db_hash:
                 status = MigrationStatus.CONFLICT
-                write_line(f"Hash mismatch for {migration_name}: file={migration_hash} db={change_hash}")
-                logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, change_hash)
+                write_line(f"Hash mismatch for {migration_name}: file={migration_hash} db={db_hash}")
+                logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, db_hash)
 
             migrations[migration.name] = status
 
@@ -140,11 +140,12 @@ FROM {self.table_name};
     @override
     def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
         query = f"""
-UPDATE {self.table_name} SET squashed = TRUE
-WHERE migration_name = ANY(%(migration_name)s);
+UPDATE {_q(self.table_name)}
+SET squashed = TRUE
+WHERE migration_name = ANY(%s);
 """
         with self.connection.cursor() as cursor:
-            cursor.execute(query, {"migration_name": migrations})  # pyright: ignore
+            cursor.execute(query, (migrations,))  # pyright: ignore
         self.apply_migration(new_migration, is_fake=True)
 
     @override
@@ -153,11 +154,12 @@ WHERE migration_name = ANY(%(migration_name)s);
         _, _, migration_hash = self.get_migration_content_and_hash(path)
 
         query = f"""
-UPDATE {self.table_name} SET change_hash = %(hash)s
-WHERE migration_name = %(migration)s;
+UPDATE {_q(self.table_name)}
+SET change_hash = %s
+WHERE migration_name = %s;
         """
         with self.connection.cursor() as cursor:
-            cursor.execute(query, {"migration": path.name, "hash": migration_hash})  # pyright: ignore
+            cursor.execute(query, (path.name, migration_hash))  # pyright: ignore
 
     @override
     def export_database_schema(self, migration: Migration) -> None:
@@ -402,24 +404,25 @@ WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND NOT trig.tgisint
         path = self.migrations_dir / migration.name
         if is_rollback and not migration.initial:
             query = f"""
-DELETE FROM {self.table_name}
-WHERE migration_name = %(migration_name)s
-    AND change_hash = %(change_hash)s;
+DELETE FROM {_q(self.table_name)}
+WHERE migration_name = %s
+    AND change_hash = %s;
 """
         else:
             query = f"""
-INSERT INTO {self.table_name} (migration_name, change_hash)
-VALUES (%(migration_name)s, %(change_hash)s);
+INSERT INTO {_q(self.table_name)} (migration_name, change_hash)
+VALUES (%s, %s);
 """
-        cursor.execute(query, {"migration_name": path.name, "change_hash": hash})  # pyright: ignore
+        cursor.execute(query, (path.name, hash))  # pyright: ignore
 
     def _get_database_hash(self, migration_name: str) -> str:
         query = f"""
-SELECT change_hash FROM {self.table_name}
-WHERE migration_name = %(migration_name)s;
+SELECT change_hash
+FROM {_q(self.table_name)}
+WHERE migration_name = %s;
 """
         with self.connection.cursor() as cursor:
-            cursor.execute(query, {"migration_name": migration_name})  # pyright: ignore
+            cursor.execute(query, (migration_name,))  # pyright: ignore
             result = cursor.fetchone()
 
             if not result or not result[0]:

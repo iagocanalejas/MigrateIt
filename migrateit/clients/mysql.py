@@ -125,7 +125,7 @@ FROM {_q(self.table_name)};
 
         for row in rows:
             migration_name: str = row[0]  # type: ignore
-            change_hash: str = row[1]  # type: ignore
+            db_hash: str = row[1]  # type: ignore
             migration = next((m for m in self.changelog.migrations if m.name == migration_name), None)
             if not migration:
                 migrations[migration_name] = MigrationStatus.REMOVED
@@ -133,10 +133,10 @@ FROM {_q(self.table_name)};
 
             _, _, migration_hash = self.get_migration_content_and_hash(self.migrations_dir / migration.name)
             status = MigrationStatus.APPLIED
-            if migration_hash != change_hash:
+            if migration_hash != db_hash:
                 status = MigrationStatus.CONFLICT
-                write_line(f"Hash mismatch for {migration_name}: file={migration_hash} db={change_hash}")
-                logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, change_hash)
+                write_line(f"Hash mismatch for {migration_name}: file={migration_hash} db={db_hash}")
+                logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, db_hash)
 
             migrations[migration.name] = status
 
@@ -548,12 +548,12 @@ VALUES (%s, %s);
         cursor.fetchall()
 
     def _get_database_hash(self, migration_name: str) -> str:
-        with self.connection.cursor() as cursor:
-            query = f"""
+        query = f"""
 SELECT change_hash
 FROM {_q(self.table_name)}
 WHERE migration_name = %s;
 """
+        with self.connection.cursor() as cursor:
             cursor.execute(query, (migration_name,))
             result = cursor.fetchone()
 
