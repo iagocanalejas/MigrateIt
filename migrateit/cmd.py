@@ -135,6 +135,9 @@ def cmd_run(
     is_rollback: bool = False,
     is_hash_update: bool = False,
 ) -> int:
+    if sum(op for op in [is_fake, is_rollback, is_hash_update] if op) > 1:
+        raise ValueError("Cannot run multiple operations at once, {is_fake=}, {is_rollback=}, {is_hash_update=}")
+
     if is_hash_update:
         if name is None:
             raise ValueError("Hash update requires a target migration name")

@@ -10,6 +10,7 @@ from migrateit.models.migration import Migration, MigrationStatus
 from tests.clients._clients_test import MIGRATION_NAME
 from tests.conftest import (
     INITIAL_MIGRATION,
+    TEST_MIGRATIONS_TABLE,
     TEST_TABLE,
     _create_migration_file,
     _drop_test_table,
@@ -72,7 +73,7 @@ def test_apply_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
     assert not _table_exists(client, TEST_TABLE)
 
 
-def test_apply_migration_undo_success(client: SqlClient[Any], temp_dir: Path) -> None:
+def test_rollback_migration_success(client: SqlClient[Any], temp_dir: Path) -> None:
     """Test rolling back a migration."""
     migrations_dir = temp_dir / "migrations"
 
@@ -95,7 +96,17 @@ def test_apply_migration_undo_success(client: SqlClient[Any], temp_dir: Path) ->
     assert not _table_exists(client, TEST_TABLE)
 
 
-def test_apply_migration_fake_and_undo_combination(client: SqlClient[Any], temp_dir: Path) -> None:
+def test_rollback_migration_initial(client: SqlClient[Any], temp_dir: Path) -> None:
+    """Test rolling back a migration."""
+
+    client.apply_migration(client.changelog.root, is_rollback=True)
+
+    statuses = client.retrieve_migration_statuses()
+    assert statuses[INITIAL_MIGRATION] == MigrationStatus.NOT_APPLIED
+    assert not _table_exists(client, TEST_MIGRATIONS_TABLE)
+
+
+def test_rollback_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
     """Test fake applying then rollback."""
     migrations_dir = temp_dir / "migrations"
 
@@ -136,7 +147,7 @@ def test_apply_migration_file_missing(client: SqlClient[Any]) -> None:
         client.apply_migration(migration, is_fake=False)
 
 
-def test_apply_migration_rollback_on_error(client: SqlClient[Any], temp_dir: Path) -> None:
+def test_rollback_migration_error(client: SqlClient[Any], temp_dir: Path) -> None:
     """Test that errors trigger a rollback."""
     migrations_dir = temp_dir / "migrations"
 
@@ -153,7 +164,7 @@ def test_apply_migration_rollback_on_error(client: SqlClient[Any], temp_dir: Pat
     spy_connection.rollback.assert_called_once()
 
 
-def test_apply_migration_undo_fake(client: SqlClient[Any], temp_dir: Path) -> None:
+def test_rollback_migration_rollback_fake(client: SqlClient[Any], temp_dir: Path) -> None:
     """Test fake rolling back a migration."""
     migrations_dir = temp_dir / "migrations"
 
@@ -168,7 +179,7 @@ def test_apply_migration_undo_fake(client: SqlClient[Any], temp_dir: Path) -> No
         client.apply_migration(migration, is_fake=True, is_rollback=True)
 
 
-def test_apply_migration_undo_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:
+def test_rollback_migration_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:
     """Test rolling back a migration that was never applied raises ValueError."""
     migrations_dir = temp_dir / "migrations"
 

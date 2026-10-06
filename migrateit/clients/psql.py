@@ -41,7 +41,7 @@ class PsqlClient(SqlClient[psycopg.Connection]):
         if not table_name.isidentifier():
             raise ValueError(f"Unsafe table name: {table_name}")
         migrations_query = f"""
-CREATE TABLE IF NOT EXISTS {table_name} (
+CREATE TABLE IF NOT EXISTS {_q(table_name)} (
     id SERIAL PRIMARY KEY,
     migration_name VARCHAR(255) UNIQUE NOT NULL,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS {table_name} (
 );
 """
         reverse_query = f"""
-DROP TABLE IF EXISTS {table_name};
+DROP TABLE IF EXISTS {_q(table_name)};
 """
         return migrations_query, reverse_query
 
@@ -402,6 +402,9 @@ WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND NOT trig.tgisint
         hash: str,
         is_rollback: bool,
     ) -> None:
+        if migration.initial and is_rollback:
+            return
+
         path = self.migrations_dir / migration.name
         if is_rollback and not migration.initial:
             query = f"""
