@@ -223,8 +223,7 @@ class ChangelogFile:
         Returns:
             A list of migration names representing the path from parent to child, or an empty list if no path exists.
         """
-        if path is None:
-            path = []
+        path = [] if path is None else list(path)
         path.append(parent)
         if parent == child:
             return path

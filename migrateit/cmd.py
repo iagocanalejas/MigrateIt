@@ -137,7 +137,7 @@ def cmd_run(
     target_migration = client.changelog.get_migration_by_name(name) if name else None
 
     if is_hash_update:
-        if not target_migration:
+        if target_migration is None:
             raise ValueError("Hash update requires a target migration name")
         if target_migration.initial:
             raise ValueError("Cannot update hash for the initial migration")
