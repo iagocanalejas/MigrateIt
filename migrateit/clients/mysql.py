@@ -534,6 +534,9 @@ WHERE trigger_schema NOT IN (%s, %s, %s, %s);
         hash: str,
         is_rollback: bool,
     ) -> None:
+        if migration.initial and is_rollback:
+            return
+
         path = self.migrations_dir / migration.name
         if is_rollback and not migration.initial:
             query = f"""
