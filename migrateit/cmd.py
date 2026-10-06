@@ -291,6 +291,29 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
     return 0
 
 
+def cmd_drop(client: SqlClient[Any], name: str) -> int:
+    target_migration = client.changelog.get_migration_by_name(name)
+    if any(target_migration.name in m.parents for m in client.changelog.migrations):
+        raise ValueError(f"Cannot drop migration {name}, it is a parent of other migrations.")
+
+    path = client.get_migration_path(target_migration)
+    if not path.exists():
+        raise FileNotFoundError(f"Migration file {path.name} does not exist.")
+
+    statuses = client.retrieve_migration_statuses()
+    if statuses[target_migration.name] == MigrationStatus.APPLIED:
+        client.apply_migration(target_migration, is_rollback=True)
+        write_line(f"Migration {target_migration.name} rolled back from the database.")
+
+    path.unlink()
+    write_line(f"Migration file removed: {path.name}")
+
+    client.changelog.migrations.remove(target_migration)
+    client.changelog.save()
+    write_line(f"Migration {target_migration.name} dropped and removed from changelog.")
+    return 0
+
+
 def _cmd_hash_update(client: SqlClient[Any], target_migration: Migration) -> int:
     if target_migration.initial:
         raise ValueError("Cannot update hash for the initial migration")

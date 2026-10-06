@@ -36,6 +36,7 @@ def main() -> int:
     _cmd_rollback(_add_cmd("rollback", help="Rollback migrations"))
     _cmd_squash(_add_cmd("squash", help="Squash migrations into a single file"))
     _cmd_show(_add_cmd("show", help="Show migration status"))
+    _cmd_drop(_add_cmd("drop", help="Drop and rollback a migration"))
     args = parser.parse_args()
 
     print_logo()
@@ -100,6 +101,8 @@ def main() -> int:
                         end_migration=args.end_migration,
                         name=args.name,
                     )
+                elif args.command == "drop":
+                    return commands.cmd_drop(client, args.name)
                 else:
                     raise NotImplementedError(f"Command {args.command} not implemented.")
         else:
@@ -217,6 +220,12 @@ def _cmd_show(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         help="Validate SQL migration syntax.",
     )
     parser.set_defaults(func=commands.cmd_show)
+    return parser
+
+
+def _cmd_drop(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument("name", type=str, default=None, help="Name of the migration to drop.")
+    parser.set_defaults(func=commands.cmd_drop)
     return parser
 
 
