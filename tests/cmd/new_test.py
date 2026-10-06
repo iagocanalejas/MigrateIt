@@ -50,8 +50,39 @@ def test_cmd_new_with_existing_migration(temp_dir: Path) -> None:
     path = mock_client.migrations_dir / "0001_test_migration.sql"
     path.write_text("Hello, world!\n")
 
-    with pytest.raises(FileExistsError, match="already exists"):
+    with patch("migrateit.models.changelog.inquirer.confirm", return_value=False):
+        with pytest.raises(FileExistsError, match="already exists"):
+            cmd_new(client=mock_client, name="test_migration", no_edit=True)
+
+
+@pytest.mark.unit
+def test_cmd_new_overwrite_migration(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+
+    # Pre-create the migration file
+    path = mock_client.migrations_dir / "0001_test_migration.sql"
+    path.write_text("Hello, world!\n")
+
+    with patch("migrateit.models.changelog.inquirer.confirm", return_value=True):
         cmd_new(client=mock_client, name="test_migration", no_edit=True)
+
+    assert (mock_client.migrations_dir / "0001_test_migration.sql").exists()
+    assert "Hello, world!" not in (mock_client.migrations_dir / "0001_test_migration.sql").read_text()
+
+
+@pytest.mark.unit
+def test_cmd_new_with_existing_migration_overwrite(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+
+    # Pre-create the migration file
+    path = mock_client.migrations_dir / "0001_test.sql"
+    path.write_text("Hello, world!\n")
+
+    with patch("migrateit.models.changelog.inquirer.confirm", return_value=True):
+        cmd_new(client=mock_client, name="test_migration", no_edit=True)
+
+    assert not (mock_client.migrations_dir / "0001_test.sql").exists()
+    assert (mock_client.migrations_dir / "0001_test_migration.sql").exists()
 
 
 @pytest.mark.unit
