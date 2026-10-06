@@ -96,9 +96,11 @@ class ChangelogFile:
     def get_migration_by_name(self, name: str) -> Migration:
         if os.path.isabs(name):
             name = os.path.basename(name)
-        name = name.split("_")[0]  # get the migration number
+        index = name.split("_")[0]  # get the migration number
+        if not re.match(r"^[0-9]{4}$", index):
+            raise ValueError(f"Invalid {index=} for migration='{name}'")
         for migration in self.migrations:
-            if migration.name.split("_")[0] == name:
+            if migration.name.split("_")[0] == index:
                 return migration
 
         raise ValueError(f"Migration '{name}' not found in changelog")
