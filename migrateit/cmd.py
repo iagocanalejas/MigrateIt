@@ -12,6 +12,7 @@ from migrateit.clients._client import SqlClient
 from migrateit.constants import VALID_EDITORS
 from migrateit.models.changelog import SupportedDatabase, create_changelog_file
 from migrateit.models.migration import (
+    Migration,
     MigrationStatus,
     create_migration_directory,
     retrieve_migration_sqls,
@@ -135,32 +136,19 @@ def cmd_run(
     is_hash_update: bool = False,
 ) -> int:
     target_migration = client.changelog.get_migration_by_name(name) if name else None
+    if target_migration:
+        write_line(f"Target: {target_migration.name}")
 
     if is_hash_update:
-        if target_migration is None:
-            raise ValueError("Hash update requires a target migration name")
-        if target_migration.initial:
-            raise ValueError("Cannot update hash for the initial migration")
-        write_line(f"Updating hash for migration: {target_migration.name}")
-        client.update_migration_hash(target_migration)
-        client.connection.commit()
-        write_line(f"Hash updated for {target_migration.name}")
-        return 0
+        return _cmd_hash_update(client, target_migration)
 
-    statuses = client.retrieve_migration_statuses()
     if is_fake:
-        if not target_migration:
-            raise ValueError("Fake migration requires a target migration name")
-        if target_migration.initial:
-            raise ValueError("Cannot fake the initial migration")
-        action = "Faking" if not is_rollback else "Faking rollback for"
-        write_line(f"{action} migration: {target_migration.name}")
-        client.apply_migration(target_migration, is_fake=is_fake, is_rollback=is_rollback)
-        client.connection.commit()
-        return 0
+        return _cmd_fake_run(client, target_migration, is_fake=True, is_rollback=False)
 
     if is_rollback and not target_migration:
         raise ValueError("Rollback requires a target migration name")
+
+    statuses = client.retrieve_migration_statuses()
     client.validate_migrations(statuses)
 
     migration_plan = client.changelog.build_migration_plan(
@@ -177,8 +165,6 @@ def cmd_run(
         return 0
 
     action = "Applying" if not is_rollback else "Rolling back"
-    if target_migration:
-        write_line(f"Target: {target_migration.name}")
     write_line(f"{action} {len(migration_plan)} migration(s)")
     try:
         for migration in migration_plan:
@@ -295,4 +281,33 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
                 pretty_print_sql_error(err[0], err[1])
         msg = "failed. Please fix the errors above." if has_err else "passed. No errors found."
         write_line("SQL validation " + msg)
+    return 0
+
+
+def _cmd_hash_update(client: SqlClient[Any], target_migration: Migration | None) -> int:
+    if target_migration is None:
+        raise ValueError("Hash update requires a target migration name")
+    if target_migration.initial:
+        raise ValueError("Cannot update hash for the initial migration")
+    write_line(f"Updating hash for migration: {target_migration.name}")
+    client.update_migration_hash(target_migration)
+    client.connection.commit()
+    write_line(f"Hash updated for {target_migration.name}")
+    return 0
+
+
+def _cmd_fake_run(
+    client: SqlClient[Any],
+    target_migration: Migration | None,
+    is_fake: bool = False,
+    is_rollback: bool = False,
+) -> int:
+    if not target_migration:
+        raise ValueError("Fake migration requires a target migration name")
+    if target_migration.initial:
+        raise ValueError("Cannot fake the initial migration")
+    action = "Faking" if not is_rollback else "Faking rollback for"
+    write_line(f"{action} migration: {target_migration.name}")
+    client.apply_migration(target_migration, is_fake=is_fake, is_rollback=is_rollback)
+    client.connection.commit()
     return 0
