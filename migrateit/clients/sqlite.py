@@ -114,11 +114,12 @@ FROM {self.table_name};
         cursor = self.connection.execute(query)
         rows = cursor.fetchall()
 
+        migrations_by_name = {m.name: m for m in self.changelog.migrations}
         for row in rows:
-            migration_name = row[0]
-            db_hash = row[1]
-            migration = next((m for m in self.changelog.migrations if m.name == migration_name), None)
+            migration_name, db_hash = row
+            migration = migrations_by_name.get(migration_name, None)
             if not migration:
+                # migration applied not in changelog
                 migrations[migration_name] = MigrationStatus.REMOVED
                 continue
 

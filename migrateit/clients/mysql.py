@@ -123,11 +123,13 @@ FROM {_q(self.table_name)};
             cursor.execute(query)
             rows = cursor.fetchall()
 
+        migrations_by_name = {m.name: m for m in self.changelog.migrations}
         for row in rows:
             migration_name: str = row[0]  # type: ignore
             db_hash: str = row[1]  # type: ignore
-            migration = next((m for m in self.changelog.migrations if m.name == migration_name), None)
+            migration = migrations_by_name.get(migration_name, None)
             if not migration:
+                # migration applied not in changelog
                 migrations[migration_name] = MigrationStatus.REMOVED
                 continue
 
