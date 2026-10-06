@@ -169,19 +169,22 @@ class ChangelogFile:
         """
         plan: list[Migration] = []
         visited: set[str] = set()
-        queue: deque[Migration] = deque([self.root])
         is_bottom_up = target_migration is not None and not is_rollback
         is_normal_order = not is_bottom_up and not is_rollback
 
+        queue: deque[Migration] = deque([self.root])
+        in_queue = {self.root.name}  # NOTE: optimization to avoid O(n) membership check on deque
         if is_rollback:
             if not target_migration:
                 raise ValueError("Target migration is required for rollback plan")
             queue = deque([target_migration])
+            in_queue = {target_migration.name}
 
         if is_bottom_up:
             if not target_migration:
                 raise ValueError("Target migration is required for bottom-up plan")
             queue = deque([target_migration])
+            in_queue = {target_migration.name}
 
         def get_neighbors(m: Migration) -> list[str]:
             # get the children of the migration
@@ -202,12 +205,14 @@ class ChangelogFile:
             plan.append(current)
             for neighbor_name in get_neighbors(current):
                 neighbor = self.get_migration_by_name(neighbor_name)
-                if neighbor.name not in visited and neighbor not in queue:
+                if neighbor.name not in visited and neighbor.name not in in_queue:
                     # Structure: A → B, A → C, B → C
                     # Tree: { A: [B, C], B: [C], C: [] }
                     # when: is_bottom_up=True
                     # C is a common child of A and B. It gets added to the queue twice, so we skip the second visit.
+                    in_queue.add(neighbor.name)
                     queue.append(neighbor)
+            in_queue.remove(current.name)
 
         plan = list(reversed(plan)) if not is_normal_order else plan
         if is_rollback:
