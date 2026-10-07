@@ -13,13 +13,6 @@ from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
 
-def _q(name: str) -> str:
-    """Wrap a MySQL identifier in backticks (safe: rejects backticks and null bytes)."""
-    if "`" in name or "\x00" in name:
-        raise ValueError(f"Invalid MySQL identifier: {name!r}")
-    return f"`{name}`"
-
-
 def _to_str(val: Any) -> str:  # pragma: no cover
     """Safely convert database query values (bytes, Decimal, int, str, etc.) to str."""
     if val is None:
@@ -68,7 +61,7 @@ class MySqlClient(SqlClient[MySQLConnectionAbstract | PooledMySQLConnection]):
         if not table_name.isidentifier():
             raise ValueError(f"Unsafe table name: {table_name}")
         migrations_query = f"""
-CREATE TABLE IF NOT EXISTS {_q(table_name)} (
+CREATE TABLE IF NOT EXISTS {cls._q(table_name)} (
     id INT AUTO_INCREMENT PRIMARY KEY,
     migration_name VARCHAR(255) UNIQUE NOT NULL,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -77,9 +70,14 @@ CREATE TABLE IF NOT EXISTS {_q(table_name)} (
 );
         """
         reverse_query = f"""
-DROP TABLE IF EXISTS {_q(table_name)};
+DROP TABLE IF EXISTS {cls._q(table_name)};
         """
         return migrations_query, reverse_query
+
+    @override
+    @classmethod
+    def _q(cls, name: str, QUOTE_CHAR: str = "`") -> str:
+        return super()._q(name, QUOTE_CHAR)
 
     @override
     def is_migrations_table_created(self) -> bool:
@@ -100,7 +98,7 @@ SELECT EXISTS(
     def is_migration_applied(self, migration: Migration) -> bool:
         query = f"""
 SELECT EXISTS(
-    SELECT 1 FROM {_q(self.table_name)} WHERE migration_name = %s
+    SELECT 1 FROM {self._q(self.table_name)} WHERE migration_name = %s
 ) as value;
 """
         with self.connection.cursor(dictionary=True) as cursor:
@@ -117,7 +115,7 @@ SELECT EXISTS(
 
         query = f"""
 SELECT migration_name, change_hash
-FROM {_q(self.table_name)};
+FROM {self._q(self.table_name)};
 """
         with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(query)
@@ -169,7 +167,7 @@ FROM {_q(self.table_name)};
     def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
         placeholders = ", ".join(["%s"] * len(migrations))
         query = f"""
-UPDATE {_q(self.table_name)}
+UPDATE {self._q(self.table_name)}
 SET squashed=1
 WHERE migration_name IN ({placeholders});
 """
@@ -183,7 +181,7 @@ WHERE migration_name IN ({placeholders});
         _, _, migration_hash = self.get_migration_content_and_hash(path)
 
         query = f"""
-UPDATE {_q(self.table_name)}
+UPDATE {self._q(self.table_name)}
 SET change_hash = %s
 WHERE migration_name = %s;
 """
@@ -215,8 +213,8 @@ WHERE schema_name NOT IN (%s, %s, %s, %s);
             )
             for r1 in cast(list[_SchemaRow], cursor.fetchall()):
                 schema = _to_str(r1["schema_name"])
-                forward_ddl.append(f"CREATE DATABASE IF NOT EXISTS {_q(schema)};")
-                rollback_ddl.append(f"DROP DATABASE IF EXISTS {_q(schema)};")
+                forward_ddl.append(f"CREATE DATABASE IF NOT EXISTS {self._q(schema)};")
+                rollback_ddl.append(f"DROP DATABASE IF EXISTS {self._q(schema)};")
 
             # -------------------------------------------------------------
             # 2. TABLES & COLUMNS
@@ -251,7 +249,7 @@ ORDER BY c.table_schema, c.table_name, c.ordinal_position;
                 default = r2["column_default"]
                 extra = _to_str(r2["extra"])
 
-                col_def = f"    {_q(col)} {col_type}"
+                col_def = f"    {self._q(col)} {col_type}"
                 if nullable == "NO":
                     col_def += " NOT NULL"
                 if default is not None:
@@ -270,11 +268,11 @@ ORDER BY c.table_schema, c.table_name, c.ordinal_position;
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
                 cols_str = ",\n".join(table_col_defs)
-                forward_ddl.append(f"CREATE TABLE IF NOT EXISTS {_q(schema)}.{_q(table)} (\n{cols_str}\n);")
+                forward_ddl.append(f"CREATE TABLE IF NOT EXISTS {self._q(schema)}.{self._q(table)} (\n{cols_str}\n);")
                 tables_list.append((schema, table))
 
             for schema, table in reversed(tables_list):
-                rollback_ddl.append(f"DROP TABLE IF EXISTS {_q(schema)}.{_q(table)};")
+                rollback_ddl.append(f"DROP TABLE IF EXISTS {self._q(schema)}.{self._q(table)};")
 
             # -------------------------------------------------------------
             # 3. FUNCTIONS & PROCEDURES
@@ -297,11 +295,11 @@ WHERE routine_schema NOT IN (%s, %s, %s, %s);
                 r_name = _to_str(r3["routine_name"])
                 r_type = _to_str(r3["routine_type"])
 
-                cursor.execute(f"SHOW CREATE {r_type} {_q(schema)}.{_q(r_name)}")
+                cursor.execute(f"SHOW CREATE {r_type} {self._q(schema)}.{self._q(r_name)}")
                 show_row = cursor.fetchone()
                 func_def = _extract_show_create(show_row)
                 forward_ddl.append(f"{func_def};")
-                rollback_ddl.append(f"DROP {r_type} IF EXISTS {_q(schema)}.{_q(r_name)};")
+                rollback_ddl.append(f"DROP {r_type} IF EXISTS {self._q(schema)}.{self._q(r_name)};")
 
             # -------------------------------------------------------------
             # 4. VIEWS
@@ -323,8 +321,10 @@ WHERE table_schema NOT IN (%s, %s, %s, %s);
                 view_name = _to_str(r4["table_name"])
                 view_def = _to_str(r4["view_definition"])
 
-                forward_ddl.append(f"CREATE OR REPLACE VIEW {_q(schema)}.{_q(view_name)} AS\n{view_def.strip()};")
-                rollback_ddl.append(f"DROP VIEW IF EXISTS {_q(schema)}.{_q(view_name)};")
+                forward_ddl.append(
+                    f"CREATE OR REPLACE VIEW {self._q(schema)}.{self._q(view_name)} AS\n{view_def.strip()};"
+                )
+                rollback_ddl.append(f"DROP VIEW IF EXISTS {self._q(schema)}.{self._q(view_name)};")
 
             # -------------------------------------------------------------
             # 5. CONSTRAINTS (Primary Keys, Foreign Keys, Unique)
@@ -360,10 +360,11 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type;
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
                 if contype == "PRIMARY KEY":
-                    forward_ddl.append(f"ALTER TABLE {_q(schema)}.{_q(table)} ADD PRIMARY KEY ({con_cols});")
+                    forward_ddl.append(f"ALTER TABLE {self._q(schema)}.{self._q(table)} ADD PRIMARY KEY ({con_cols});")
                 elif contype == "UNIQUE":
                     forward_ddl.append(
-                        f"ALTER TABLE {_q(schema)}.{_q(table)} ADD CONSTRAINT {_q(conname)} UNIQUE ({con_cols});"
+                        f"ALTER TABLE {self._q(schema)}.{self._q(table)} "
+                        "ADD CONSTRAINT {self._q(conname)} UNIQUE ({con_cols});"
                     )
                 else:  # pragma: no cover[safety]
                     raise ValueError(f"Unsupported constraint type: {contype}")
@@ -408,8 +409,8 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, kcu.referenced_tabl
                 del_rule = _to_str(r6["delete_rule"])
 
                 fk_def = (
-                    f"ALTER TABLE {_q(schema)}.{_q(table)} ADD CONSTRAINT {_q(conname)} "
-                    f"FOREIGN KEY ({fk_cols}) REFERENCES {_q(ref_schema)}.{_q(ref_table)} ({ref_cols_str}) "
+                    f"ALTER TABLE {self._q(schema)}.{self._q(table)} ADD CONSTRAINT {self._q(conname)} "
+                    f"FOREIGN KEY ({fk_cols}) REFERENCES {self._q(ref_schema)}.{self._q(ref_table)} ({ref_cols_str}) "
                     f"ON UPDATE {up_rule} ON DELETE {del_rule};"
                 )
                 forward_ddl.append(fk_def)
@@ -437,7 +438,8 @@ WHERE tc.constraint_schema NOT IN (%s, %s, %s, %s)
                 check_clause = _to_str(r7["check_clause"])
 
                 forward_ddl.append(
-                    f"ALTER TABLE {_q(schema)}.{_q(table)} ADD CONSTRAINT {_q(conname)} CHECK ({check_clause});"
+                    f"ALTER TABLE {self._q(schema)}.{self._q(table)} "
+                    f"ADD CONSTRAINT {self._q(conname)} CHECK ({check_clause});"
                 )
 
             # -------------------------------------------------------------
@@ -469,7 +471,9 @@ GROUP BY table_schema, table_name, index_name, non_unique;
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
                 unique_kw = "" if non_unique else "UNIQUE "
-                forward_ddl.append(f"CREATE {unique_kw}INDEX {_q(indexname)} ON {_q(schema)}.{_q(table)} ({idx_cols});")
+                forward_ddl.append(
+                    f"CREATE {unique_kw}INDEX {self._q(indexname)} ON {self._q(schema)}.{self._q(table)} ({idx_cols});"
+                )
 
             # -------------------------------------------------------------
             # 7. TRIGGERS
@@ -494,10 +498,10 @@ WHERE trigger_schema NOT IN (%s, %s, %s, %s);
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
 
-                cursor.execute(f"SHOW CREATE TRIGGER {_q(schema)}.{_q(tgname)}")
+                cursor.execute(f"SHOW CREATE TRIGGER {self._q(schema)}.{self._q(tgname)}")
                 show_row = cursor.fetchone()
                 forward_ddl.append(f"{_extract_show_create(show_row)};")
-                rollback_ddl.append(f"DROP TRIGGER IF EXISTS {_q(schema)}.{_q(tgname)};")
+                rollback_ddl.append(f"DROP TRIGGER IF EXISTS {self._q(schema)}.{self._q(tgname)};")
 
         migration_path = self.migrations_dir / migration.name
         with open(migration_path, "w", encoding="utf-8") as f:
@@ -563,13 +567,13 @@ WHERE trigger_schema NOT IN (%s, %s, %s, %s);
         path = self.migrations_dir / migration.name
         if is_rollback and not migration.initial:
             query = f"""
-DELETE FROM {_q(self.table_name)}
+DELETE FROM {self._q(self.table_name)}
 WHERE migration_name = %s
     AND change_hash = %s;
 """
         else:
             query = f"""
-INSERT INTO {_q(self.table_name)} (migration_name, change_hash)
+INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
 VALUES (%s, %s);
 """
         cursor.execute(query, (path.name, hash))
@@ -577,7 +581,7 @@ VALUES (%s, %s);
     def _get_database_hash(self, migration_name: str) -> str:
         query = f"""
 SELECT change_hash
-FROM {_q(self.table_name)}
+FROM {self._q(self.table_name)}
 WHERE migration_name = %s;
 """
         with self.connection.cursor(dictionary=True) as cursor:
