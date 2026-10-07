@@ -1,4 +1,5 @@
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -14,7 +15,7 @@ def test_cmd_run_and_rerun(client: SqlClient[Any]) -> None:
 
     cmd_run(client=client)
     rows = _get_query_rows(client, "SELECT migration_name FROM migrations")
-    assert len(rows) == 2  # migrateit + new
+    assert len(rows) == 2
 
     cmd_run(client=client)
     rows = _get_query_rows(client, "SELECT migration_name FROM migrations")
@@ -38,9 +39,6 @@ def test_cmd_run_fake(client: SqlClient[Any]) -> None:
     cmd_run(client=client, is_fake=True)
     rows = _get_query_rows(client, "SELECT migration_name FROM migrations")
     assert len(rows) == 3
-
-    # Verify table was NOT created (fake doesn't execute SQL)
-    # Use DB-specific table existence check
     assert not _table_exists(client, "test")
     assert not _table_exists(client, "test2")
 
@@ -64,14 +62,32 @@ def test_cmd_run_rollback(client: SqlClient[Any]) -> None:
     assert len(rows) == 1
 
 
+def test_cmd_run_plan_only(client: SqlClient[Any]) -> None:
+    cmd_new(client, name="new", no_edit=True)
+    _create_migration_file(client.migrations_dir, "0001_new.sql", sql="CREATE TABLE test (id INTEGER PRIMARY KEY);")
+
+    cmd_run(client=client, is_plan_only=True)
+    rows = _get_query_rows(client, "SELECT migration_name FROM migrations")
+    assert len(rows) == 0
+    assert not _table_exists(client, "test")
+
+
 def test_cmd_run_no_migrations_to_rollback(client: SqlClient[Any]) -> None:
-    """Test cmd_run returns early when nothing to roll back."""
-    cmd_run(client=client, name="0000_migrateit.sql", is_rollback=True)
+    cmd_run(client=client)
+
+    cmd_new(client, name="new", no_edit=True)
+    _create_migration_file(client.migrations_dir, "0001_new.sql")
+
+    with patch("migrateit.cmd.write_line") as mock_write_line:
+        cmd_run(client=client, name="0001", is_rollback=True)
+    mock_write_line.assert_called_with("Rollback: no migrations to roll back")
 
 
 def test_cmd_run_all_applied(client: SqlClient[Any]) -> None:
-    """Test cmd_run returns early when all migrations already applied."""
     cmd_run(client=client)
+    with patch("migrateit.cmd.write_line") as mock_write_line:
+        cmd_run(client=client)
+    mock_write_line.assert_called_once_with("All migrations already applied")
 
 
 def test_cmd_run_hash_update_no_target(client: SqlClient[Any]) -> None:

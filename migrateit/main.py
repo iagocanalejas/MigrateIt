@@ -86,6 +86,7 @@ def main() -> int:
                         args.name,
                         is_fake=args.fake,
                         is_hash_update=args.update_hash,
+                        is_plan_only=args.dry_run,
                     )
                 elif args.command == "rollback":
                     return commands.cmd_run(
@@ -93,6 +94,7 @@ def main() -> int:
                         args.name,
                         is_fake=args.fake,
                         is_rollback=True,
+                        is_plan_only=args.dry_run,
                     )
                 elif args.command == "squash":
                     return commands.cmd_squash(
@@ -160,7 +162,18 @@ def _cmd_new(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 def _cmd_migrate(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
-    parser.add_argument("--fake", action="store_true", default=False, help="Fakes the migration marking it as ran.")
+    parser.add_argument(
+        "--fake",
+        action="store_true",
+        default=False,
+        help="Fakes the migration marking it as ran.",
+    )
+    parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        default=False,
+        help="Dry run the migration without applying it.",
+    )
     parser.add_argument(
         "--update-hash",
         action="store_true",
@@ -178,6 +191,12 @@ def _cmd_rollback(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Fakes the migration marking it as ran.",
+    )
+    parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        default=False,
+        help="Dry run the migration without applying it.",
     )
     parser.set_defaults(func=commands.cmd_run)
     return parser
