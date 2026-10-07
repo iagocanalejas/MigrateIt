@@ -106,7 +106,7 @@ def test_rollback_migration_initial(client: SqlClient[Any], temp_dir: Path) -> N
     assert not _table_exists(client, TEST_MIGRATIONS_TABLE)
 
 
-def test_rollback_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
+def test_rollback_fake_migration(client: SqlClient[Any], temp_dir: Path) -> None:
     """Test fake applying then rollback."""
     migrations_dir = temp_dir / "migrations"
 
@@ -122,6 +122,30 @@ def test_rollback_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None
     assert statuses[MIGRATION_NAME] == MigrationStatus.NOT_APPLIED
     assert not _migration_is_applied(client, MIGRATION_NAME)
     assert not _table_exists(client, TEST_TABLE)
+
+
+def test_fake_rollback_migration(client: SqlClient[Any], temp_dir: Path) -> None:
+    """Test fake rolling back a migration."""
+    migrations_dir = temp_dir / "migrations"
+
+    _create_migration_file(
+        migrations_dir,
+        MIGRATION_NAME,
+        sql=f"""
+            CREATE TABLE IF NOT EXISTS {TEST_TABLE} (
+                id SERIAL PRIMARY KEY,
+                data TEXT
+            );
+        """,
+    )
+
+    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    client.changelog.migrations.append(migration)
+
+    client.apply_migration(migration)
+    client.apply_migration(migration, is_fake=True, is_rollback=True)
+    assert not _migration_is_applied(client, MIGRATION_NAME)
+    assert _table_exists(client, TEST_TABLE)
 
 
 def test_apply_migration_already_applied(client: SqlClient[Any], temp_dir: Path) -> None:
@@ -162,21 +186,6 @@ def test_rollback_migration_error(client: SqlClient[Any], temp_dir: Path) -> Non
     with pytest.raises(Exception):
         client.apply_migration(migration)
     spy_connection.rollback.assert_called_once()
-
-
-def test_rollback_migration_rollback_fake(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test fake rolling back a migration."""
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(migrations_dir, MIGRATION_NAME)
-
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
-    client.changelog.migrations.append(migration)
-
-    client.apply_migration(migration, is_fake=False)
-
-    with pytest.raises(ValueError, match="fake a rollback"):
-        client.apply_migration(migration, is_fake=True, is_rollback=True)
 
 
 def test_rollback_migration_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:

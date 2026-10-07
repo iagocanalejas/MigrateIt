@@ -135,9 +135,9 @@ def cmd_run(
     is_rollback: bool = False,
     is_hash_update: bool = False,
 ) -> int:
-    # TODO: check which operations are being run in parallel
-    if sum(op for op in [is_fake, is_rollback, is_hash_update] if op) > 1:
-        raise ValueError(f"Cannot run multiple operations at once, {is_fake=}, {is_rollback=}, {is_hash_update=}")
+    if (is_fake or is_rollback) and is_hash_update:
+        action = "faking" if is_fake else "rolling back"
+        raise ValueError(f"Cannot update hash while {action} or rolling back")
 
     if is_hash_update:
         if name is None:

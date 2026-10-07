@@ -146,9 +146,6 @@ FROM {_q(self.table_name)};
 
     @override
     def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
-        if is_fake and is_rollback:
-            raise ValueError("Cannot fake a rollback migration")
-
         path = self.get_migration_path(migration)
         if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
             if is_rollback:

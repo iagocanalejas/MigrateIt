@@ -23,9 +23,8 @@ def test_cmd_run_and_rerun(client: SqlClient[Any]) -> None:
 
 def test_cmd_run_by_name_not_found(client: SqlClient[Any]) -> None:
     """Test cmd_run raises ValueError for non-existent target migration."""
-    with pytest.raises(ValueError) as ctx:
+    with pytest.raises(ValueError, match="not found"):
         cmd_run(client=client, name="0010")
-    assert "Migration '0010' not found" in str(ctx.value)
 
 
 def test_cmd_run_fake(client: SqlClient[Any]) -> None:
@@ -77,17 +76,20 @@ def test_cmd_run_all_applied(client: SqlClient[Any]) -> None:
 
 def test_cmd_run_hash_update_no_target(client: SqlClient[Any]) -> None:
     """Test cmd_run raises ValueError when hash_update is True but no name given."""
-    with pytest.raises(ValueError) as ctx:
+    with pytest.raises(ValueError, match="requires a target migration"):
         cmd_run(client=client, is_hash_update=True)
-    assert "Hash update requires a target migration name" in str(ctx.value)
 
 
 def test_cmd_run_hash_update_initial(client: SqlClient[Any]) -> None:
     """Test cmd_run raises ValueError when trying to update hash of the initial migration."""
     initial = [m for m in client.changelog.migrations if m.initial][0]
-    with pytest.raises(ValueError) as ctx:
+    with pytest.raises(ValueError, match="hash for the initial migration"):
         cmd_run(client=client, name=initial.name, is_hash_update=True)
-    assert "Cannot update hash for the initial migration" in str(ctx.value)
+
+
+def test_cmd_run_hash_update_fake(client: SqlClient[Any]) -> None:
+    with pytest.raises(ValueError, match="Cannot update hash"):
+        cmd_run(client=client, is_fake=True, is_hash_update=True)
 
 
 def test_cmd_run_hash_update_success(client: SqlClient[Any]) -> None:
