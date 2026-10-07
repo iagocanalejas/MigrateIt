@@ -51,6 +51,12 @@ class SqlClient[T](ABC, SqlClientProtocol):
         self.connection = connection
         self.config = config
 
+    @classmethod
+    def _q(cls, name: str, QUOTE_CHAR: str = '"') -> str:
+        if QUOTE_CHAR in name or "\x00" in name:
+            raise ValueError(f"Invalid identifier: {name!r}")
+        return f"{QUOTE_CHAR}{name}{QUOTE_CHAR}"
+
     @staticmethod
     def validate_config(config: MigrateItConfig) -> None:
         if not config.table_name:

@@ -10,13 +10,6 @@ from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
 
-def _q(name: str) -> str:
-    """Wrap a SQLite identifier in double quotes (safe: rejects double quotes and null bytes)."""
-    if '"' in name or "\x00" in name:
-        raise ValueError(f"Invalid SQLite identifier: {name!r}")
-    return f'"{name}"'
-
-
 def _split_sql_statements(sql: str) -> list[str]:
     """Split SQL into individual statements, respecting semicolons inside strings."""
     statements: list[str] = []
@@ -62,7 +55,7 @@ class SqliteClient(SqlClient[sqlite3.Connection]):
         if not table_name.isidentifier():
             raise ValueError(f"Unsafe table name: {table_name}")
         migrations_query = f"""
-CREATE TABLE IF NOT EXISTS {_q(table_name)} (
+CREATE TABLE IF NOT EXISTS {cls._q(table_name)} (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     migration_name VARCHAR(255) UNIQUE NOT NULL,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -71,7 +64,7 @@ CREATE TABLE IF NOT EXISTS {_q(table_name)} (
 );
         """
         reverse_query = f"""
-DROP TABLE IF EXISTS {_q(table_name)};
+DROP TABLE IF EXISTS {cls._q(table_name)};
         """
         return migrations_query, reverse_query
 
@@ -91,7 +84,7 @@ WHERE type='table' AND name=?;
         """Check if a migration has been applied in SQLite."""
         query = f"""
 SELECT EXISTS(
-    SELECT 1 FROM {_q(self.table_name)} WHERE migration_name=?
+    SELECT 1 FROM {self._q(self.table_name)} WHERE migration_name=?
 );
 """
         cursor = self.connection.execute(query, (migration.name,))
@@ -109,7 +102,7 @@ SELECT EXISTS(
 
         query = f"""
 SELECT migration_name, change_hash
-FROM {_q(self.table_name)};
+FROM {self._q(self.table_name)};
 """
         cursor = self.connection.execute(query)
         rows = cursor.fetchall()
@@ -161,7 +154,7 @@ FROM {_q(self.table_name)};
         """Mark migrations as squashed in SQLite."""
         placeholders = ",".join("?" for _ in migrations)
         query = f"""
-UPDATE {_q(self.table_name)} SET squashed=1
+UPDATE {self._q(self.table_name)} SET squashed=1
 WHERE migration_name IN ({placeholders});
 """
         with self.connection:
@@ -175,7 +168,7 @@ WHERE migration_name IN ({placeholders});
         _, _, migration_hash = self.get_migration_content_and_hash(path)
 
         query = f"""
-INSERT OR REPLACE INTO {_q(self.table_name)} (migration_name, change_hash)
+INSERT OR REPLACE INTO {self._q(self.table_name)} (migration_name, change_hash)
 VALUES (?, ?);
 """
         self.connection.execute(query, (path.name, migration_hash))
@@ -222,7 +215,7 @@ ORDER BY name;
 
         # Rollback tables in reverse order
         for name in reversed(tables_list):
-            rollback_ddl.append(f"DROP TABLE IF EXISTS {_q(name)};")
+            rollback_ddl.append(f"DROP TABLE IF EXISTS {self._q(name)};")
 
         # -------------------------------------------------------------
         # 2. VIEWS
@@ -252,7 +245,7 @@ ORDER BY name;
             views_list.append(name)
 
         for name in reversed(views_list):
-            rollback_ddl.append(f"DROP VIEW IF EXISTS {_q(name)};")
+            rollback_ddl.append(f"DROP VIEW IF EXISTS {self._q(name)};")
 
         # -------------------------------------------------------------
         # 3. INDEXES
@@ -365,13 +358,13 @@ ORDER BY name;
         path = self.migrations_dir / migration.name
         if is_rollback and not migration.initial:
             query = f"""
-DELETE FROM {_q(self.table_name)}
+DELETE FROM {self._q(self.table_name)}
 WHERE migration_name=?
     AND change_hash=?;
 """
         else:
             query = f"""
-INSERT INTO {_q(self.table_name)} (migration_name, change_hash)
+INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
 VALUES (?, ?);
 """
         self.connection.execute(query, (path.name, hash))
@@ -380,7 +373,7 @@ VALUES (?, ?);
         """Retrieve a migration's hash from the SQLite database."""
         query = f"""
 SELECT change_hash
-FROM {_q(self.table_name)}
+FROM {self._q(self.table_name)}
 WHERE migration_name=?;
 """
         cursor = self.connection.execute(query, (migration_name,))
