@@ -135,6 +135,7 @@ def cmd_run(
     is_rollback: bool = False,
     is_hash_update: bool = False,
 ) -> int:
+    # TODO: check which operations are being run in parallel
     if sum(op for op in [is_fake, is_rollback, is_hash_update] if op) > 1:
         raise ValueError(f"Cannot run multiple operations at once, {is_fake=}, {is_rollback=}, {is_hash_update=}")
 
@@ -142,11 +143,6 @@ def cmd_run(
         if name is None:
             raise ValueError("Hash update requires a target migration name")
         return _cmd_run_hash_update(client, client.changelog.get_migration_by_name(name))
-
-    if is_fake:
-        if name is None:
-            raise ValueError("Fake migration requires a target migration name")
-        return _cmd_run_fake(client, client.changelog.get_migration_by_name(name), is_fake=True, is_rollback=False)
 
     if is_rollback and not name:
         raise ValueError("Rollback requires a target migration name")
@@ -171,12 +167,17 @@ def cmd_run(
             write_line("All migrations already applied")
         return 0
 
-    action = "Applying" if not is_rollback else "Rolling back"
-    write_line(f"{action} {len(migration_plan)} migration(s)")
+    if is_fake:
+        action = "Faking" if not is_rollback else "Faking rollback for"
+        write_line(f"{action} {len(migration_plan)} migration(s)")
+    else:
+        action = "Applying" if not is_rollback else "Rolling back"
+        write_line(f"{action} {len(migration_plan)} migration(s)")
+
     try:
         for migration in migration_plan:
             write_line(f"{action.lower().capitalize()} migration: {migration.name}")
-            client.apply_migration(migration, is_rollback=is_rollback)
+            client.apply_migration(migration, is_fake=is_fake, is_rollback=is_rollback)
         client.connection.commit()
     except Exception as e:
         client.connection.rollback()
@@ -323,19 +324,4 @@ def _cmd_run_hash_update(client: SqlClient[Any], target_migration: Migration) ->
     client.update_migration_hash(target_migration)
     client.connection.commit()
     write_line(f"Hash updated for {target_migration.name}")
-    return 0
-
-
-def _cmd_run_fake(
-    client: SqlClient[Any],
-    target_migration: Migration,
-    is_fake: bool = False,
-    is_rollback: bool = False,
-) -> int:
-    if target_migration.initial:
-        raise ValueError("Cannot fake the initial migration")
-    action = "Faking" if not is_rollback else "Faking rollback for"
-    write_line(f"{action} migration: {target_migration.name}")
-    client.apply_migration(target_migration, is_fake=is_fake, is_rollback=is_rollback)
-    client.connection.commit()
     return 0

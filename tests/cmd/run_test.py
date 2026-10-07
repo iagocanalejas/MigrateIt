@@ -33,13 +33,17 @@ def test_cmd_run_fake(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
     _create_migration_file(client.migrations_dir, "0001_new.sql", sql="CREATE TABLE test (id INTEGER PRIMARY KEY);")
 
-    cmd_run(client=client, name="0001", is_fake=True)
+    cmd_new(client, name="new", no_edit=True)
+    _create_migration_file(client.migrations_dir, "0002_new.sql", sql="CREATE TABLE test2 (id INTEGER PRIMARY KEY);")
+
+    cmd_run(client=client, is_fake=True)
     rows = _get_query_rows(client, "SELECT migration_name FROM migrations")
-    assert len(rows) == 1  # only new migration (0001 marked fake)
+    assert len(rows) == 3
 
     # Verify table was NOT created (fake doesn't execute SQL)
     # Use DB-specific table existence check
     assert not _table_exists(client, "test")
+    assert not _table_exists(client, "test2")
 
 
 def test_cmd_run_rollback(client: SqlClient[Any]) -> None:
