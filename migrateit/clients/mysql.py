@@ -1,6 +1,6 @@
 import os
 from collections import defaultdict
-from typing import Any, override
+from typing import Any, TypedDict, cast, override
 
 import mysql.connector
 from mysql.connector.abstracts import MySQLConnectionAbstract
@@ -83,30 +83,30 @@ DROP TABLE IF EXISTS {_q(table_name)};
 
     @override
     def is_migrations_table_created(self) -> bool:
-        with self.connection.cursor() as cursor:
-            query = """
-SELECT EXISTS (
+        query = """
+SELECT EXISTS(
     SELECT 1
     FROM information_schema.tables
     WHERE table_schema = DATABASE()
         AND LOWER(table_name) = LOWER(%s)
-);
-            """
+) as value;
+"""
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(query, (self.table_name,))
-            result = cursor.fetchone()
-            return bool(result[0]) if result else False  # type: ignore
+            result = cast(_BoolResult, cursor.fetchone())
+            return result["value"]
 
     @override
     def is_migration_applied(self, migration: Migration) -> bool:
         query = f"""
 SELECT EXISTS(
     SELECT 1 FROM {_q(self.table_name)} WHERE migration_name = %s
-);
+) as value;
 """
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(query, (migration.name,))
-            result = cursor.fetchone()
-            return bool(result[0]) if result else False  # type: ignore
+            result = cast(_BoolResult, cursor.fetchone())
+            return result["value"]
 
     @override
     def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
@@ -119,14 +119,13 @@ SELECT EXISTS(
 SELECT migration_name, change_hash
 FROM {_q(self.table_name)};
 """
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(query)
             rows = cursor.fetchall()
 
         migrations_by_name = {m.name: m for m in self.changelog.migrations}
-        for row in rows:
-            migration_name: str = row[0]  # type: ignore
-            db_hash: str = row[1]  # type: ignore
+        for row in cast(list[_MigrationStatusRow], rows):
+            migration_name, db_hash = row["migration_name"], row["change_hash"]
             migration = migrations_by_name.get(migration_name, None)
             if not migration:
                 # migration applied not in changelog
@@ -202,21 +201,21 @@ WHERE migration_name = %s;
         system_schemas = ("mysql", "information_schema", "performance_schema", "sys")
 
         write_line(f"Exporting full database schema to '{migration.name}'...")
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             # -------------------------------------------------------------
             # 1. SCHEMAS / DATABASES
             # -------------------------------------------------------------
             write_line("\tExporting schemas...")
             cursor.execute(
                 """
-SELECT schema_name
+SELECT schema_name as schema_name
 FROM information_schema.schemata
 WHERE schema_name NOT IN (%s, %s, %s, %s);
             """,
                 system_schemas,
             )
-            for row in cursor.fetchall():
-                schema = _to_str(row[0])  # type: ignore
+            for r1 in cast(list[_SchemaRow], cursor.fetchall()):
+                schema = _to_str(r1["schema_name"])
                 forward_ddl.append(f"CREATE DATABASE IF NOT EXISTS {_q(schema)};")
                 rollback_ddl.append(f"DROP DATABASE IF EXISTS {_q(schema)};")
 
@@ -226,7 +225,14 @@ WHERE schema_name NOT IN (%s, %s, %s, %s);
             write_line("\tExporting tables and columns...")
             cursor.execute(
                 """
-SELECT c.table_schema, c.table_name, c.column_name, c.column_type, c.is_nullable, c.column_default, c.extra
+SELECT
+    c.table_schema as table_schema,
+    c.table_name as table_name,
+    c.column_name as column_name,
+    c.column_type as column_type,
+    c.is_nullable as is_nullable,
+    c.column_default as column_default,
+    c.extra as extra
 FROM information_schema.columns c
     JOIN information_schema.tables t ON c.table_schema = t.table_schema AND c.table_name = t.table_name
 WHERE t.table_type = 'BASE TABLE'
@@ -237,14 +243,14 @@ ORDER BY c.table_schema, c.table_name, c.ordinal_position;
             )
 
             table_columns = defaultdict(list)
-            for row in cursor.fetchall():
-                schema = _to_str(row[0])  # type: ignore
-                table = _to_str(row[1])  # type: ignore
-                col = _to_str(row[2])  # type: ignore
-                col_type = _to_str(row[3])  # type: ignore
-                nullable = _to_str(row[4])  # type: ignore
-                default = row[5]  # type: ignore
-                extra = _to_str(row[6])  # type: ignore
+            for r2 in cast(list[_ColumnRow], cursor.fetchall()):
+                schema = _to_str(r2["table_schema"])
+                table = _to_str(r2["table_name"])
+                col = _to_str(r2["column_name"])
+                col_type = _to_str(r2["column_type"])
+                nullable = _to_str(r2["is_nullable"])
+                default = r2["column_default"]
+                extra = _to_str(r2["extra"])
 
                 col_def = f"    {_q(col)} {col_type}"
                 if nullable == "NO":
@@ -277,17 +283,20 @@ ORDER BY c.table_schema, c.table_name, c.ordinal_position;
             write_line("\tExporting functions and procedures...")
             cursor.execute(
                 """
-SELECT routine_schema, routine_name, routine_type
+SELECT
+    routine_schema as routine_schema,
+    routine_name as routine_name,
+    routine_type as routine_type
 FROM information_schema.routines
 WHERE routine_schema NOT IN (%s, %s, %s, %s);
             """,
                 system_schemas,
             )
 
-            for row in cursor.fetchall():
-                schema = _to_str(row[0])  # type: ignore
-                r_name = _to_str(row[1])  # type: ignore
-                r_type = _to_str(row[2])  # type: ignore
+            for r3 in cast(list[_RoutineRow], cursor.fetchall()):
+                schema = _to_str(r3["routine_schema"])
+                r_name = _to_str(r3["routine_name"])
+                r_type = _to_str(r3["routine_type"])
 
                 cursor.execute(f"SHOW CREATE {r_type} {_q(schema)}.{_q(r_name)}")
                 show_row = cursor.fetchone()
@@ -301,16 +310,20 @@ WHERE routine_schema NOT IN (%s, %s, %s, %s);
             write_line("\tExporting views...")
             cursor.execute(
                 """
-SELECT table_schema, table_name, view_definition
+SELECT
+    table_schema as table_schema,
+    table_name as table_name,
+    view_definition as view_definition
 FROM information_schema.views
 WHERE table_schema NOT IN (%s, %s, %s, %s);
             """,
                 system_schemas,
             )
-            for row in cursor.fetchall():
-                schema = _to_str(row[0])  # type: ignore
-                view_name = _to_str(row[1])  # type: ignore
-                view_def = _to_str(row[2])  # type: ignore
+            for r4 in cast(list[_ViewRow], cursor.fetchall()):
+                schema = _to_str(r4["table_schema"])
+                view_name = _to_str(r4["table_name"])
+                view_def = _to_str(r4["view_definition"])
+
                 forward_ddl.append(f"CREATE OR REPLACE VIEW {_q(schema)}.{_q(view_name)} AS\n{view_def.strip()};")
                 rollback_ddl.append(f"DROP VIEW IF EXISTS {_q(schema)}.{_q(view_name)};")
 
@@ -321,7 +334,11 @@ WHERE table_schema NOT IN (%s, %s, %s, %s);
             # Primary Keys and Unique Constraints
             cursor.execute(
                 """
-SELECT tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type,
+SELECT
+    tc.table_schema as table_schema,
+    tc.table_name as table_name,
+    tc.constraint_name as constraint_name,
+    tc.constraint_type as constraint_type,
     GROUP_CONCAT(CONCAT('`', kcu.column_name, '`') ORDER BY kcu.ordinal_position SEPARATOR ', ') AS cols
 FROM information_schema.table_constraints tc
     JOIN information_schema.key_column_usage kcu
@@ -334,12 +351,12 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type;
                 system_schemas,
             )
 
-            for row in cursor.fetchall():
-                schema = _to_str(row[0])  # type: ignore
-                table = _to_str(row[1])  # type: ignore
-                conname = _to_str(row[2])  # type: ignore
-                contype = _to_str(row[3])  # type: ignore
-                con_cols = _to_str(row[4])  # type: ignore
+            for r5 in cast(list[_ConstraintRow], cursor.fetchall()):
+                schema = _to_str(r5["table_schema"])
+                table = _to_str(r5["table_name"])
+                conname = _to_str(r5["constraint_name"])
+                contype = _to_str(r5["constraint_type"])
+                con_cols = _to_str(r5["cols"])
 
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
@@ -355,11 +372,16 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type;
             # Foreign Keys
             cursor.execute(
                 """
-SELECT tc.table_schema, tc.table_name, tc.constraint_name,
+SELECT
+    tc.table_schema as table_schema,
+    tc.table_name as table_name,
+    tc.constraint_name as constraint_name,
     GROUP_CONCAT(CONCAT('`', kcu.column_name, '`') ORDER BY kcu.ordinal_position SEPARATOR ', ') AS cols,
-    kcu.referenced_table_schema, kcu.referenced_table_name,
+    kcu.referenced_table_schema as ref_table_schema,
+    kcu.referenced_table_name as ref_table_name,
     GROUP_CONCAT(CONCAT('`', kcu.referenced_column_name, '`') ORDER BY kcu.ordinal_position SEPARATOR ', ') AS ref_cols,
-    rc.update_rule, rc.delete_rule
+    rc.update_rule as update_rule,
+    rc.delete_rule as delete_rule
 FROM information_schema.table_constraints tc
     JOIN information_schema.key_column_usage kcu
         ON tc.constraint_schema = kcu.constraint_schema
@@ -368,24 +390,23 @@ FROM information_schema.table_constraints tc
     JOIN information_schema.referential_constraints rc
         ON tc.constraint_schema = rc.constraint_schema
         AND tc.constraint_name = rc.constraint_name
-WHERE tc.constraint_schema NOT IN (%s, %s, %s, %s)
-    AND tc.constraint_type = 'FOREIGN KEY'
+WHERE tc.constraint_schema NOT IN (%s, %s, %s, %s) AND tc.constraint_type = 'FOREIGN KEY'
 GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, kcu.referenced_table_schema, kcu.referenced_table_name,
     rc.update_rule, rc.delete_rule;
-            """,
+""",
                 system_schemas,
             )
 
-            for row in cursor.fetchall():
-                schema = _to_str(row[0])  # type: ignore
-                table = _to_str(row[1])  # type: ignore
-                conname = _to_str(row[2])  # type: ignore
-                fk_cols = _to_str(row[3])  # type: ignore
-                ref_schema = _to_str(row[4])  # type: ignore
-                ref_table = _to_str(row[5])  # type: ignore
-                ref_cols_str = _to_str(row[6])  # type: ignore
-                up_rule = _to_str(row[7])  # type: ignore
-                del_rule = _to_str(row[8])  # type: ignore
+            for r6 in cast(list[_ForeignKeyRow], cursor.fetchall()):
+                schema = _to_str(r6["table_schema"])
+                table = _to_str(r6["table_name"])
+                conname = _to_str(r6["constraint_name"])
+                fk_cols = _to_str(r6["cols"])
+                ref_schema = _to_str(r6["ref_table_schema"])
+                ref_table = _to_str(r6["ref_table_name"])
+                ref_cols_str = _to_str(r6["ref_cols"])
+                up_rule = _to_str(r6["update_rule"])
+                del_rule = _to_str(r6["delete_rule"])
 
                 fk_def = (
                     f"ALTER TABLE {_q(schema)}.{_q(table)} ADD CONSTRAINT {_q(conname)} "
@@ -396,26 +417,25 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, kcu.referenced_tabl
 
             cursor.execute(
                 """
-                SELECT
-                    tc.table_schema,
-                    tc.table_name,
-                    tc.constraint_name,
-                    cc.check_clause
-                FROM information_schema.table_constraints tc
-                JOIN information_schema.check_constraints cc
-                    ON tc.constraint_schema = cc.constraint_schema
-                    AND tc.constraint_name = cc.constraint_name
-                WHERE tc.constraint_schema NOT IN (%s, %s, %s, %s)
-                  AND tc.constraint_type = 'CHECK';
+SELECT
+    tc.table_schema as table_schema,
+    tc.table_name as table_name,
+    tc.constraint_name as constraint_name,
+    cc.check_clause as check_clause
+FROM information_schema.table_constraints tc
+    JOIN information_schema.check_constraints cc
+        ON tc.constraint_schema = cc.constraint_schema AND tc.constraint_name = cc.constraint_name
+WHERE tc.constraint_schema NOT IN (%s, %s, %s, %s)
+    AND tc.constraint_type = 'CHECK';
                 """,
                 system_schemas,
             )
 
-            for row in cursor.fetchall():
-                schema = _to_str(row[0])  # type: ignore
-                table = _to_str(row[1])  # type: ignore
-                conname = _to_str(row[2])  # type: ignore
-                check_clause = _to_str(row[3])  # type: ignore
+            for r7 in cast(list[_CheckConstraintRow], cursor.fetchall()):
+                schema = _to_str(r7["table_schema"])
+                table = _to_str(r7["table_name"])
+                conname = _to_str(r7["constraint_name"])
+                check_clause = _to_str(r7["check_clause"])
 
                 forward_ddl.append(
                     f"ALTER TABLE {_q(schema)}.{_q(table)} ADD CONSTRAINT {_q(conname)} CHECK ({check_clause});"
@@ -427,7 +447,11 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, kcu.referenced_tabl
             write_line("\tExporting indexes...")
             cursor.execute(
                 """
-SELECT table_schema, table_name, index_name, non_unique,
+SELECT
+    table_schema as table_schema,
+    table_name as table_name,
+    index_name as index_name,
+    non_unique as non_unique,
     GROUP_CONCAT(CONCAT('`', column_name, '`') ORDER BY seq_in_index SEPARATOR ', ') AS cols
 FROM information_schema.statistics
 WHERE table_schema NOT IN (%s, %s, %s, %s) AND index_name != 'PRIMARY'
@@ -436,12 +460,12 @@ GROUP BY table_schema, table_name, index_name, non_unique;
                 system_schemas,
             )
 
-            for row in cursor.fetchall():
-                schema = _to_str(row[0])  # type: ignore
-                table = _to_str(row[1])  # type: ignore
-                indexname = _to_str(row[2])  # type: ignore
-                non_unique = row[3]  # type: ignore
-                idx_cols = _to_str(row[4])  # type: ignore
+            for r8 in cast(list[_IndexRow], cursor.fetchall()):
+                schema = _to_str(r8["table_schema"])
+                table = _to_str(r8["table_name"])
+                indexname = _to_str(r8["index_name"])
+                non_unique = r8["non_unique"]
+                idx_cols = _to_str(r8["cols"])
 
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
@@ -454,17 +478,20 @@ GROUP BY table_schema, table_name, index_name, non_unique;
             write_line("\tExporting triggers...")
             cursor.execute(
                 """
-SELECT trigger_schema, trigger_name, event_object_table
+SELECT
+    trigger_schema as trigger_schema,
+    trigger_name as trigger_name,
+    event_object_table as event_object_table
 FROM information_schema.triggers
 WHERE trigger_schema NOT IN (%s, %s, %s, %s);
             """,
                 system_schemas,
             )
 
-            for row in cursor.fetchall():
-                schema = _to_str(row[0])  # type: ignore
-                tgname = _to_str(row[1])  # type: ignore
-                table = _to_str(row[2])  # type: ignore
+            for r9 in cast(list[_TriggerRow], cursor.fetchall()):
+                schema = _to_str(r9["trigger_schema"])
+                tgname = _to_str(r9["trigger_name"])
+                table = _to_str(r9["event_object_table"])
                 if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
                     continue
 
@@ -555,10 +582,90 @@ SELECT change_hash
 FROM {_q(self.table_name)}
 WHERE migration_name = %s;
 """
-        with self.connection.cursor() as cursor:
+        with self.connection.cursor(dictionary=True) as cursor:
             cursor.execute(query, (migration_name,))
-            result = cursor.fetchone()
+            result = cast(_HashResult, cursor.fetchone())
 
-            if not result or not result[0]:  # type: ignore
-                raise ValueError(f"Migration {migration_name} not found in the database")
-            return str(result[0])  # type: ignore
+            if result and result["change_hash"]:
+                return result["change_hash"]
+            raise ValueError(f"Migration {migration_name} not found in the database")
+
+
+class _BoolResult(TypedDict):
+    value: bool
+
+
+class _MigrationStatusRow(TypedDict):
+    migration_name: str
+    change_hash: str
+
+
+class _HashResult(TypedDict):
+    change_hash: str
+
+
+class _SchemaRow(TypedDict):
+    schema_name: str
+
+
+class _ColumnRow(TypedDict):
+    table_schema: str
+    table_name: str
+    column_name: str
+    column_type: str
+    is_nullable: str
+    column_default: Any
+    extra: str
+
+
+class _RoutineRow(TypedDict):
+    routine_schema: str
+    routine_name: str
+    routine_type: str
+
+
+class _ViewRow(TypedDict):
+    table_schema: str
+    table_name: str
+    view_definition: str
+
+
+class _ConstraintRow(TypedDict):
+    table_schema: str
+    table_name: str
+    constraint_name: str
+    constraint_type: str
+    cols: str
+
+
+class _ForeignKeyRow(TypedDict):
+    table_schema: str
+    table_name: str
+    constraint_name: str
+    cols: str
+    ref_table_schema: str
+    ref_table_name: str
+    ref_cols: str
+    update_rule: str
+    delete_rule: str
+
+
+class _CheckConstraintRow(TypedDict):
+    table_schema: str
+    table_name: str
+    constraint_name: str
+    check_clause: str
+
+
+class _IndexRow(TypedDict):
+    table_schema: str
+    table_name: str
+    index_name: str
+    non_unique: Any
+    cols: str
+
+
+class _TriggerRow(TypedDict):
+    trigger_schema: str
+    trigger_name: str
+    event_object_table: str
