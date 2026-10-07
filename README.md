@@ -92,6 +92,9 @@ migrateit export my_full_export    # with a custom name
 # Run the migrations
 migrateit migrate
 
+# Print the migration plan without applying
+migrateit migrate --plan-only
+
 # Run a specific migration
 migrateit migrate 0001
 
@@ -161,7 +164,7 @@ options:
 ```
 
 ```sh
-usage: migrateit migrate [-h] [--fake] [--update-hash] [name]
+usage: migrateit migrate [-h] [--fake] [--plan-only] [--update-hash] [name]
 
 positional arguments:
   name           Name of the migration to run
@@ -169,6 +172,7 @@ positional arguments:
 options:
   -h, --help     show this help message and exit
   --fake         Fakes the migration marking it as ran.
+  --plan-only    Dry run the migration without applying it.
   --update-hash  Update the hash of the migration.
 ```
 
@@ -192,7 +196,7 @@ options:
 ```
 
 ```sh
-usage: migrateit rollback [-h] [--fake] [name]
+usage: migrateit rollback [-h] [--fake] [--plan-only] [name]
 
 positional arguments:
   name          Name of the migration to rollback
@@ -200,6 +204,7 @@ positional arguments:
 options:
   -h, --help    show this help message and exit
   --fake        Fakes the rollback marking it as undone.
+  --plan-only    Dry run the migration without applying it.
 ```
 
 ```sh

@@ -134,6 +134,7 @@ def cmd_run(
     is_fake: bool = False,
     is_rollback: bool = False,
     is_hash_update: bool = False,
+    is_plan_only: bool = False,
 ) -> int:
     if (is_fake or is_rollback) and is_hash_update:
         action = "faking" if is_fake else "rolling back"
@@ -159,6 +160,9 @@ def cmd_run(
         target_migration=target_migration,
         is_rollback=is_rollback,
     )
+    if is_plan_only:
+        write_line(" -> ".join(m.name for m in migration_plan))
+        return 0
 
     if not migration_plan:
         if is_rollback:
