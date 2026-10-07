@@ -178,8 +178,7 @@ WHERE migration_name IN ({placeholders});
 INSERT OR REPLACE INTO {_q(self.table_name)} (migration_name, change_hash)
 VALUES (?, ?);
 """
-        cursor = self.connection.execute(query, (path.name, migration_hash))
-        cursor.fetchall()
+        self.connection.execute(query, (path.name, migration_hash))
 
     @override
     def export_database_schema(self, migration: Migration) -> None:
