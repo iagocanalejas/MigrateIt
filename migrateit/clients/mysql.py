@@ -158,7 +158,8 @@ FROM {_q(self.table_name)};
                 if not is_fake:
                     code = migration_code if not is_rollback else reverse_migration_code
                     cursor.execute(code)
-                    cursor.fetchall()
+                    if any(m in code.upper() for m in ("SELECT", "SHOW", "DESCRIBE")):
+                        cursor.fetchall()
                 self._update_migration_changelog(cursor, migration, migration_hash, is_rollback)
         except mysql.connector.Error as e:
             self.connection.rollback()
@@ -174,7 +175,6 @@ WHERE migration_name IN ({placeholders});
 """
         with self.connection.cursor() as cursor:
             cursor.execute(query, migrations)
-            cursor.fetchall()
         self.apply_migration(new_migration, is_fake=True)
 
     @override
@@ -189,7 +189,6 @@ WHERE migration_name = %s;
 """
         with self.connection.cursor() as cursor:
             cursor.execute(query, (migration_hash, path.name))
-            cursor.fetchall()
 
     @override
     def export_database_schema(self, migration: Migration) -> None:
@@ -574,7 +573,6 @@ INSERT INTO {_q(self.table_name)} (migration_name, change_hash)
 VALUES (%s, %s);
 """
         cursor.execute(query, (path.name, hash))
-        cursor.fetchall()
 
     def _get_database_hash(self, migration_name: str) -> str:
         query = f"""
