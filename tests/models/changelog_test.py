@@ -472,11 +472,13 @@ def test_print_dag() -> None:
     migrations = [
         Migration(name="0000_init.sql", initial=True, parents=[]),
         Migration(name="0001_add.sql", parents=["0000_init.sql"]),
+        Migration(name="0002_two.sql", parents=["0000_init.sql", "0001_add.sql"]),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     status_map: dict[str, MigrationStatus] = {
         "0000_init.sql": MigrationStatus.APPLIED,
         "0001_add.sql": MigrationStatus.NOT_APPLIED,
+        "0002_two.sql": MigrationStatus.NOT_APPLIED,
     }
     changelog.print_dag(status_map)
 

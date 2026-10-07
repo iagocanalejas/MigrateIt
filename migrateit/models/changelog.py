@@ -251,8 +251,9 @@ class ChangelogFile:
         children: dict[str, list[Migration]],
         status_map: dict[str, MigrationStatus],
         level: int = 0,
-        seen: set[str] = set(),
+        seen: set[str] | None = None,
     ) -> None:
+        seen = seen or set()
         indent = "  " * level + ("└─ " if level > 0 else "")
         status = status_map[name]
         status_str = f"{STATUS_COLORS[status]}{status.name.replace('_', ' ').title()}{STATUS_COLORS['reset']}"
