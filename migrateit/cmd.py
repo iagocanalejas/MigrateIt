@@ -9,6 +9,7 @@ from typing import Any
 import inquirer
 
 from migrateit.clients._client import SqlClient
+from migrateit.clients._lock import DatabaseLock
 from migrateit.constants import VALID_EDITORS
 from migrateit.models.changelog import SupportedDatabase, create_changelog_file
 from migrateit.models.migration import (
@@ -182,10 +183,11 @@ def cmd_run(
         write_line(f"{action} {len(migration_plan)} migration(s)")
 
     try:
-        for migration in migration_plan:
-            write_line(f"{action.lower().capitalize()} migration: {migration.name}")
-            client.apply_migration(migration, is_fake=is_fake, is_rollback=is_rollback)
-        client.connection.commit()
+        with DatabaseLock(client.connection, client.table_name):
+            for migration in migration_plan:
+                write_line(f"{action.lower().capitalize()} migration: {migration.name}")
+                client.apply_migration(migration, is_fake=is_fake, is_rollback=is_rollback)
+            client.connection.commit()
     except Exception as e:
         client.connection.rollback()
         raise e
