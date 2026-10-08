@@ -94,32 +94,30 @@ def test_cmd_show_shows_pending_hint(temp_dir: Path) -> None:
 
 
 @pytest.mark.unit
-def test_cmd_show_shows_conflict_hint(temp_dir: Path) -> None:
+@pytest.mark.parametrize(
+    "statuses,search_term",
+    [
+        pytest.param(
+            {"0001_init.sql": MigrationStatus.CONFLICT},
+            "hash conflicts",
+            id="conflict",
+        ),
+        pytest.param(
+            {"0001_init.sql": MigrationStatus.APPLIED, "ghost.sql": MigrationStatus.REMOVED},
+            "missing from changelog",
+            id="removed",
+        ),
+    ],
+)
+def test_cmd_show_shows_hint(temp_dir: Path, statuses: dict[str, MigrationStatus], search_term: str) -> None:
     client = _mock_client(temp_dir)
-    client.retrieve_migration_statuses.return_value = {"0001_init.sql": MigrationStatus.CONFLICT}  # type: ignore
+    client.retrieve_migration_statuses.return_value = statuses  # type: ignore
     client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=[])]
 
     with patch("migrateit.cmd.write_line") as mock_write:
         cmd_show(client)
         call_args = [c[0][0] for c in mock_write.call_args_list]
-        hints = [c for c in call_args if "hash conflicts" in c.lower()]
-        assert len(hints) == 1
-
-
-@pytest.mark.unit
-def test_cmd_show_shows_removed_hint(temp_dir: Path) -> None:
-    client = _mock_client(temp_dir)
-    client.retrieve_migration_statuses.return_value = {  # type: ignore
-        "0001_init.sql": MigrationStatus.APPLIED,
-        "ghost.sql": MigrationStatus.REMOVED,
-    }
-
-    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=[])]
-
-    with patch("migrateit.cmd.write_line") as mock_write:
-        cmd_show(client)
-        call_args = [c[0][0] for c in mock_write.call_args_list]
-        hints = [c for c in call_args if "missing from changelog" in c.lower()]
+        hints = [c for c in call_args if search_term in c.lower()]
         assert len(hints) == 1
 
 
