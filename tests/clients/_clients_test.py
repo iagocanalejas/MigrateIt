@@ -301,13 +301,13 @@ def test_update_migration_hash(client: SqlClient[Any], temp_dir: Path) -> None:
 
     client.apply_migration(migration, is_fake=False)
 
-    old_hash = client._get_database_hash(MIGRATION_NAME)  # type: ignore
+    old_hash = client._get_database_hash(MIGRATION_NAME)
 
     # Update the hash
     client.update_migration_hash(migration)
     client.connection.commit()
 
-    new_hash = client._get_database_hash(MIGRATION_NAME)  # type: ignore
+    new_hash = client._get_database_hash(MIGRATION_NAME)
 
     assert old_hash == new_hash  # same file, same hash
 
@@ -317,4 +317,4 @@ def test_update_migration_hash(client: SqlClient[Any], temp_dir: Path) -> None:
 
 def test_get_database_hash_not_found(client: SqlClient[Any]) -> None:
     with pytest.raises(ValueError, match="not found in the database"):
-        client._get_database_hash("nonexistent.sql")  # type: ignore
+        client._get_database_hash("nonexistent.sql")
