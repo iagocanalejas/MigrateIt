@@ -367,7 +367,7 @@ GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type;
                 elif contype == "UNIQUE":
                     forward_ddl.append(
                         f"ALTER TABLE {self._q(schema)}.{self._q(table)} "
-                        "ADD CONSTRAINT {self._q(conname)} UNIQUE ({con_cols});"
+                        f"ADD CONSTRAINT {self._q(conname)} UNIQUE ({con_cols});"
                     )
                 else:  # pragma: no cover[safety]
                     raise ValueError(f"Unsupported constraint type: {contype}")

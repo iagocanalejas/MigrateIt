@@ -14,6 +14,7 @@ from migrateit.models.changelog import ChangelogFile, SupportedDatabase
 from migrateit.models.config import MigrateItConfig
 from migrateit.models.migration import Migration, MigrationStatus
 
+linter = Linter(dialect="ansi")
 WHITESPACE_RE = re.compile(r"\s+")
 
 
@@ -97,7 +98,6 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol):
 
     @staticmethod
     def _remove_sql_comments(sql: str) -> str:
-        linter = Linter(dialect="ansi")
         parsed = linter.parse_string(sql)
         return "".join(segment.raw for segment in parsed.tree.raw_segments if not segment.is_type("comment")).strip()
 

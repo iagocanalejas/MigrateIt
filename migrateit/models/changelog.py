@@ -1,3 +1,4 @@
+import functools
 import json
 import os
 import re
@@ -29,7 +30,7 @@ class ChangelogFile:
     migrations: list[Migration] = field(default_factory=list)
     path: Path = field(default_factory=Path)
 
-    @property
+    @functools.cached_property
     def root(self) -> Migration:
         if len(self.migrations) == 0:
             raise ValueError("No migrations found. Changelog is not initialized.")
@@ -37,7 +38,7 @@ class ChangelogFile:
             raise ValueError("Initial migration is not defined in the changelog")
         return self.migrations[0]
 
-    @property
+    @functools.cached_property
     def migrations_tree(self) -> OrderedDict[str, list[Migration]]:
         d = OrderedDict[str, list[Migration]]()
         for migration in self.migrations:
