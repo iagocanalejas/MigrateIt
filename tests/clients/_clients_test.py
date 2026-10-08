@@ -21,11 +21,19 @@ MIGRATION_NAME = "0001_test_table.sql"
 
 
 @pytest.mark.unit
-def test_get_connection_postgres() -> None:
-    with patch("migrateit.models.connection.psycopg.connect") as mock_connect:
+@pytest.mark.parametrize(
+    "database,driver",
+    [
+        pytest.param(SupportedDatabase.POSTGRES, "migrateit.models.connection.psycopg.connect", id="postgres"),
+        pytest.param(SupportedDatabase.MYSQL, "migrateit.models.connection.mysql.connector.connect", id="mysql"),
+        pytest.param(SupportedDatabase.MARIADB, "migrateit.models.connection.mysql.connector.connect", id="mariadb"),
+    ],
+)
+def test_get_connection(database: SupportedDatabase, driver: str) -> None:
+    with patch(driver) as mock_connect:
         mock_conn: Any = MagicMock()
         mock_connect.return_value = mock_conn
-        result = get_connection(SupportedDatabase.POSTGRES)
+        result = get_connection(database)
         assert result == mock_conn
         mock_connect.assert_called_once()
 
@@ -43,16 +51,6 @@ def test_get_connection_sqlite() -> None:
 
 
 @pytest.mark.unit
-def test_get_connection_mysql() -> None:
-    with patch("migrateit.models.connection.mysql.connector.connect") as mock_connect:
-        mock_conn: Any = MagicMock()
-        mock_connect.return_value = mock_conn
-        result = get_connection(SupportedDatabase.MYSQL)
-        assert result == mock_conn
-        mock_connect.assert_called_once()
-
-
-@pytest.mark.unit
 def test_get_connection_mysql_connection_string() -> None:
     with (
         patch("migrateit.models.connection.mysql.connector.connect") as mock_connect,
@@ -61,16 +59,6 @@ def test_get_connection_mysql_connection_string() -> None:
         mock_conn: Any = MagicMock()
         mock_connect.return_value = mock_conn
         result = get_connection(SupportedDatabase.MYSQL)
-        assert result == mock_conn
-        mock_connect.assert_called_once()
-
-
-@pytest.mark.unit
-def test_get_connection_mariadb() -> None:
-    with patch("migrateit.models.connection.mysql.connector.connect") as mock_connect:
-        mock_conn: Any = MagicMock()
-        mock_connect.return_value = mock_conn
-        result = get_connection(SupportedDatabase.MARIADB)
         assert result == mock_conn
         mock_connect.assert_called_once()
 
@@ -133,35 +121,21 @@ def test_sql_client_valid_config(temp_dir: Path) -> None:
 
 
 @pytest.mark.unit
-def test_validate_config_empty_table_name() -> None:
+@pytest.mark.parametrize(
+    "table_name,expected_error,expected_match",
+    [
+        pytest.param("", ValueError, "Table name is required", id="empty"),
+        pytest.param(123, TypeError, None, id="non_string"),
+        pytest.param("invalid-name", ValueError, "valid identifier", id="invalid_identifier"),
+    ],
+)
+def test_validate_config(table_name: object, expected_error: type[Exception], expected_match: str | None) -> None:
     config = MigrateItConfig(
-        table_name="",
+        table_name=table_name,  # type: ignore[arg-type]
         migrations_dir=Path("/tmp/migrations"),
         changelog=ChangelogFile(version=1, path=Path("/tmp/changelog.json")),
     )
-    with pytest.raises(ValueError, match="Table name is required"):
-        SqlClient.validate_config(config)
-
-
-@pytest.mark.unit
-def test_validate_config_non_string_table_name() -> None:
-    config = MigrateItConfig(
-        table_name=int(123),  # type: ignore[arg-type]
-        migrations_dir=Path("/tmp/migrations"),
-        changelog=ChangelogFile(version=1, path=Path("/tmp/changelog.json")),
-    )
-    with pytest.raises(TypeError):
-        SqlClient.validate_config(config)
-
-
-@pytest.mark.unit
-def test_validate_config_invalid_identifier() -> None:
-    config = MigrateItConfig(
-        table_name="invalid-name",
-        migrations_dir=Path("/tmp/migrations"),
-        changelog=ChangelogFile(version=1, path=Path("/tmp/changelog.json")),
-    )
-    with pytest.raises(ValueError, match="valid identifier"):
+    with pytest.raises(expected_error, match=expected_match):
         SqlClient.validate_config(config)
 
 

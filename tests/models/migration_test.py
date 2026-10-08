@@ -46,23 +46,20 @@ def test_valid_nonexistent_file() -> None:
 
 
 @pytest.mark.unit
-def test_migration_is_same_migration_name_exact_match() -> None:
-    assert Migration.is_same_migration_name("0001_test.sql", "0001_test.sql") is True
-
-
-@pytest.mark.unit
-def test_migration_is_same_migration_name_prefix_match() -> None:
-    assert Migration.is_same_migration_name("0001_test_v2.sql", "0001_test.sql") is True
-
-
-@pytest.mark.unit
-def test_migration_is_same_migration_name_different_prefix() -> None:
-    assert Migration.is_same_migration_name("0002_test.sql", "0001_test.sql") is False
-
-
-@pytest.mark.unit
-def test_migration_is_same_migration_name_no_prefix() -> None:
-    assert Migration.is_same_migration_name("test.sql", "test.sql") is True
+@pytest.mark.parametrize(
+    "name1,name2, expected",
+    [
+        ("0001_test.sql", "0001_test.sql", True),
+        ("0001_test.sql", "0001_test_v2.sql", True),
+        ("0001_test.sql", "0002_test.sql", False),
+        ("test.sql", "test.sql", True),
+        ("", "0001_test.sql", False),
+        ("0001_test.sql", "", False),
+        ("", "", False),
+    ],
+)
+def test_migration_is_same_migration_name(name1: str, name2: str, expected: bool) -> None:
+    assert Migration.is_same_migration_name(name1, name2) is expected
 
 
 # --- migration.to_dict tests ---
@@ -123,24 +120,6 @@ def test_changelog_file_from_json_invalid_json() -> None:
 def test_changelog_file_from_json_missing_version() -> None:
     with pytest.raises(ValueError, match="'version'"):
         ChangelogFile.from_json('{"migrations": []}', Path("/tmp/test.json"))
-
-
-# --- migration.is_same_migration_name tests ---
-
-
-@pytest.mark.unit
-def test_migration_is_same_migration_name_empty_first() -> None:
-    assert Migration.is_same_migration_name("", "0001_test.sql") is False
-
-
-@pytest.mark.unit
-def test_migration_is_same_migration_name_empty_second() -> None:
-    assert Migration.is_same_migration_name("0001_test.sql", "") is False
-
-
-@pytest.mark.unit
-def test_migration_is_same_migration_name_both_empty() -> None:
-    assert Migration.is_same_migration_name("", "") is False
 
 
 # --- create_migration_directory tests ---
