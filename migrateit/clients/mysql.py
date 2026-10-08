@@ -295,6 +295,9 @@ WHERE routine_schema NOT IN (%s, %s, %s, %s);
                 r_name = _to_str(r3["routine_name"])
                 r_type = _to_str(r3["routine_type"])
 
+                if r_type.upper() not in ("FUNCTION", "PROCEDURE"):
+                    raise ValueError(f"Unexpected routine type: {r_type!r}")
+
                 cursor.execute(f"SHOW CREATE {r_type} {self._q(schema)}.{self._q(r_name)}")
                 show_row = cursor.fetchone()
                 func_def = _extract_show_create(show_row)
