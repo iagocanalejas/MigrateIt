@@ -34,7 +34,7 @@ def test_apply_migration_success(client: SqlClient[Any], temp_dir: Path) -> None
         """,
     )
 
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     client.apply_migration(migration)
@@ -62,7 +62,7 @@ def test_apply_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
         """,
     )
 
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     client.apply_migration(migration, is_fake=True)
@@ -84,7 +84,7 @@ def test_rollback_migration_success(client: SqlClient[Any], temp_dir: Path) -> N
         rollback_sql=f"DROP TABLE IF EXISTS {TEST_TABLE};",
     )
 
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     client.apply_migration(migration, is_fake=False)
@@ -112,7 +112,7 @@ def test_rollback_fake_migration(client: SqlClient[Any], temp_dir: Path) -> None
 
     _create_migration_file(migrations_dir, MIGRATION_NAME)
 
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     client.apply_migration(migration, is_fake=True)
@@ -139,7 +139,7 @@ def test_fake_rollback_migration(client: SqlClient[Any], temp_dir: Path) -> None
         """,
     )
 
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     client.apply_migration(migration)
@@ -154,7 +154,7 @@ def test_apply_migration_already_applied(client: SqlClient[Any], temp_dir: Path)
 
     _create_migration_file(migrations_dir, MIGRATION_NAME)
 
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     client.apply_migration(migration, is_fake=False)
@@ -164,7 +164,7 @@ def test_apply_migration_already_applied(client: SqlClient[Any], temp_dir: Path)
 
 def test_apply_migration_file_missing(client: SqlClient[Any]) -> None:
     """Test applying a migration with a missing file."""
-    migration = Migration(name="not_found.sql", parents=[INITIAL_MIGRATION])
+    migration = Migration(name="not_found.sql", parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     with pytest.raises(FileNotFoundError):
@@ -177,7 +177,7 @@ def test_rollback_migration_error(client: SqlClient[Any], temp_dir: Path) -> Non
 
     _create_migration_file(migrations_dir, MIGRATION_NAME, sql="INVALID SQL")
 
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     spy_connection = MagicMock(wraps=client.connection)
@@ -194,7 +194,7 @@ def test_rollback_migration_not_applied(client: SqlClient[Any], temp_dir: Path) 
 
     _create_migration_file(migrations_dir, MIGRATION_NAME)
 
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     with pytest.raises(ValueError, match="is not applied, cannot undo it"):
@@ -202,7 +202,7 @@ def test_rollback_migration_not_applied(client: SqlClient[Any], temp_dir: Path) 
 
 
 def test_apply_missing_migration(client: SqlClient[Any], temp_dir: Path) -> None:
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
     with pytest.raises(FileNotFoundError):
         client.apply_migration(migration)

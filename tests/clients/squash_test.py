@@ -50,14 +50,14 @@ def test_squash_migrations_marks_old_as_squashed_and_applies_new(client: SqlClie
     # Apply the initial migration (fake — table already exists from client fixture)
     client.apply_migration(client.changelog.migrations[0], is_fake=True)
 
-    old_migrations = [MIGRATION_NAME, "0002_migration.sql"]
+    old_migrations = (MIGRATION_NAME, "0002_migration.sql")
     new_migration_name = "0012_squashed.sql"
 
     for fname in old_migrations:
         _create_migration_file(migrations_dir, fname)
 
     for fname in old_migrations:
-        m = Migration(name=fname, parents=[INITIAL_MIGRATION] if fname == old_migrations[0] else [old_migrations[0]])
+        m = Migration(name=fname, parents=(INITIAL_MIGRATION,) if fname == old_migrations[0] else (old_migrations[0],))
         client.changelog.migrations.append(m)
 
     for migration in client.changelog.migrations[1:]:  # skip initial
@@ -66,6 +66,6 @@ def test_squash_migrations_marks_old_as_squashed_and_applies_new(client: SqlClie
     _create_migration_file(migrations_dir, new_migration_name, sql="-- squashed content")
     new_migration = Migration(name=new_migration_name, parents=old_migrations)
 
-    client.squash_migrations(migrations=old_migrations, new_migration=new_migration)
+    client.squash_migrations(migrations=list(old_migrations), new_migration=new_migration)
     assert _migration_is_applied(client, new_migration_name)
-    assert _migrations_got_squashed(client, old_migrations)
+    assert _migrations_got_squashed(client, list(old_migrations))

@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -15,11 +15,11 @@ class MigrationStatus(Enum):
     NOT_APPLIED = "not_applied"
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Migration:
     name: str
     initial: bool = False
-    parents: list[str] = field(default_factory=list)
+    parents: tuple[str, ...] = ()
 
     def __str__(self) -> str:
         return self.name

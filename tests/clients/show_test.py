@@ -45,7 +45,7 @@ def test_show_migrations_applied(client: SqlClient[Any], temp_dir: Path) -> None
         """,
     )
 
-    migration_applied = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration_applied = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration_applied)
     client.apply_migration(migration_applied, is_fake=True)
 
@@ -67,7 +67,7 @@ def test_show_migrations_conflict(client: SqlClient[Any], temp_dir: Path) -> Non
         """,
     )
 
-    migration_applied = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration_applied = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration_applied)
     client.apply_migration(migration_applied, is_fake=True)
     _update_migration_hash(client, MIGRATION_NAME, "different_hash")  # mismatch
@@ -91,7 +91,7 @@ def test_show_migrations_removed(client: SqlClient[Any], temp_dir: Path) -> None
         """,
     )
 
-    migration_applied = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration_applied = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.apply_migration(migration_applied, is_fake=True)
 
     result = client.retrieve_migration_statuses()

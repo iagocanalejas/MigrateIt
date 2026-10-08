@@ -34,7 +34,7 @@ def _insert_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -
 def test_validate_simple_select_syntax(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     _create_migration_file(migrations_dir, MIGRATION_NAME, sql="SELECT * FROM non_existing_table;")
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     assert client.validate_sql_syntax(migration) is None
 
 
@@ -51,7 +51,7 @@ def test_validate_create_table_syntax(client: SqlClient[Any], temp_dir: Path) ->
             );
         """,
     )
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     assert client.validate_sql_syntax(migration) is None
     assert not _table_exists(client, "non_existing_table")
@@ -60,7 +60,7 @@ def test_validate_create_table_syntax(client: SqlClient[Any], temp_dir: Path) ->
 def test_invalid_sql_in_migration_code(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     _create_migration_file(migrations_dir, MIGRATION_NAME, sql="SELEKT * FRM non_existing_table;")
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     error_result = client.validate_sql_syntax(migration)
     assert isinstance(error_result, tuple)
@@ -72,7 +72,7 @@ def test_invalid_sql_in_migration_code(client: SqlClient[Any], temp_dir: Path) -
 def test_invalid_sql_in_rollback_code(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     _create_migration_file(migrations_dir, MIGRATION_NAME, rollback_sql="ROLLBAK;")
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     error_result = client.validate_sql_syntax(migration)
     assert isinstance(error_result, tuple)
@@ -84,12 +84,12 @@ def test_invalid_sql_in_rollback_code(client: SqlClient[Any], temp_dir: Path) ->
 def test_empty_sql_file_is_skipped(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     _create_migration_file(migrations_dir, MIGRATION_NAME, sql="", rollback_sql="")
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     assert client.validate_sql_syntax(migration) is None
 
 
 def test_file_not_found_raises_error(client: SqlClient[Any]) -> None:
-    migration = Migration(name="not_exist.sql", parents=[INITIAL_MIGRATION])
+    migration = Migration(name="not_exist.sql", parents=(INITIAL_MIGRATION,))
     with pytest.raises(FileNotFoundError):
         client.validate_sql_syntax(migration)
 
@@ -100,7 +100,7 @@ def test_non_sql_file_raises_error(client: SqlClient[Any], temp_dir: Path) -> No
     filename = "0006_script.txt"
     path = migrations_dir / filename
     path.write_text("SELECT 1;")
-    migration = Migration(name=filename, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=filename, parents=(INITIAL_MIGRATION,))
     with pytest.raises(FileNotFoundError):
         client.validate_sql_syntax(migration)
 
@@ -115,7 +115,7 @@ def test_validate_multiple_statements(client: SqlClient[Any], temp_dir: Path) ->
             INSERT INTO {TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES ('2', 'hash2');
         """,
     )
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     assert client.validate_sql_syntax(migration) is None
 
@@ -123,7 +123,7 @@ def test_validate_multiple_statements(client: SqlClient[Any], temp_dir: Path) ->
 def test_validate_drop_table_statement(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     _create_migration_file(migrations_dir, MIGRATION_NAME, sql="DROP TABLE non_existing_table;")
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     assert client.validate_sql_syntax(migration) is None
 
@@ -135,7 +135,7 @@ def test_validate_alter_table_add_column(client: SqlClient[Any], temp_dir: Path)
         MIGRATION_NAME,
         sql=f"ALTER TABLE {TEST_MIGRATIONS_TABLE} ADD COLUMN new_col TEXT;",
     )
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     assert client.validate_sql_syntax(migration) is None
 
 
@@ -146,14 +146,14 @@ def test_validate_alter_table_drop_column(client: SqlClient[Any], temp_dir: Path
         MIGRATION_NAME,
         sql=f"ALTER TABLE {TEST_MIGRATIONS_TABLE} DROP COLUMN to_remove;",
     )
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     assert client.validate_sql_syntax(migration) is None
 
 
 def test_invalid_drop_table_statement(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     _create_migration_file(migrations_dir, MIGRATION_NAME, sql="DROP TABL test_table;")
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     error_result = client.validate_sql_syntax(migration)
     assert isinstance(error_result, tuple)
@@ -165,7 +165,7 @@ def test_invalid_drop_table_statement(client: SqlClient[Any], temp_dir: Path) ->
 def test_invalid_alter_table_statement(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     _create_migration_file(migrations_dir, MIGRATION_NAME, sql="ALTER TABLE some_table ADD COLUM typo_col TEXT;")
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     error_result = client.validate_sql_syntax(migration)
     assert isinstance(error_result, tuple)
@@ -179,8 +179,8 @@ def test_invalid_alter_table_statement(client: SqlClient[Any], temp_dir: Path) -
 
 def test_validate_migrations_success(client: SqlClient[Any]) -> None:
     migrations = [
-        Migration(name=INITIAL_MIGRATION, initial=True, parents=[]),
-        Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION]),
+        Migration(name=INITIAL_MIGRATION, initial=True, parents=()),
+        Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,)),
     ]
     client.config.changelog = ChangelogFile(version=1, migrations=migrations)
     status_map = {
@@ -197,7 +197,7 @@ def test_validate_empty_migrations(client: SqlClient[Any]) -> None:
 
 
 def test_validate_no_initial_raises(client: SqlClient[Any]) -> None:
-    migrations = [Migration(name="0001_test.sql", parents=[])]
+    migrations = [Migration(name="0001_test.sql", parents=())]
     client.config.changelog = ChangelogFile(version=1, migrations=migrations)
     statuses: dict[str, MigrationStatus] = {}
     with pytest.raises(ValueError, match="Initial migration is not defined"):
@@ -206,8 +206,8 @@ def test_validate_no_initial_raises(client: SqlClient[Any]) -> None:
 
 def test_validate_multiple_initial_raises(client: SqlClient[Any]) -> None:
     migrations = [
-        Migration(name="0000_a.sql", initial=True, parents=[]),
-        Migration(name="0001_b.sql", initial=True, parents=[]),
+        Migration(name="0000_a.sql", initial=True, parents=()),
+        Migration(name="0001_b.sql", initial=True, parents=()),
     ]
     client.config.changelog = ChangelogFile(version=1, migrations=migrations)
     statuses: dict[str, MigrationStatus] = {}
@@ -216,7 +216,7 @@ def test_validate_multiple_initial_raises(client: SqlClient[Any]) -> None:
 
 
 def test_validate_removed_raises(client: SqlClient[Any]) -> None:
-    migrations = [Migration(name="0000_init.sql", initial=True, parents=[])]
+    migrations = [Migration(name="0000_init.sql", initial=True, parents=())]
     client.config.changelog = ChangelogFile(version=1, migrations=migrations)
     statuses = {"0000_init.sql": MigrationStatus.APPLIED, "ghost.sql": MigrationStatus.REMOVED}
     with pytest.raises(ValueError, match="Removed migrations found"):
@@ -225,8 +225,8 @@ def test_validate_removed_raises(client: SqlClient[Any]) -> None:
 
 def test_validate_parent_not_applied(client: SqlClient[Any]) -> None:
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_child.sql", parents=["0000_init.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_child.sql", parents=("0000_init.sql",)),
     ]
     client.config.changelog = ChangelogFile(version=1, migrations=migrations)
     statuses = {
@@ -242,8 +242,8 @@ def test_validate_conflict_raises(client: SqlClient[Any], temp_dir: Path) -> Non
     _create_migration_file(migrations_dir, MIGRATION_NAME)
 
     client.changelog.migrations = [
-        Migration(name=INITIAL_MIGRATION, initial=True, parents=[]),
-        Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION]),
+        Migration(name=INITIAL_MIGRATION, initial=True, parents=()),
+        Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,)),
     ]
 
     # Insert a different hash into the DB to trigger conflict
@@ -260,9 +260,9 @@ def test_show_migrations_order_error(client: SqlClient[Any]) -> None:
     changelog = ChangelogFile(
         version=1,
         migrations=[
-            Migration(name="0000_migrateit.sql", initial=True, parents=[]),
-            Migration(name="0001_first.sql", parents=["0000_migrateit.sql"]),
-            Migration(name="0002_second.sql", parents=["0001_first.sql"]),
+            Migration(name="0000_migrateit.sql", initial=True, parents=()),
+            Migration(name="0001_first.sql", parents=("0000_migrateit.sql",)),
+            Migration(name="0002_second.sql", parents=("0001_first.sql",)),
         ],
     )
     client.config.changelog = changelog

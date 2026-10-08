@@ -220,7 +220,7 @@ def test_applied_migration_returns_true(client: SqlClient[Any], temp_dir: Path) 
     migrations_dir = temp_dir / "migrations"
 
     _create_migration_file(migrations_dir, MIGRATION_NAME)
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     client.apply_migration(migration, is_fake=False)
@@ -231,7 +231,7 @@ def test_applied_migration_returns_true_for_fake(client: SqlClient[Any], temp_di
     migrations_dir = temp_dir / "migrations"
 
     _create_migration_file(migrations_dir, MIGRATION_NAME)
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     client.apply_migration(migration, is_fake=True)
@@ -242,7 +242,7 @@ def test_not_applied_migration_returns_false(client: SqlClient[Any], temp_dir: P
     migrations_dir = temp_dir / "migrations"
 
     _create_migration_file(migrations_dir, MIGRATION_NAME)
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     assert not client.is_migration_applied(migration)
@@ -256,7 +256,7 @@ def test_no_table_returns_not_applied(client: SqlClient[Any], temp_dir: Path) ->
     _drop_test_table(client, TEST_MIGRATIONS_TABLE)
 
     _create_migration_file(migrations_dir, "0001_test.sql")
-    migrations = [Migration(name="0001_test.sql", parents=[INITIAL_MIGRATION])]
+    migrations = [Migration(name="0001_test.sql", parents=(INITIAL_MIGRATION,))]
     client.config.changelog = ChangelogFile(version=1, migrations=[Migration(name=INITIAL_MIGRATION), *migrations])
 
     statuses = client.retrieve_migration_statuses()
@@ -270,7 +270,7 @@ def test_update_migration_hash(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
 
     _create_migration_file(migrations_dir, MIGRATION_NAME)
-    migration = Migration(name=MIGRATION_NAME, parents=[INITIAL_MIGRATION])
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.config.changelog = ChangelogFile(version=1, migrations=[Migration(name=INITIAL_MIGRATION), migration])
 
     client.apply_migration(migration, is_fake=False)

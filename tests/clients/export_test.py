@@ -53,12 +53,16 @@ def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
 
 
 def test_export_invalid_parents(client: SqlClient[Any]) -> None:
+    client.changelog.create_new_migration(
+        migrations_dir=client.migrations_dir,
+        name="migration_1",
+        dependencies=("0000_migrateit.sql",),
+    )
     migration = client.changelog.create_new_migration(
         migrations_dir=client.migrations_dir,
         name="full_export",
-        dependencies=["0000_migrateit.sql"],
+        dependencies=("0001",),
     )
-    migration.parents = ["some_other_migration.sql"]
 
     with pytest.raises(ValueError, match="export must depend only on the initial migration"):
         client.export_database_schema(migration)
@@ -69,7 +73,7 @@ def _export_and_read(client: SqlClient[Any], migration_name: str = "full_export"
     migration = client.changelog.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=migration_name,
-        dependencies=[root.name],
+        dependencies=(root.name,),
     )
     client.export_database_schema(migration)
     return (client.migrations_dir / migration.name).read_text()

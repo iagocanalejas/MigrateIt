@@ -67,16 +67,16 @@ def test_migration_is_same_migration_name(name1: str, name2: str, expected: bool
 
 @pytest.mark.unit
 def test_migration_to_dict_initial() -> None:
-    m = Migration(name="0000_init.sql", initial=True, parents=[])
+    m = Migration(name="0000_init.sql", initial=True, parents=())
     d = m.to_dict()
-    assert d == {"name": "0000_init.sql", "initial": True, "parents": []}
+    assert d == {"name": "0000_init.sql", "initial": True, "parents": ()}
 
 
 @pytest.mark.unit
 def test_migration_to_dict_with_parents() -> None:
-    m = Migration(name="0001_add.sql", initial=False, parents=["0000_init.sql"])
+    m = Migration(name="0001_add.sql", initial=False, parents=("0000_init.sql",))
     d = m.to_dict()
-    assert d == {"name": "0001_add.sql", "initial": False, "parents": ["0000_init.sql"]}
+    assert d == {"name": "0001_add.sql", "initial": False, "parents": ("0000_init.sql",)}
 
 
 # --- migration.from_json tests ---

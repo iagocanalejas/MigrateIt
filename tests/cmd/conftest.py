@@ -10,7 +10,7 @@ from tests.conftest import INITIAL_MIGRATION
 
 def _mock_client(temp_dir: Path) -> SqlClient[Any]:
     changelog = create_changelog_file(temp_dir / "changelog.json", database=SupportedDatabase.POSTGRES)
-    changelog.migrations.append(Migration(name=INITIAL_MIGRATION, initial=True, parents=[]))
+    changelog.migrations.append(Migration(name=INITIAL_MIGRATION, initial=True, parents=()))
 
     mock_client: MagicMock = MagicMock(spec=SqlClient[Any])
     mock_client.changelog = changelog

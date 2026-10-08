@@ -18,8 +18,8 @@ def test_cmd_show_list_mode(temp_dir: Path) -> None:
     }
 
     client.changelog.migrations = [
-        Migration(name="0001_init.sql", initial=True, parents=[]),
-        Migration(name="0002_test.sql", parents=["0001_init.sql"]),
+        Migration(name="0001_init.sql", initial=True, parents=()),
+        Migration(name="0002_test.sql", parents=("0001_init.sql",)),
     ]
 
     with patch.object(client.changelog, "print_list") as mock_print_list:
@@ -36,8 +36,8 @@ def test_cmd_show_dag_mode(temp_dir: Path) -> None:
     }
 
     client.changelog.migrations = [
-        Migration(name="0001_init.sql", initial=True, parents=[]),
-        Migration(name="0002_child.sql", parents=["0001_init.sql"]),
+        Migration(name="0001_init.sql", initial=True, parents=()),
+        Migration(name="0002_child.sql", parents=("0001_init.sql",)),
     ]
 
     with patch.object(client.changelog, "print_dag") as mock_print_dag:
@@ -49,7 +49,7 @@ def test_cmd_show_dag_mode(temp_dir: Path) -> None:
 def test_cmd_show_validate_sql_success(temp_dir: Path) -> None:
     client = _mock_client(temp_dir)
     client.retrieve_migration_statuses.return_value = {"0001_init.sql": MigrationStatus.APPLIED}  # type: ignore
-    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=[])]
+    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=())]
 
     with (
         patch.object(client, "validate_sql_syntax", return_value=None),
@@ -66,7 +66,7 @@ def test_cmd_show_validate_sql_success(temp_dir: Path) -> None:
 def test_cmd_show_validate_sql_failure(temp_dir: Path) -> None:
     client = _mock_client(temp_dir)
     client.retrieve_migration_statuses.return_value = {"0001_init.sql": MigrationStatus.APPLIED}  # type: ignore
-    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=[])]
+    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=())]
 
     with (
         patch.object(client, "validate_sql_syntax", return_value=(Exception("syntax error"), "SELECT *;")),
@@ -83,7 +83,7 @@ def test_cmd_show_validate_sql_failure(temp_dir: Path) -> None:
 def test_cmd_show_shows_pending_hint(temp_dir: Path) -> None:
     client = _mock_client(temp_dir)
     client.retrieve_migration_statuses.return_value = {"0001_init.sql": MigrationStatus.NOT_APPLIED}  # type: ignore
-    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=[])]
+    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=())]
 
     with patch("migrateit.cmd.write_line") as mock_write:
         cmd_show(client)
@@ -112,7 +112,7 @@ def test_cmd_show_shows_pending_hint(temp_dir: Path) -> None:
 def test_cmd_show_shows_hint(temp_dir: Path, statuses: dict[str, MigrationStatus], search_term: str) -> None:
     client = _mock_client(temp_dir)
     client.retrieve_migration_statuses.return_value = statuses  # type: ignore
-    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=[])]
+    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=())]
 
     with patch("migrateit.cmd.write_line") as mock_write:
         cmd_show(client)
@@ -125,7 +125,7 @@ def test_cmd_show_shows_hint(temp_dir: Path, statuses: dict[str, MigrationStatus
 def test_cmd_show_no_hint_when_all_clean(temp_dir: Path) -> None:
     client = _mock_client(temp_dir)
     client.retrieve_migration_statuses.return_value = {"0001_init.sql": MigrationStatus.APPLIED}  # type: ignore
-    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=[])]
+    client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=())]
 
     with patch("migrateit.cmd.write_line") as mock_write:
         cmd_show(client)
