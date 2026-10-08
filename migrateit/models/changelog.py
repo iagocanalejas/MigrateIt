@@ -107,7 +107,12 @@ class ChangelogFile:
 
         raise ValueError(f"Migration '{name}' not found in changelog")
 
-    def create_new_migration(self, migrations_dir: Path, name: str, dependencies: list[str] | None = None) -> Migration:
+    def create_new_migration(
+        self,
+        migrations_dir: Path,
+        name: str,
+        dependencies: tuple[str, ...] | None = None,
+    ) -> Migration:
         """
         Create a new migration file in the given directory.
         Args:
@@ -122,7 +127,7 @@ class ChangelogFile:
 
         if dependencies and not all(self.exist_migration_by_name(dep) for dep in dependencies):
             raise ValueError(f"Some dependencies {dependencies} do not exist in the changelog")
-        dependencies = [self.get_migration_by_name(dep).name for dep in dependencies] if dependencies else None
+        dependencies = tuple(self.get_migration_by_name(dep).name for dep in dependencies) if dependencies else None
 
         is_initial = len(self.migrations) == 0
         if is_initial and dependencies:
@@ -137,7 +142,7 @@ class ChangelogFile:
         new_migration = Migration(
             name=new_filepath.name,
             initial=is_initial,
-            parents=[] if is_initial else (dependencies or [self.migrations[-1].name]),
+            parents=() if is_initial else (dependencies or (self.migrations[-1].name,)),
         )
         self.migrations.append(new_migration)
         self.save()

@@ -11,7 +11,7 @@ from migrateit.models.migration import Migration, MigrationStatus
 @pytest.mark.unit
 @pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
 def test_changelog_file_to_dict(database: SupportedDatabase) -> None:
-    m = Migration(name="0000_init.sql", initial=True, parents=[])
+    m = Migration(name="0000_init.sql", initial=True, parents=())
     changelog = ChangelogFile(version=1, database=database, migrations=[m])
     d = changelog.to_dict()
     assert d["version"] == 1
@@ -25,7 +25,7 @@ def test_changelog_file_to_dict(database: SupportedDatabase) -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
 def test_changelog_file_to_json(database: SupportedDatabase) -> None:
-    m = Migration(name="0000_init.sql", initial=True, parents=[])
+    m = Migration(name="0000_init.sql", initial=True, parents=())
     changelog = ChangelogFile(version=1, database=database, migrations=[m])
     json_str = changelog.to_json()
     assert "version" in json_str
@@ -37,28 +37,28 @@ def test_changelog_file_to_json(database: SupportedDatabase) -> None:
 
 @pytest.mark.unit
 def test_changelog_file_exist_migration_by_name_exact() -> None:
-    m = Migration(name="0001_test.sql", parents=["0000_init.sql"])
+    m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = ChangelogFile(version=1, migrations=[m])
     assert changelog.exist_migration_by_name("0001_test.sql") is True
 
 
 @pytest.mark.unit
 def test_changelog_file_exist_migration_by_name_prefix() -> None:
-    m = Migration(name="0001_test.sql", parents=["0000_init.sql"])
+    m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = ChangelogFile(version=1, migrations=[m])
     assert changelog.exist_migration_by_name("0001_other.sql") is True
 
 
 @pytest.mark.unit
 def test_changelog_file_exist_migration_by_name_not_found() -> None:
-    m = Migration(name="0001_test.sql", parents=["0000_init.sql"])
+    m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = ChangelogFile(version=1, migrations=[m])
     assert changelog.exist_migration_by_name("0002_other.sql") is False
 
 
 @pytest.mark.unit
 def test_changelog_file_exist_migration_by_name_abs_path() -> None:
-    m = Migration(name="0001_test.sql", parents=["0000_init.sql"])
+    m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = ChangelogFile(version=1, migrations=[m])
     assert changelog.exist_migration_by_name("/some/path/0001_test.sql") is True
 
@@ -68,8 +68,8 @@ def test_changelog_file_exist_migration_by_name_abs_path() -> None:
 
 @pytest.mark.unit
 def test_changelog_file_get_migration_by_name() -> None:
-    m1 = Migration(name="0001_test.sql", parents=["0000_init.sql"])
-    m2 = Migration(name="0002_other.sql", parents=["0001_test.sql"])
+    m1 = Migration(name="0001_test.sql", parents=("0000_init.sql",))
+    m2 = Migration(name="0002_other.sql", parents=("0001_test.sql",))
     changelog = ChangelogFile(version=1, migrations=[m1, m2])
     result = changelog.get_migration_by_name("0001")
     assert result.name == "0001_test.sql"
@@ -77,7 +77,7 @@ def test_changelog_file_get_migration_by_name() -> None:
 
 @pytest.mark.unit
 def test_changelog_file_get_migration_by_name_full() -> None:
-    m = Migration(name="0001_test.sql", parents=["0000_init.sql"])
+    m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = ChangelogFile(version=1, migrations=[m])
     result = changelog.get_migration_by_name("0001_test.sql")
     assert result.name == "0001_test.sql"
@@ -85,7 +85,7 @@ def test_changelog_file_get_migration_by_name_full() -> None:
 
 @pytest.mark.unit
 def test_changelog_file_get_migration_by_name_not_found() -> None:
-    m = Migration(name="0001_test.sql", parents=["0000_init.sql"])
+    m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = ChangelogFile(version=1, migrations=[m])
     with pytest.raises(ValueError, match="not found"):
         changelog.get_migration_by_name("0002_nonexistent")
@@ -93,7 +93,7 @@ def test_changelog_file_get_migration_by_name_not_found() -> None:
 
 @pytest.mark.unit
 def test_changelog_file_get_migration_by_name_abs_path() -> None:
-    m = Migration(name="0001_test.sql", parents=["0000_init.sql"])
+    m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = ChangelogFile(version=1, migrations=[m])
     result = changelog.get_migration_by_name("/some/path/0001_test.sql")
     assert result.name == "0001_test.sql"
@@ -101,8 +101,8 @@ def test_changelog_file_get_migration_by_name_abs_path() -> None:
 
 @pytest.mark.unit
 def test_get_migration_by_name_prefix_collision_returns_first(temp_dir: Path) -> None:
-    m1 = Migration(name="0001_init.sql", initial=True, parents=[])
-    m2 = Migration(name="0001_test.sql", parents=["0000_init.sql"])
+    m1 = Migration(name="0001_init.sql", initial=True, parents=())
+    m2 = Migration(name="0001_test.sql", parents=("0000_init.sql",))
 
     changelog_path = temp_dir / "changelog.json"
     changelog_path.touch()
@@ -120,9 +120,9 @@ def test_get_migration_by_name_prefix_collision_returns_first(temp_dir: Path) ->
 @pytest.mark.unit
 def test_build_tree_simple_chain() -> None:
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_test.sql", parents=["0000_init.sql"]),
-        Migration(name="0002_next.sql", parents=["0001_test.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_test.sql", parents=("0000_init.sql",)),
+        Migration(name="0002_next.sql", parents=("0001_test.sql",)),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     tree = changelog.migrations_tree
@@ -135,9 +135,9 @@ def test_build_tree_simple_chain() -> None:
 @pytest.mark.unit
 def test_build_tree_duplicated_name_raises() -> None:
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_test.sql", parents=["0000_init.sql"]),
-        Migration(name="0001_test.sql", parents=["0000_init.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_test.sql", parents=("0000_init.sql",)),
+        Migration(name="0001_test.sql", parents=("0000_init.sql",)),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     with pytest.raises(ValueError, match="duplicated"):
@@ -146,10 +146,10 @@ def test_build_tree_duplicated_name_raises() -> None:
 
 @pytest.mark.unit
 def test_build_tree_with_multiple_parents() -> None:
-    m1 = Migration(name="0000_init.sql", initial=True, parents=[])
-    m2 = Migration(name="0001_branch_a.sql", parents=["0000_init.sql"])
-    m3 = Migration(name="0002_branch_b.sql", parents=["0000_init.sql"])
-    m4 = Migration(name="0003_merge.sql", parents=["0001_branch_a.sql", "0002_branch_b.sql"])
+    m1 = Migration(name="0000_init.sql", initial=True, parents=())
+    m2 = Migration(name="0001_branch_a.sql", parents=("0000_init.sql",))
+    m3 = Migration(name="0002_branch_b.sql", parents=("0000_init.sql",))
+    m4 = Migration(name="0003_merge.sql", parents=("0001_branch_a.sql", "0002_branch_b.sql"))
     changelog = ChangelogFile(version=1, migrations=[m1, m2, m3, m4])
     tree = changelog.migrations_tree
     assert tree["0003_merge.sql"] == []
@@ -163,8 +163,8 @@ def test_build_tree_with_multiple_parents() -> None:
 @pytest.mark.unit
 def test_build_plan_simple_forward() -> None:
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_add_table.sql", parents=["0000_init.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_add_table.sql", parents=("0000_init.sql",)),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     statuses = {"0000_init.sql": MigrationStatus.APPLIED, "0001_add_table.sql": MigrationStatus.NOT_APPLIED}
@@ -186,10 +186,10 @@ def test_build_plan_diamond_requeue_visited() -> None:
     D is processed.
     """
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_left.sql", parents=["0000_init.sql"]),
-        Migration(name="0002_right.sql", parents=["0000_init.sql", "0001_left.sql"]),
-        Migration(name="0003_merge.sql", parents=["0001_left.sql", "0002_right.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_left.sql", parents=("0000_init.sql",)),
+        Migration(name="0002_right.sql", parents=("0000_init.sql", "0001_left.sql")),
+        Migration(name="0003_merge.sql", parents=("0001_left.sql", "0002_right.sql")),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     statuses = dict.fromkeys([m.name for m in migrations], MigrationStatus.NOT_APPLIED)
@@ -210,10 +210,10 @@ def test_build_plan_unvisited_parents() -> None:
     D is processed.
     """
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_init.sql", parents=["0000_init.sql"]),
-        Migration(name="0002_init.sql", parents=["0001_init.sql"]),
-        Migration(name="0003_init.sql", parents=["0000_init.sql", "0002_init.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_init.sql", parents=("0000_init.sql",)),
+        Migration(name="0002_init.sql", parents=("0001_init.sql",)),
+        Migration(name="0003_init.sql", parents=("0000_init.sql", "0002_init.sql")),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     statuses = dict.fromkeys([m.name for m in migrations], MigrationStatus.NOT_APPLIED)
@@ -233,9 +233,9 @@ def test_build_plan_already_visited_neighbor() -> None:
     When B is processed, A tries to be enqueued again, but it's already queued.
     """
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_init.sql", parents=["0000_init.sql"]),
-        Migration(name="0002_init.sql", parents=["0001_init.sql", "0000_init.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_init.sql", parents=("0000_init.sql",)),
+        Migration(name="0002_init.sql", parents=("0001_init.sql", "0000_init.sql")),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     statuses = dict.fromkeys([m.name for m in migrations], MigrationStatus.NOT_APPLIED)
@@ -246,9 +246,9 @@ def test_build_plan_already_visited_neighbor() -> None:
 
 @pytest.mark.unit
 def test_build_plan_rollback_applied() -> None:
-    m1 = Migration(name="0000_init.sql", initial=True, parents=[])
-    m2 = Migration(name="0001_add.sql", parents=["0000_init.sql"])
-    m3 = Migration(name="0002_more.sql", parents=["0001_add.sql"])
+    m1 = Migration(name="0000_init.sql", initial=True, parents=())
+    m2 = Migration(name="0001_add.sql", parents=("0000_init.sql",))
+    m3 = Migration(name="0002_more.sql", parents=("0001_add.sql",))
     changelog = ChangelogFile(version=1, migrations=[m1, m2, m3])
     statuses: dict[str, MigrationStatus] = {
         "0000_init.sql": MigrationStatus.APPLIED,
@@ -264,8 +264,8 @@ def test_build_plan_rollback_applied() -> None:
 
 @pytest.mark.unit
 def test_build_plan_bottom_up() -> None:
-    m1 = Migration(name="0000_init.sql", initial=True, parents=[])
-    m2 = Migration(name="0001_add.sql", parents=["0000_init.sql"])
+    m1 = Migration(name="0000_init.sql", initial=True, parents=())
+    m2 = Migration(name="0001_add.sql", parents=("0000_init.sql",))
     changelog = ChangelogFile(version=1, migrations=[m1, m2])
     statuses: dict[str, MigrationStatus] = {
         "0000_init.sql": MigrationStatus.APPLIED,
@@ -280,7 +280,7 @@ def test_build_plan_bottom_up() -> None:
 
 @pytest.mark.unit
 def test_build_plan_rollback_no_target() -> None:
-    m = Migration(name="0000_init.sql", initial=True, parents=[])
+    m = Migration(name="0000_init.sql", initial=True, parents=())
     changelog = ChangelogFile(version=1, migrations=[m])
     statuses: dict[str, MigrationStatus] = {"0000_init.sql": MigrationStatus.APPLIED}
     with pytest.raises(ValueError, match="Target migration is required for rollback"):
@@ -351,8 +351,8 @@ def test_load_changelog_file_valid(temp_dir: Path) -> None:
 def test_load_changelog_file_multiple_initial_raises(temp_dir: Path) -> None:
     path = temp_dir / "changelog.json"
     migrations = [
-        Migration(name="0000_a.sql", initial=True, parents=[]),
-        Migration(name="0001_b.sql", initial=True, parents=[]),
+        Migration(name="0000_a.sql", initial=True, parents=()),
+        Migration(name="0001_b.sql", initial=True, parents=()),
     ]
     cl = ChangelogFile(version=1, migrations=migrations, path=path)
     path.write_text(cl.to_json())
@@ -363,7 +363,7 @@ def test_load_changelog_file_multiple_initial_raises(temp_dir: Path) -> None:
 @pytest.mark.unit
 def test_load_changelog_file_initial_with_parents_raises(temp_dir: Path) -> None:
     path = temp_dir / "changelog.json"
-    migrations = [Migration(name="0000_a.sql", initial=True, parents=["0001_b.sql"])]
+    migrations = [Migration(name="0000_a.sql", initial=True, parents=("0001_b.sql",))]
     cl = ChangelogFile(version=1, migrations=migrations, path=path)
     path.write_text(cl.to_json())
     with pytest.raises(ValueError, match="cannot have parents"):
@@ -373,11 +373,11 @@ def test_load_changelog_file_initial_with_parents_raises(temp_dir: Path) -> None
 @pytest.mark.unit
 def test_load_changelog_file_non_initial_without_parents_raises(temp_dir: Path) -> None:
     path = temp_dir / "changelog.json"
-    migrations = [Migration(name="0000_a.sql", initial=True, parents=[])]
+    migrations = [Migration(name="0000_a.sql", initial=True, parents=())]
     cl = ChangelogFile(version=1, migrations=migrations, path=path)
     path.write_text(cl.to_json())
     # Single initial migration is valid; adding a non-initial without parents
-    migrations.append(Migration(name="0001_b.sql", parents=[]))
+    migrations.append(Migration(name="0001_b.sql", parents=()))
     cl.migrations = migrations
     path.write_text(cl.to_json())
     with pytest.raises(ValueError, match="must have parents"):
@@ -388,8 +388,8 @@ def test_load_changelog_file_non_initial_without_parents_raises(temp_dir: Path) 
 def test_load_changelog_with_non_existing_parent(temp_dir: Path) -> None:
     path = temp_dir / "changelog.json"
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_test.sql", parents=["9999_missing.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_test.sql", parents=("9999_missing.sql",)),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     path.write_text(changelog.to_json())
@@ -414,8 +414,8 @@ def test_find_path_linear() -> None:
         version=1,
         migrations=[
             Migration(name="0001_a"),
-            Migration(name="0002_b", parents=["0001_a"]),
-            Migration(name="0003_c", parents=["0002_b"]),
+            Migration(name="0002_b", parents=("0001_a",)),
+            Migration(name="0003_c", parents=("0002_b",)),
         ],
     )
     path = cl.find_path("0001_a", "0003_c")
@@ -441,9 +441,9 @@ def test_find_path_branching() -> None:
         version=1,
         migrations=[
             Migration(name="0001_a"),
-            Migration(name="0002_b", parents=["0001_a"]),
-            Migration(name="0003_c", parents=["0001_a"]),
-            Migration(name="0004_d", parents=["0003_c"]),
+            Migration(name="0002_b", parents=("0001_a",)),
+            Migration(name="0003_c", parents=("0001_a",)),
+            Migration(name="0004_d", parents=("0003_c",)),
         ],
     )
     path = cl.find_path("0001_a", "0004_d")
@@ -456,8 +456,8 @@ def test_find_path_branching() -> None:
 @pytest.mark.unit
 def test_print_list() -> None:
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_add.sql", parents=["0000_init.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_add.sql", parents=("0000_init.sql",)),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     status_map: dict[str, MigrationStatus] = {
@@ -470,9 +470,9 @@ def test_print_list() -> None:
 @pytest.mark.unit
 def test_print_dag() -> None:
     migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=[]),
-        Migration(name="0001_add.sql", parents=["0000_init.sql"]),
-        Migration(name="0002_two.sql", parents=["0000_init.sql", "0001_add.sql"]),
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_add.sql", parents=("0000_init.sql",)),
+        Migration(name="0002_two.sql", parents=("0000_init.sql", "0001_add.sql")),
     ]
     changelog = ChangelogFile(version=1, migrations=migrations)
     status_map: dict[str, MigrationStatus] = {
@@ -485,7 +485,7 @@ def test_print_dag() -> None:
 
 @pytest.mark.unit
 def test_print_dag_no_children() -> None:
-    m = Migration(name="0000_init.sql", initial=True, parents=[])
+    m = Migration(name="0000_init.sql", initial=True, parents=())
     changelog = ChangelogFile(version=1, migrations=[m])
     status_map: dict[str, MigrationStatus] = {"0000_init.sql": MigrationStatus.APPLIED}
     changelog.print_dag(status_map)

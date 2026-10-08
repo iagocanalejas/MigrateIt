@@ -75,7 +75,7 @@ def cmd_export(client: SqlClient[Any], name: str | None) -> int:
     migration = client.changelog.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=name,
-        dependencies=[client.changelog.root.name],
+        dependencies=(client.changelog.root.name,),
     )
     write_line(f"Migration file created: {migration.name}")
 
@@ -87,7 +87,7 @@ def cmd_export(client: SqlClient[Any], name: str | None) -> int:
 def cmd_new(
     client: SqlClient[Any],
     name: str,
-    dependencies: list[str] | None = None,
+    dependencies: tuple[str, ...] | None = None,
     no_edit: bool = False,
     interactive: bool = False,
 ) -> int:

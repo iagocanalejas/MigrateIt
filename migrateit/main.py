@@ -70,7 +70,7 @@ def main() -> int:
                     return commands.cmd_new(
                         client,
                         name=args.name,
-                        dependencies=args.dependencies,
+                        dependencies=tuple(args.dependencies),
                         no_edit=args.no_edit,
                         interactive=args.interactive,
                     )

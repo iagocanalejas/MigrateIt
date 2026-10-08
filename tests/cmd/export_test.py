@@ -35,7 +35,7 @@ def test_cmd_export_with_name(client: SqlClient[Any]) -> None:
 
     # Verify migration depends on root
     export_migration = next(m for m in client.changelog.migrations if "my_full_export" in m.name)
-    assert export_migration.parents == [client.changelog.root.name]
+    assert export_migration.parents == (client.changelog.root.name,)
 
     # Verify migration file exists
     changelog_names = [m.name for m in client.changelog.migrations]

@@ -91,7 +91,7 @@ def test_cmd_new_with_dependencies(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
 
     cmd_new(client=mock_client, name="test_table", no_edit=True)
-    cmd_new(client=mock_client, name="test_table2", dependencies=["0000", "0001"], no_edit=True)
+    cmd_new(client=mock_client, name="test_table2", dependencies=("0000", "0001"), no_edit=True)
 
     assert (mock_client.migrations_dir / "0001_test_table.sql").exists()
 
@@ -110,7 +110,7 @@ def test_cmd_new_interactive_with_dependencies_raises_value_error(temp_dir: Path
         cmd_new(
             client=mock_client,
             name="test_migration",
-            dependencies=["0000_migrateit.sql"],
+            dependencies=("0000_migrateit.sql",),
             interactive=True,
             no_edit=True,
         )
