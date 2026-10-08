@@ -110,7 +110,7 @@ def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
         changelog=ChangelogFile(version=1, path=temp_dir / "changelog.json"),
     )
     with pytest.raises(ValueError, match="connection cannot be None"):
-        SqlClient[None](None, config)  # type: ignore[abstract]
+        SqlClient[None](None, config)  # type: ignore
 
 
 # --- config tests ---

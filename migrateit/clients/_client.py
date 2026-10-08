@@ -17,7 +17,11 @@ from migrateit.models.migration import Migration, MigrationStatus
 WHITESPACE_RE = re.compile(r"\s+")
 
 
-class SqlClient[T](ABC, SqlClientProtocol):
+if TYPE_CHECKING:
+    from migrateit.models.connection import Connection
+
+
+class SqlClient[T: Connection](ABC, SqlClientProtocol):
     VARNAME_DB_URL = os.getenv("VARNAME_DB_URL", "DB_URL")
     VARNAME_DB_FILE = os.getenv("VARNAME_DB_FILE", "DB_FILE")
     VARNAME_DB_HOST = os.getenv("VARNAME_DB_HOST", "DB_HOST")
@@ -170,10 +174,6 @@ class SqlClient[T](ABC, SqlClientProtocol):
         if "DROP TABLE" in sql and "IF EXISTS" not in sql:
             return sql.replace("DROP TABLE", "DROP TABLE IF EXISTS", 1)
         return sql
-
-
-if TYPE_CHECKING:
-    from migrateit.models.connection import Connection
 
 
 def get_client(config: MigrateItConfig, connection: "Connection") -> SqlClient[Any]:
