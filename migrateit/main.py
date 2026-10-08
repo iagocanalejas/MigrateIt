@@ -130,11 +130,14 @@ def _cmd_export(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 
 def _cmd_new(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    def _auto_name() -> str:
+        return f"auto_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
     parser.add_argument(
         "name",
         type=str,
         nargs="?",
-        default=f"auto_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        default=_auto_name,
         help="Name of the new migration.",
     )
     parser.add_argument(
