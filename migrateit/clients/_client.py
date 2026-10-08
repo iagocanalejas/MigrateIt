@@ -80,6 +80,7 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol):
     @staticmethod
     def get_migration_content_and_hash(path: Path) -> tuple[str, str, str]:
         content = path.read_text()
+        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
         parts = content.split(C.ROLLBACK_SPLIT_TAG)
         if len(parts) == 1:
             raise ValueError("No rollback tag in migration file")
@@ -91,7 +92,7 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol):
         return (
             WHITESPACE_RE.sub(" ", migration).strip(),
             WHITESPACE_RE.sub(" ", reverse_migration).strip(),
-            hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            content_hash,
         )
 
     @staticmethod

@@ -1,4 +1,5 @@
 import os
+import re
 from collections import defaultdict
 from typing import Any, override
 
@@ -257,6 +258,8 @@ FROM pg_proc p
 WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND p.prokind IN ('f', 'p');
             """)
             for schema, name, func_def in cursor.fetchall():
+                if not re.match(r"(CREATE|ALTER)\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE)", func_def, re.IGNORECASE):
+                    raise ValueError(f"Invalid function definition for {schema}.{name}")
                 forward_ddl.append(f"{func_def};")
                 # Extract argument signature for precise DROP FUNCTION matching
                 cursor.execute("SELECT pg_get_function_identity_arguments(%s::regproc)", [f"{schema}.{name}"])
