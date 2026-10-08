@@ -125,7 +125,10 @@ def cmd_new(
     editor = os.getenv("EDITOR", "notepad.exe" if platform.system() == "Windows" else "vim")
     editor = _validate_editor(editor)
     cmd = shlex.split(editor) + [str(client.migrations_dir / migration.name)]
-    return subprocess.call(cmd)
+    rc = subprocess.call(cmd)
+    if rc != 0:  # pragma: no cover
+        write_line(f"Editor exited with code {rc}")
+    return rc
 
 
 def cmd_run(

@@ -20,7 +20,7 @@ class FatalError(RuntimeError):
 def error_handler() -> Generator[None]:
     try:
         yield
-    except (Exception, KeyboardInterrupt) as e:
+    except (RuntimeError, ValueError, FileNotFoundError, KeyboardInterrupt) as e:
         if isinstance(e, FatalError):
             msg, ret_code = "An error has occurred", 1
         elif isinstance(e, KeyboardInterrupt):

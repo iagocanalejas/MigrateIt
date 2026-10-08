@@ -20,13 +20,13 @@ DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 
 class LoggingHandler(logging.Handler):
-    """A logging.Handler that writes colored log messages to the terminal."""
+    formatter: logging.Formatter  # pyright: ignore
 
     def __init__(self, use_color: bool = True, fmt: str = DEFAULT_LOG_FORMAT) -> None:
         super().__init__()
         self.use_color = use_color
         self.fmt = fmt
-        self.formatter: logging.Formatter = logging.Formatter(fmt)  # pyright: ignore
+        self.setFormatter(logging.Formatter(fmt))
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
