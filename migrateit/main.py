@@ -69,8 +69,8 @@ def main() -> int:
                 elif args.command == "new":
                     return commands.cmd_new(
                         client,
-                        name=args.name,
-                        dependencies=tuple(args.dependencies),
+                        name=args.name or f"auto_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                        dependencies=tuple(args.dependencies) if args.dependencies else None,
                         no_edit=args.no_edit,
                         interactive=args.interactive,
                     )
@@ -130,14 +130,11 @@ def _cmd_export(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 
 def _cmd_new(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    def _auto_name() -> str:
-        return f"auto_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
     parser.add_argument(
         "name",
         type=str,
         nargs="?",
-        default=_auto_name,
+        default=None,
         help="Name of the new migration.",
     )
     parser.add_argument(

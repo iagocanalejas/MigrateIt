@@ -3,40 +3,13 @@ import re
 import sqlite3
 from typing import Any, override
 
+from sqlfluff.core import Linter
+
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
-
-
-def _split_sql_statements(sql: str) -> list[str]:
-    """Split SQL into individual statements, respecting semicolons inside strings."""
-    statements: list[str] = []
-    current: list[str] = []
-    in_single_quote = False
-    in_double_quote = False
-    i = 0
-    while i < len(sql):
-        char = sql[i]
-        if char == "'" and not in_double_quote:
-            in_single_quote = not in_single_quote
-            current.append(char)
-        elif char == '"' and not in_single_quote:
-            in_double_quote = not in_double_quote
-            current.append(char)
-        elif char == ";" and not in_single_quote and not in_double_quote:
-            stmt = "".join(current).strip()
-            if stmt:
-                statements.append(stmt)
-            current = []
-        else:
-            current.append(char)
-        i += 1
-    trailing = "".join(current).strip()
-    if trailing:
-        statements.append(trailing)
-    return statements
 
 
 class SqliteClient(SqlClient[sqlite3.Connection]):
@@ -140,12 +113,14 @@ FROM {self._q(self.table_name)};
         try:
             code = migration_code if not is_rollback else reverse_migration_code
             if not is_fake and code.strip():
-                # NOTE: avoid executescript() which implicitly commits and cannot be rolled back.
-                statements = _split_sql_statements(code)
+                parsed = Linter(dialect=self.changelog.database.value).parse_string(code)
+                if len(parsed.violations) > 0:
+                    raise ValueError(parsed.violations)
+                statements = [seg.raw.strip() for seg in parsed.tree.segments if seg.is_type("statement")]
                 for stmt in statements:
                     self.connection.execute(stmt)
             self._update_migration_changelog(migration, migration_hash, is_rollback)
-        except sqlite3.Error as e:
+        except (sqlite3.Error, ValueError) as e:
             self.connection.rollback()
             raise e
 

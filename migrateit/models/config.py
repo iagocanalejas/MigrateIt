@@ -4,7 +4,7 @@ from pathlib import Path
 from .changelog import ChangelogFile
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MigrateItConfig:
     table_name: str
     migrations_dir: Path

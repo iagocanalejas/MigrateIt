@@ -78,6 +78,9 @@ def test_cmd_run_no_migrations_to_rollback(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
     _create_migration_file(client.migrations_dir, "0001_new.sql")
 
+    # NOTE: remove cached value, this will never be a problem in real use
+    del client.changelog.migrations_tree
+
     with patch("migrateit.cmd.write_line") as mock_write_line:
         cmd_run(client=client, name="0001", is_rollback=True)
     mock_write_line.assert_called_with("Rollback: no migrations to roll back")
