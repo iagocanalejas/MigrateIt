@@ -512,39 +512,6 @@ WHERE trigger_schema NOT IN (%s, %s, %s, %s);
             f.write("\n\n".join(reversed(rollback_ddl)) + "\n")
 
     @override
-    def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
-        if len(self.changelog.migrations) == 0:
-            return
-
-        if not self.changelog.root.initial:
-            raise ValueError("Initial migration is not defined in the changelog")
-        if len([m for m in self.changelog.migrations if m.initial]) > 1:
-            raise ValueError("Multiple initial migrations found in the changelog")
-
-        removed_migrations = [m for m, s in status_map.items() if s == MigrationStatus.REMOVED]
-        if removed_migrations:
-            raise ValueError(f"Removed migrations found in the database: {removed_migrations}. ")
-
-        conflict_migrations = [m for m, s in status_map.items() if s == MigrationStatus.CONFLICT]
-        if conflict_migrations:
-            errors: list[str] = []
-            for conflict_migration in conflict_migrations:
-                path = self.migrations_dir / conflict_migration
-                _, _, migration_hash = self.get_migration_content_and_hash(path)
-                errors.append(
-                    f"Migration {conflict_migration} has a different hash in the database: "
-                    f"found={migration_hash} existing={self._get_database_hash(conflict_migration)}"
-                )
-            raise ValueError("\n".join(errors))
-
-        for migration in self.changelog.migrations:
-            if status_map[migration.name] != MigrationStatus.APPLIED:
-                continue
-            for parent in migration.parents:
-                if status_map[parent] != MigrationStatus.APPLIED:
-                    raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
-
-    @override
     def _patch_sql_statement(self, sql: str) -> str:
         sql = super()._patch_sql_statement(sql)
         if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
@@ -553,6 +520,21 @@ WHERE trigger_schema NOT IN (%s, %s, %s, %s);
             if "ADD COLUMN" in sql and "IF NOT EXISTS" not in sql:
                 return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", 1)
         return sql
+
+    @override
+    def _get_database_hash(self, migration_name: str) -> str:
+        query = f"""
+SELECT change_hash
+FROM {self._q(self.table_name)}
+WHERE migration_name = %s;
+"""
+        with self.connection.cursor(dictionary=True) as cursor:
+            cursor.execute(query, (migration_name,))
+            result = cast(_HashResult, cursor.fetchone())
+
+            if result and result["change_hash"]:
+                return result["change_hash"]
+            raise ValueError(f"Migration {migration_name} not found in the database")
 
     def _update_migration_changelog(
         self,
@@ -577,20 +559,6 @@ INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
 VALUES (%s, %s);
 """
         cursor.execute(query, (path.name, hash))
-
-    def _get_database_hash(self, migration_name: str) -> str:
-        query = f"""
-SELECT change_hash
-FROM {self._q(self.table_name)}
-WHERE migration_name = %s;
-"""
-        with self.connection.cursor(dictionary=True) as cursor:
-            cursor.execute(query, (migration_name,))
-            result = cast(_HashResult, cursor.fetchone())
-
-            if result and result["change_hash"]:
-                return result["change_hash"]
-            raise ValueError(f"Migration {migration_name} not found in the database")
 
 
 class _BoolResult(TypedDict):

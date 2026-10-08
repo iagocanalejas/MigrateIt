@@ -12,7 +12,7 @@ from migrateit import constants as C
 from migrateit.clients._protocol import SqlClientProtocol
 from migrateit.models.changelog import ChangelogFile, SupportedDatabase
 from migrateit.models.config import MigrateItConfig
-from migrateit.models.migration import Migration
+from migrateit.models.migration import Migration, MigrationStatus
 
 WHITESPACE_RE = re.compile(r"\s+")
 
@@ -122,6 +122,42 @@ class SqlClient[T](ABC, SqlClientProtocol):
                 return SyntaxError(f"SQL Syntax Error: {err_msg}"), code
 
         return None
+
+    @override
+    def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
+        if len(self.changelog.migrations) == 0:
+            return
+
+        if not self.changelog.root.initial:
+            raise ValueError("Initial migration is not defined in the changelog")
+        if len([m for m in self.changelog.migrations if m.initial]) > 1:
+            raise ValueError("Multiple initial migrations found in the changelog")
+
+        # check removed migrations
+        removed_migrations = [m for m, s in status_map.items() if s == MigrationStatus.REMOVED]
+        if removed_migrations:
+            raise ValueError(f"Removed migrations found in the database: {removed_migrations}. ")
+
+        # check conflict migrations
+        conflict_migrations = [m for m, s in status_map.items() if s == MigrationStatus.CONFLICT]
+        if conflict_migrations:
+            errors: list[str] = []
+            for conflict_migration in conflict_migrations:
+                path = self.migrations_dir / conflict_migration
+                _, _, migration_hash = self.get_migration_content_and_hash(path)
+                errors.append(
+                    f"Migration {conflict_migration} has a different hash in the database: "
+                    f"found={migration_hash} existing={self._get_database_hash(conflict_migration)}"
+                )
+            raise ValueError("\n".join(errors))
+
+        # check for each migration all the parents are applied
+        for migration in self.changelog.migrations:
+            if status_map[migration.name] != MigrationStatus.APPLIED:
+                continue
+            for parent in migration.parents:
+                if status_map[parent] != MigrationStatus.APPLIED:
+                    raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
 
     @override
     def _patch_sql_statement(self, sql: str) -> str:
