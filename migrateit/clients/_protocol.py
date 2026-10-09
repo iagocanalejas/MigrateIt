@@ -1,9 +1,22 @@
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from migrateit.models.migration import Migration, MigrationStatus
 
 
+@dataclass(frozen=True, slots=True)
+class ExportItem:
+    name: str
+    metadata_query: str
+    process_row: Callable[[Any], tuple[list[str], list[str]]]
+    query_params: tuple[Any, ...] = ()
+
+
 class SqlClientProtocol(Protocol):
+    @property
+    def export_items(self) -> list[ExportItem]: ...
+
     @classmethod
     def get_connection_params(cls) -> dict[str, Any]:
         """
