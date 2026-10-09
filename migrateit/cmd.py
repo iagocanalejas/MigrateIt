@@ -188,7 +188,7 @@ def cmd_run(
                 write_line(f"{action.lower().capitalize()} migration: {migration.name}")
                 client.apply_migration(migration, is_fake=is_fake, is_rollback=is_rollback)
             client.connection.commit()
-    except Exception as e:
+    except Exception as e:  # pragma: no cover[defensive]
         client.connection.rollback()
         raise e
     direction = "Migration" if not is_rollback else "Rollback"
