@@ -1,9 +1,10 @@
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from migrateit.clients._client import SqlClient
+from migrateit.clients._lock import _DummyLocker
 from migrateit.cmd import cmd_new, cmd_run
 from tests.conftest import _create_migration_file, _get_query_rows, _table_exists
 
@@ -20,12 +21,6 @@ def test_cmd_run_and_rerun(client: SqlClient[Any]) -> None:
     cmd_run(client=client)
     rows = _get_query_rows(client, "SELECT migration_name FROM migrations")
     assert len(rows) == 2
-
-
-def test_cmd_run_by_name_not_found(client: SqlClient[Any]) -> None:
-    """Test cmd_run raises ValueError for non-existent target migration."""
-    with pytest.raises(ValueError, match="not found"):
-        cmd_run(client=client, name="0010")
 
 
 def test_cmd_run_fake(client: SqlClient[Any]) -> None:
@@ -70,6 +65,27 @@ def test_cmd_run_plan_only(client: SqlClient[Any]) -> None:
     rows = _get_query_rows(client, "SELECT migration_name FROM migrations")
     assert len(rows) == 0
     assert not _table_exists(client, "test")
+
+
+def test_cmd_run_rollbacks_on_error(client: SqlClient[Any]) -> None:
+    cmd_new(client, name="new", no_edit=True)
+    _create_migration_file(client.migrations_dir, "0001_new.sql", sql="INVALID SQL")
+
+    spy_connection = MagicMock(wraps=client.connection)
+    client.connection = spy_connection
+
+    with patch(
+        "migrateit.cmd.DatabaseLock._build_locker", return_value=_DummyLocker(spy_connection, client.table_name)
+    ):
+        with pytest.raises(Exception):
+            cmd_run(client, name="0001")
+        spy_connection.rollback.assert_called_once()
+
+
+def test_cmd_run_by_name_not_found(client: SqlClient[Any]) -> None:
+    """Test cmd_run raises ValueError for non-existent target migration."""
+    with pytest.raises(ValueError, match="not found"):
+        cmd_run(client=client, name="0010")
 
 
 def test_cmd_run_no_migrations_to_rollback(client: SqlClient[Any]) -> None:

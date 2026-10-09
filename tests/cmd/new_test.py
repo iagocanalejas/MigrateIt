@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -16,7 +16,7 @@ def test_cmd_new_with_editor(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
 
     with (
-        patch("migrateit.cmd.subprocess.call", return_value=0) as mock_call,
+        patch("migrateit.cmd.subprocess.run", return_value=MagicMock(returncode=0)) as mock_call,
         patch.dict(os.environ, {"EDITOR": "vim"}, clear=False),
     ):
         result = cmd_new(mock_client, name="test_migration", no_edit=False)
@@ -33,7 +33,7 @@ def test_cmd_new_without_editor(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
 
     with (
-        patch("migrateit.cmd.subprocess.call", return_value=0) as mock_call,
+        patch("migrateit.cmd.subprocess.run", return_value=MagicMock(returncode=0)) as mock_call,
         patch.dict(os.environ, {"EDITOR": "vim"}, clear=False),
     ):
         result = cmd_new(mock_client, name="test_migration", no_edit=True)

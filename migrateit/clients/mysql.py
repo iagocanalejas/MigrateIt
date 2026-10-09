@@ -291,7 +291,6 @@ def _process_routines(client: MySqlClient, row: tuple[str, ...]) -> tuple[list[s
     if r_type.upper() not in ("FUNCTION", "PROCEDURE"):
         raise ValueError(f"Unexpected routine type: {r_type!r}")
 
-    client.execute(f"SHOW CREATE {r_type} {client._q(schema)}.{client._q(r_name)}")
     show_row = client.execute_for_one(f"SHOW CREATE {r_type} {client._q(schema)}.{client._q(r_name)}")
     fwd = [f"{_to_str(show_row[2])};"]
     rb = [f"DROP {r_type} IF EXISTS {client._q(schema)}.{client._q(r_name)};"]
@@ -383,7 +382,6 @@ def _process_triggers(client: MySqlClient, row: tuple[str, str, str]) -> tuple[l
     if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
         return [], []
 
-    client.execute(f"SHOW CREATE TRIGGER {client._q(schema)}.{client._q(tgname)}")
     show_row = client.execute_for_one(f"SHOW CREATE TRIGGER {client._q(schema)}.{client._q(tgname)}")
     fwd = [f"{_to_str(show_row[-1])};"]
     rb = [f"DROP TRIGGER IF EXISTS {client._q(schema)}.{client._q(tgname)};"]

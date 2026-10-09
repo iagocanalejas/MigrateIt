@@ -105,7 +105,7 @@ FROM {self._q(self.table_name)};
                 write_line(f"Hash mismatch for {migration_name}: file={migration_hash} db={db_hash}")
                 logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, db_hash)
 
-            migrations[migration.name] = status
+            migrations[migration_name] = status
 
         return migrations
 
@@ -118,19 +118,15 @@ FROM {self._q(self.table_name)};
 
         migration_code, reverse_migration_code, migration_hash = migration.get_content_and_hash(self.migrations_dir)
 
-        try:
-            code = migration_code if not is_rollback else reverse_migration_code
-            if not is_fake and code.strip():
-                parsed = Linter(dialect=self.changelog.database.value).parse_string(code)
-                if len(parsed.violations) > 0:
-                    raise ValueError(parsed.violations)
-                statements = [seg.raw.strip() for seg in parsed.tree.segments if seg.is_type("statement")]
-                for stmt in statements:
-                    self.execute(stmt)
-            self._update_migration_changelog(migration, migration_hash, is_rollback)
-        except (Exception, ValueError) as e:
-            self.connection.rollback()
-            raise e
+        code = migration_code if not is_rollback else reverse_migration_code
+        if not is_fake and code.strip():
+            parsed = Linter(dialect=self.changelog.database.value).parse_string(code)
+            if len(parsed.violations) > 0:
+                raise ValueError(parsed.violations)
+            statements = [seg.raw.strip() for seg in parsed.tree.segments if seg.is_type("statement")]
+            for stmt in statements:
+                self.execute(stmt)
+        self._update_migration_changelog(migration, migration_hash, is_rollback)
 
     @override
     def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:

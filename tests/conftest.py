@@ -48,6 +48,11 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
             try:
                 yield pg_conn
             finally:
+                try:
+                    pg_conn.rollback()
+                except Exception:  # pragma: no cover[safety]
+                    pass
+
                 with pg_conn.cursor() as cursor:
                     cursor.execute("DROP SCHEMA public CASCADE;")
                     cursor.execute("DROP SCHEMA IF EXISTS app_schema CASCADE;")
@@ -66,6 +71,11 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
             try:
                 yield mysql_conn
             finally:
+                try:
+                    mysql_conn.rollback()
+                except Exception:  # pragma: no cover[safety]
+                    pass
+
                 with mysql_conn.cursor() as cursor:
                     cursor.execute(f"DROP DATABASE IF EXISTS `{db_name}`;")
                     cursor.execute(f"CREATE DATABASE `{db_name}`;")
@@ -77,6 +87,10 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
             try:
                 yield sqlite_conn
             finally:
+                try:
+                    sqlite_conn.rollback()
+                except Exception:  # pragma: no cover[safety]
+                    pass
                 sqlite_conn.close()
 
         case _:
@@ -141,6 +155,7 @@ def client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlClien
             migrations_dir=migrations_dir,
             changelog=changelog,
         )
+
         yield get_client(config, conn)
 
 

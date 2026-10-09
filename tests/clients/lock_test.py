@@ -1,6 +1,7 @@
 import sqlite3
 import threading
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import psycopg
@@ -13,6 +14,7 @@ from migrateit.clients._lock import (
     _PsqlLocker,
     _SqliteLocker,
 )
+from migrateit.models.changelog import SupportedDatabase
 from tests.conftest import TEST_MIGRATIONS_TABLE
 
 # SQLite DDL for the migrations table (matches the actual schema)
@@ -63,7 +65,7 @@ def test_compute_advisory_key_non_negative() -> None:
 def test_sqlite_lock_acquire_and_release() -> None:
     conn = _make_sqlite_conn()
 
-    with DatabaseLock(conn, TEST_MIGRATIONS_TABLE):
+    with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
         pass
 
     cursor = conn.execute('SELECT COUNT(*) FROM "migrateit_lock"')
@@ -75,7 +77,7 @@ def test_sqlite_lock_released_on_error() -> None:
     conn = _make_sqlite_conn()
 
     with pytest.raises(RuntimeError, match="simulated"):
-        with DatabaseLock(conn, TEST_MIGRATIONS_TABLE):
+        with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
             raise RuntimeError("simulated")
 
     cursor = conn.execute('SELECT COUNT(*) FROM "migrateit_lock"')
@@ -83,26 +85,36 @@ def test_sqlite_lock_released_on_error() -> None:
     assert count == 0
 
 
-def test_sqlite_lock_concurrent() -> None:
-    conn = sqlite3.connect(":memory:", autocommit=False, check_same_thread=False)
-    conn.executescript(_MIGRATIONS_TABLE_DDL)
-    conn.commit()
+def test_sqlite_lock_concurrent(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+
+    # Initialize lock schema on a setup connection
+    setup_conn = sqlite3.connect(db_path)
+    setup_conn.executescript(_MIGRATIONS_TABLE_DDL)
+    setup_conn.commit()
+    setup_conn.close()
 
     errors: list[BaseException] = []
     acquired = threading.Event()
 
     def holder() -> None:
         try:
-            with DatabaseLock(conn, TEST_MIGRATIONS_TABLE):
+            # Separate connection for holder thread
+            conn = sqlite3.connect(db_path, timeout=5.0)
+            with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
                 acquired.set()
                 time.sleep(1)
+            conn.close()
         except BaseException as exc:  # pragma: no cover
             errors.append(exc)
 
     def waiter() -> None:
         try:
-            with DatabaseLock(conn, TEST_MIGRATIONS_TABLE):
+            # Separate connection for waiter thread
+            conn = sqlite3.connect(db_path, timeout=5.0)
+            with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
                 pass
+            conn.close()
         except BaseException as exc:  # pragma: no cover
             errors.append(exc)
 
@@ -112,7 +124,7 @@ def test_sqlite_lock_concurrent() -> None:
     t2.start()
 
     acquired.wait(timeout=2)
-    t2.join(timeout=45)
+    t2.join(timeout=5)
     t1.join(timeout=2)
 
     assert not errors, f"Unexpected errors: {errors}"
@@ -121,7 +133,7 @@ def test_sqlite_lock_concurrent() -> None:
 def test_sqlite_lock_table_created() -> None:
     conn = _make_sqlite_conn()
 
-    DatabaseLock(conn, TEST_MIGRATIONS_TABLE)
+    DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE)
 
     cursor = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -134,7 +146,7 @@ def test_sqlite_lock_repeated_acquisitions() -> None:
     conn = _make_sqlite_conn()
 
     for _ in range(3):
-        with DatabaseLock(conn, TEST_MIGRATIONS_TABLE):
+        with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
             pass
 
     cursor = conn.execute('SELECT COUNT(*) FROM "migrateit_lock"')
@@ -270,7 +282,7 @@ def test_database_lock_builds_psql_locker() -> None:
     mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
     mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
-    lock = DatabaseLock(mock_conn, TEST_MIGRATIONS_TABLE)  # noqa: F841
+    lock = DatabaseLock(mock_conn, SupportedDatabase.POSTGRES, TEST_MIGRATIONS_TABLE)  # noqa: F841
     assert isinstance(lock._locker, _PsqlLocker)  # noqa: SLF001
 
 
@@ -283,5 +295,5 @@ def test_database_lock_builds_mysql_locker() -> None:
     mock_cursor.fetchall.return_value = [(1,)]
 
     # MagicMock without spec should be treated as MySQL
-    lock = DatabaseLock(mock_conn, TEST_MIGRATIONS_TABLE)  # noqa: F841
+    lock = DatabaseLock(mock_conn, SupportedDatabase.MARIADB, TEST_MIGRATIONS_TABLE)  # noqa: F841
     assert isinstance(lock._locker, _MySqlLocker)  # noqa: SLF001

@@ -126,7 +126,7 @@ def cmd_new(
     editor = os.getenv("EDITOR", "notepad.exe" if platform.system() == "Windows" else "vim")
     editor = _validate_editor(editor)
     cmd = shlex.split(editor) + [str(client.migrations_dir / migration.name)]
-    rc = subprocess.call(cmd)
+    rc = subprocess.run(cmd, timeout=30).returncode
     if rc != 0:  # pragma: no cover
         write_line(f"Editor exited with code {rc}")
     return rc
@@ -182,15 +182,18 @@ def cmd_run(
         action = "Applying" if not is_rollback else "Rolling back"
         write_line(f"{action} {len(migration_plan)} migration(s)")
 
-    try:
-        with DatabaseLock(client.connection, client.table_name):
+    with DatabaseLock(client.connection, client.changelog.database, client.table_name):
+        try:
             for migration in migration_plan:
                 write_line(f"{action.lower().capitalize()} migration: {migration.name}")
                 client.apply_migration(migration, is_fake=is_fake, is_rollback=is_rollback)
             client.connection.commit()
-    except Exception as e:  # pragma: no cover[defensive]
-        client.connection.rollback()
-        raise e
+        except Exception as e:
+            try:
+                client.connection.rollback()
+            except Exception:  # pragma: no cover
+                pass
+            raise e
     direction = "Migration" if not is_rollback else "Rollback"
     write_line(f"{direction} complete: {len(migration_plan)} migration(s) applied")
     return 0
