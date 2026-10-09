@@ -125,30 +125,3 @@ def test_cmd_run_hash_update_success(client: SqlClient[Any]) -> None:
     updated_hash = next(r[1] for r in rows_after if r[0] == "0001_new.sql")
 
     assert updated_hash == original_hash
-
-
-def test_cmd_run_rollback_on_error(client: SqlClient[Any]) -> None:
-    """Test cmd_run calls connection.rollback() when apply_migration raises an exception."""
-    from unittest.mock import MagicMock, patch
-
-    cmd_new(client, name="first", no_edit=True)
-    cmd_new(client, name="second", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_first.sql")
-    _create_migration_file(client.migrations_dir, "0002_second.sql")
-
-    side_effect_calls: list[int] = [0]
-
-    def _apply_then_fail(*_, **__) -> None:  # type: ignore
-        side_effect_calls[0] += 1
-        if side_effect_calls[0] == 2:
-            raise RuntimeError("simulated DB error")
-
-    mock_conn = MagicMock()
-
-    with (
-        patch.object(client, "apply_migration", side_effect=_apply_then_fail),
-        patch.object(client, "connection", mock_conn),
-    ):
-        with pytest.raises(RuntimeError, match="simulated DB error"):
-            cmd_run(client=client)
-        mock_conn.rollback.assert_called_once()

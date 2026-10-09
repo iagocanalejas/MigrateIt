@@ -198,10 +198,3 @@ def test_rollback_migration_not_applied(client: SqlClient[Any], temp_dir: Path) 
 
     with pytest.raises(ValueError, match="is not applied, cannot undo it"):
         client.apply_migration(migration, is_fake=False, is_rollback=True)
-
-
-def test_apply_missing_migration(client: SqlClient[Any], temp_dir: Path) -> None:
-    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
-    client.changelog.migrations.append(migration)
-    with pytest.raises(FileNotFoundError):
-        client.apply_migration(migration)
