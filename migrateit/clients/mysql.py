@@ -2,14 +2,12 @@ import os
 from collections import defaultdict
 from typing import Any, TypedDict, cast, override
 
-import mysql.connector
 from mysql.connector.abstracts import MySQLConnectionAbstract
 from mysql.connector.pooling import PooledMySQLConnection
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
-from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
-from migrateit.reporters.logs import logger
+from migrateit.models.migration import Migration, get_migration_header
 from migrateit.reporters.output import write_line
 
 
@@ -80,6 +78,25 @@ DROP TABLE IF EXISTS {cls._q(table_name)};
         return super()._q(name, QUOTE_CHAR)
 
     @override
+    def execute(self, query: str, params: tuple[Any, ...] = ()) -> None:
+        with self.connection.cursor() as cursor:
+            cursor.execute(query, params)
+            if any(m in query.upper() for m in ("SELECT", "SHOW", "DESCRIBE")):
+                cursor.fetchall()
+
+    @override
+    def execute_for_one(self, query: str, params: tuple[Any, ...] = ()) -> Any:
+        with self.connection.cursor() as cursor:
+            cursor.execute(query, params)
+            return cursor.fetchone()
+
+    @override
+    def execute_for_rows(self, query: str, params: tuple[Any, ...] = ()) -> list[Any]:
+        with self.connection.cursor() as cursor:
+            cursor.execute(query, params)
+            return cursor.fetchall()
+
+    @override
     def is_migrations_table_created(self) -> bool:
         query = """
 SELECT EXISTS(
@@ -93,100 +110,6 @@ SELECT EXISTS(
             cursor.execute(query, (self.table_name,))
             result = cast(_BoolResult, cursor.fetchone())
             return result["value"]
-
-    @override
-    def is_migration_applied(self, migration: Migration) -> bool:
-        query = f"""
-SELECT EXISTS(
-    SELECT 1 FROM {self._q(self.table_name)} WHERE migration_name = %s
-) as value;
-"""
-        with self.connection.cursor(dictionary=True) as cursor:
-            cursor.execute(query, (migration.name,))
-            result = cast(_BoolResult, cursor.fetchone())
-            return result["value"]
-
-    @override
-    def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
-        migrations = {k: MigrationStatus.NOT_APPLIED for k, _ in self.changelog.migrations_tree.items()}
-
-        if not self.is_migrations_table_created():
-            return migrations
-
-        query = f"""
-SELECT migration_name, change_hash
-FROM {self._q(self.table_name)};
-"""
-        with self.connection.cursor(dictionary=True) as cursor:
-            cursor.execute(query)
-            rows = cursor.fetchall()
-
-        migrations_by_name = {m.name: m for m in self.changelog.migrations}
-        for row in cast(list[_MigrationStatusRow], rows):
-            migration_name, db_hash = row["migration_name"], row["change_hash"]
-            migration = migrations_by_name.get(migration_name, None)
-            if not migration:
-                # migration applied not in changelog
-                migrations[migration_name] = MigrationStatus.REMOVED
-                continue
-
-            _, _, migration_hash = self.get_migration_content_and_hash(self.migrations_dir / migration.name)
-            status = MigrationStatus.APPLIED
-            if migration_hash != db_hash:
-                status = MigrationStatus.CONFLICT
-                write_line(f"Hash mismatch for {migration_name}: file={migration_hash} db={db_hash}")
-                logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, db_hash)
-
-            migrations[migration.name] = status
-
-        return migrations
-
-    @override
-    def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
-        path = self.get_migration_path(migration)
-        if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
-            if is_rollback:
-                raise ValueError(f"Migration {path.name} is not applied, cannot undo it")
-            raise ValueError(f"Migration {path.name} is already applied, cannot apply it again")
-
-        migration_code, reverse_migration_code, migration_hash = self.get_migration_content_and_hash(path)
-
-        try:
-            with self.connection.cursor() as cursor:
-                if not is_fake:
-                    code = migration_code if not is_rollback else reverse_migration_code
-                    cursor.execute(code)
-                    if any(m in code.upper() for m in ("SELECT", "SHOW", "DESCRIBE")):
-                        cursor.fetchall()
-                self._update_migration_changelog(cursor, migration, migration_hash, is_rollback)
-        except mysql.connector.Error as e:
-            self.connection.rollback()
-            raise e
-
-    @override
-    def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
-        placeholders = ", ".join(["%s"] * len(migrations))
-        query = f"""
-UPDATE {self._q(self.table_name)}
-SET squashed=1
-WHERE migration_name IN ({placeholders});
-"""
-        with self.connection.cursor() as cursor:
-            cursor.execute(query, migrations)
-        self.apply_migration(new_migration, is_fake=True)
-
-    @override
-    def update_migration_hash(self, migration: Migration) -> None:
-        path = self.get_migration_path(migration)
-        _, _, migration_hash = self.get_migration_content_and_hash(path)
-
-        query = f"""
-UPDATE {self._q(self.table_name)}
-SET change_hash = %s
-WHERE migration_name = %s;
-"""
-        with self.connection.cursor() as cursor:
-            cursor.execute(query, (migration_hash, path.name))
 
     @override
     def export_database_schema(self, migration: Migration) -> None:
@@ -524,57 +447,9 @@ WHERE trigger_schema NOT IN (%s, %s, %s, %s);
                 return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", 1)
         return sql
 
-    @override
-    def _get_database_hash(self, migration_name: str) -> str:
-        query = f"""
-SELECT change_hash
-FROM {self._q(self.table_name)}
-WHERE migration_name = %s;
-"""
-        with self.connection.cursor(dictionary=True) as cursor:
-            cursor.execute(query, (migration_name,))
-            result = cast(_HashResult, cursor.fetchone())
-
-            if result and result["change_hash"]:
-                return result["change_hash"]
-            raise ValueError(f"Migration {migration_name} not found in the database")
-
-    def _update_migration_changelog(
-        self,
-        cursor: Any,
-        migration: Migration,
-        hash: str,
-        is_rollback: bool,
-    ) -> None:
-        if migration.initial and is_rollback:
-            return
-
-        path = self.migrations_dir / migration.name
-        if is_rollback and not migration.initial:
-            query = f"""
-DELETE FROM {self._q(self.table_name)}
-WHERE migration_name = %s
-    AND change_hash = %s;
-"""
-        else:
-            query = f"""
-INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
-VALUES (%s, %s);
-"""
-        cursor.execute(query, (path.name, hash))
-
 
 class _BoolResult(TypedDict):
     value: bool
-
-
-class _MigrationStatusRow(TypedDict):
-    migration_name: str
-    change_hash: str
-
-
-class _HashResult(TypedDict):
-    change_hash: str
 
 
 class _SchemaRow(TypedDict):
