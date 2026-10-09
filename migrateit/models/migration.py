@@ -1,3 +1,4 @@
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -6,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from migrateit import constants as C
+from migrateit.models.sql import WHITESPACE_RE, remove_sql_comments
 
 
 class MigrationStatus(Enum):
@@ -36,6 +38,29 @@ class Migration:
         if not name1 or not name2:
             return False
         return name1 == name2 or name1.startswith(name2.split("_")[0])
+
+    def get_full_path(self, migrations_dir: Path) -> Path:
+        path = migrations_dir / self.name
+        if not path.is_file() or not path.name.endswith(".sql"):
+            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
+        return path
+
+    def get_content_and_hash(self, migrations_dir: Path) -> tuple[str, str, str]:
+        content = self.get_full_path(migrations_dir).read_text()
+        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        parts = content.split(C.ROLLBACK_SPLIT_TAG)
+        if len(parts) == 1:
+            raise ValueError("No rollback tag in migration file")
+        if len(parts) > 2:
+            raise ValueError("Too many rollback tags in migration file")
+
+        migration = remove_sql_comments(parts[0])
+        reverse_migration = remove_sql_comments(parts[1])
+        return (
+            WHITESPACE_RE.sub(" ", migration).strip(),
+            WHITESPACE_RE.sub(" ", reverse_migration).strip(),
+            content_hash,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {

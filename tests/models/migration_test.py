@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.clients._clients_test import MIGRATION_NAME
 
 from migrateit.constants import ROLLBACK_SPLIT_TAG
 from migrateit.models.changelog import ChangelogFile, SupportedDatabase
@@ -60,6 +61,48 @@ def test_valid_nonexistent_file() -> None:
 )
 def test_migration_is_same_migration_name(name1: str, name2: str, expected: bool) -> None:
     assert Migration.is_same_migration_name(name1, name2) is expected
+
+
+# --- get_content_and_hash tests ---
+
+
+@pytest.mark.unit
+def test_get_migration_content_and_hash_no_rollback(temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+    m = Migration(name=MIGRATION_NAME, initial=True, parents=())
+
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    with open(migrations_dir / MIGRATION_NAME, "w") as f:
+        f.write("SELECT 1;")
+
+    with pytest.raises(ValueError, match="No rollback"):
+        m.get_content_and_hash(migrations_dir)
+
+
+@pytest.mark.unit
+def test_get_migration_content_and_hash_more_than_one_rollback(temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+    m = Migration(name=MIGRATION_NAME, initial=True, parents=())
+
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    with open(migrations_dir / MIGRATION_NAME, "w") as f:
+        f.write("SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;" + ROLLBACK_SPLIT_TAG + "SELECT 3;")
+
+    with pytest.raises(ValueError, match="Too many rollback"):
+        m.get_content_and_hash(migrations_dir)
+
+
+@pytest.mark.unit
+def test_get_migration_content_clean_comments(temp_dir: Path) -> None:
+    migrations_dir = temp_dir / "migrations"
+    m = Migration(name=MIGRATION_NAME, initial=True, parents=())
+
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    with open(migrations_dir / MIGRATION_NAME, "w") as f:
+        f.write("-- Comment\n" + "SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;")
+
+    code, _, _ = m.get_content_and_hash(migrations_dir)
+    assert "--" not in code
 
 
 # --- migration.to_dict tests ---
