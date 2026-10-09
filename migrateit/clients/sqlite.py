@@ -85,6 +85,11 @@ ORDER BY name;
                 process_row=partial(_process_tables, self),
             ),
             ExportItem(
+                name="tables_emit",
+                metadata_query="SELECT 1;",
+                process_row=partial(_emit_tables, self),
+            ),
+            ExportItem(
                 name="views",
                 metadata_query="""
 SELECT name, sql
@@ -140,9 +145,20 @@ def _process_tables(client: SqliteClient, row: tuple[str, str]) -> tuple[list[st
 
     sql_str = _ensure_if_not_exists(sql_str, "CREATE TABLE ")
 
-    fwd = [sql_str]
-    rb = [f"DROP TABLE IF EXISTS {client._q(name)};"]
-    return fwd, rb
+    # Accumulate columns per table using a mutable side-channel on the client
+    if not hasattr(client, "_export_columns_fwr"):
+        client._export_columns_fwr = []  # type: ignore[attr-defined]
+    if not hasattr(client, "_export_columns_rb"):
+        client._export_columns_rb = []  # type: ignore[attr-defined]
+    client._export_columns_fwr.append(sql_str)  # type: ignore[attr-defined]
+    client._export_columns_rb.append(f"DROP TABLE IF EXISTS {client._q(name)};")  # type: ignore[attr-defined]
+    return [], []
+
+
+def _emit_tables(client: SqliteClient, _row: Any) -> tuple[list[str], list[str]]:
+    fwr: list[str] = getattr(client, "_export_columns_fwr", [])
+    rb: list[str] = getattr(client, "_export_columns_rb", [])
+    return fwr, list(reversed(rb))
 
 
 def _process_views(client: SqliteClient, row: tuple[str, str]) -> tuple[list[str], list[str]]:

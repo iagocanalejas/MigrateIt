@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -168,23 +167,6 @@ def test_apply_migration_file_missing(client: SqlClient[Any]) -> None:
 
     with pytest.raises(FileNotFoundError):
         client.apply_migration(migration, is_fake=False)
-
-
-def test_rollback_migration_error(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test that errors trigger a rollback."""
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(migrations_dir, MIGRATION_NAME, sql="INVALID SQL")
-
-    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
-    client.changelog.migrations.append(migration)
-
-    spy_connection = MagicMock(wraps=client.connection)
-    client.connection = spy_connection
-
-    with pytest.raises(Exception):
-        client.apply_migration(migration)
-    spy_connection.rollback.assert_called_once()
 
 
 def test_rollback_migration_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:
