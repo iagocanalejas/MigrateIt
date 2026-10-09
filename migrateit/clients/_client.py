@@ -1,6 +1,4 @@
-import hashlib
 import os
-import re
 from abc import ABC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
@@ -8,21 +6,22 @@ from typing import TYPE_CHECKING, Any, override
 import sqlfluff
 from sqlfluff.core import Linter
 
-from migrateit import constants as C
-from migrateit.clients._protocol import SqlClientProtocol
+from migrateit.clients._protocol import SqlClientProtocol, SqlConnectionProtocol
 from migrateit.models.changelog import ChangelogFile, SupportedDatabase
 from migrateit.models.config import MigrateItConfig
 from migrateit.models.migration import Migration, MigrationStatus
+from migrateit.models.sql import remove_sql_comments
+from migrateit.reporters.logs import logger
+from migrateit.reporters.output import write_line
 
 linter = Linter(dialect="ansi")
-WHITESPACE_RE = re.compile(r"\s+")
 
 
 if TYPE_CHECKING:
     from migrateit.models.connection import Connection
 
 
-class SqlClient[T: Connection](ABC, SqlClientProtocol):
+class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
     VARNAME_DB_URL = os.getenv("VARNAME_DB_URL", "DB_URL")
     VARNAME_DB_FILE = os.getenv("VARNAME_DB_FILE", "DB_FILE")
     VARNAME_DB_HOST = os.getenv("VARNAME_DB_HOST", "DB_HOST")
@@ -36,6 +35,11 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol):
     config: MigrateItConfig
 
     @property
+    @override
+    def placeholder(self) -> str:
+        return "%s"
+
+    @property
     def table_name(self) -> str:
         return self.config.table_name
 
@@ -47,6 +51,12 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol):
     def changelog(self) -> ChangelogFile:
         return self.config.changelog
 
+    @classmethod
+    def _q(cls, name: str, QUOTE_CHAR: str = '"') -> str:
+        if QUOTE_CHAR in name or "\x00" in name:
+            raise ValueError(f"Invalid identifier: {name!r}")
+        return f"{QUOTE_CHAR}{name}{QUOTE_CHAR}"
+
     def __init__(self, connection: T, config: MigrateItConfig):
         if connection is None:
             raise ValueError("Database connection cannot be None")
@@ -56,11 +66,97 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol):
         self.connection = connection
         self.config = config
 
-    @classmethod
-    def _q(cls, name: str, QUOTE_CHAR: str = '"') -> str:
-        if QUOTE_CHAR in name or "\x00" in name:
-            raise ValueError(f"Invalid identifier: {name!r}")
-        return f"{QUOTE_CHAR}{name}{QUOTE_CHAR}"
+    @override
+    def is_migration_applied(self, migration: Migration) -> bool:
+        query = f"""
+SELECT EXISTS (
+    SELECT 1 FROM {self._q(self.table_name)} WHERE migration_name = {self.placeholder}
+);
+"""
+        result = self.execute_for_one(query, (migration.name,))
+        return bool(result[0]) if result else False
+
+    @override
+    def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
+        migrations = {k: MigrationStatus.NOT_APPLIED for k, _ in self.changelog.migrations_tree.items()}
+
+        if not self.is_migrations_table_created():
+            return migrations
+
+        query = f"""
+SELECT migration_name, change_hash
+FROM {self._q(self.table_name)};
+        """
+        rows = self.execute_for_rows(query)
+
+        migrations_by_name = {m.name: m for m in self.changelog.migrations}
+        for row in rows:
+            migration_name, db_hash = row
+            migration = migrations_by_name.get(migration_name, None)
+            if not migration:
+                # migration applied not in changelog
+                migrations[migration_name] = MigrationStatus.REMOVED
+                continue
+
+            _, _, migration_hash = migration.get_content_and_hash(self.migrations_dir)
+            status = MigrationStatus.APPLIED
+            if migration_hash != db_hash:
+                status = MigrationStatus.CONFLICT
+                write_line(f"Hash mismatch for {migration_name}: file={migration_hash} db={db_hash}")
+                logger.warning("Hash mismatch for %s: file=%s db=%s", migration_name, migration_hash, db_hash)
+
+            migrations[migration.name] = status
+
+        return migrations
+
+    @override
+    def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
+        if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
+            if is_rollback:
+                raise ValueError(f"Migration {migration.name} is not applied, cannot undo it")
+            raise ValueError(f"Migration {migration.name} is already applied, cannot apply it again")
+
+        migration_code, reverse_migration_code, migration_hash = migration.get_content_and_hash(self.migrations_dir)
+
+        try:
+            code = migration_code if not is_rollback else reverse_migration_code
+            if not is_fake and code.strip():
+                parsed = Linter(dialect=self.changelog.database.value).parse_string(code)
+                if len(parsed.violations) > 0:
+                    raise ValueError(parsed.violations)
+                statements = [seg.raw.strip() for seg in parsed.tree.segments if seg.is_type("statement")]
+                for stmt in statements:
+                    self.execute(stmt)
+            self._update_migration_changelog(migration, migration_hash, is_rollback)
+        except (Exception, ValueError) as e:
+            self.connection.rollback()
+            raise e
+
+    @override
+    def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
+        placeholders = ",".join(self.placeholder for _ in migrations)
+        query = f"""
+UPDATE {self._q(self.table_name)}
+SET squashed = true
+WHERE migration_name IN ({placeholders});
+"""
+        self.execute(query, tuple(migrations))
+        self.apply_migration(new_migration, is_fake=True)
+
+    @override
+    def update_migration_hash(self, migration: Migration) -> None:
+        _, _, migration_hash = migration.get_content_and_hash(self.migrations_dir)
+
+        query = f"""
+UPDATE {self._q(self.table_name)}
+SET change_hash = {self.placeholder}
+WHERE migration_name = {self.placeholder};
+"""
+        self.execute(query, (migration_hash, migration.name))
+
+    # ---------------------------------------------------------------------------
+    # Validation methods
+    # ---------------------------------------------------------------------------
 
     @staticmethod
     def validate_config(config: MigrateItConfig) -> None:
@@ -78,39 +174,9 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol):
         if not config.changelog.path:
             raise ValueError("Migrations file is required")
 
-    @staticmethod
-    def get_migration_content_and_hash(path: Path) -> tuple[str, str, str]:
-        content = path.read_text()
-        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        parts = content.split(C.ROLLBACK_SPLIT_TAG)
-        if len(parts) == 1:
-            raise ValueError("No rollback tag in migration file")
-        if len(parts) > 2:
-            raise ValueError("Too many rollback tags in migration file")
-
-        migration = SqlClient._remove_sql_comments(parts[0])
-        reverse_migration = SqlClient._remove_sql_comments(parts[1])
-        return (
-            WHITESPACE_RE.sub(" ", migration).strip(),
-            WHITESPACE_RE.sub(" ", reverse_migration).strip(),
-            content_hash,
-        )
-
-    @staticmethod
-    def _remove_sql_comments(sql: str) -> str:
-        parsed = linter.parse_string(sql)
-        return "".join(segment.raw for segment in parsed.tree.raw_segments if not segment.is_type("comment")).strip()
-
-    def get_migration_path(self, migration: Migration) -> Path:
-        path = self.migrations_dir / migration.name
-        if not path.is_file() or not path.name.endswith(".sql"):
-            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
-        return path
-
     @override
     def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
-        path = self.get_migration_path(migration)
-        migration_code, reverse_migration_code, _ = self.get_migration_content_and_hash(path)
+        migration_code, reverse_migration_code, _ = migration.get_content_and_hash(self.migrations_dir)
 
         for code in (migration_code, reverse_migration_code):
             patched = self._patch_sql_statement(code)
@@ -148,8 +214,8 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol):
         if conflict_migrations:
             errors: list[str] = []
             for conflict_migration in conflict_migrations:
-                path = self.migrations_dir / conflict_migration
-                _, _, migration_hash = self.get_migration_content_and_hash(path)
+                migration = self.changelog.get_migration_by_name(conflict_migration)
+                _, _, migration_hash = migration.get_content_and_hash(self.migrations_dir)
                 errors.append(
                     f"Migration {conflict_migration} has a different hash in the database: "
                     f"found={migration_hash} existing={self._get_database_hash(conflict_migration)}"
@@ -164,9 +230,44 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol):
                 if status_map[parent] != MigrationStatus.APPLIED:
                     raise ValueError(f"Migration {migration.name} is applied before its parent {parent}.")
 
+    # ---------------------------------------------------------------------------
+    # HELPERS
+    # ---------------------------------------------------------------------------
+
+    @override
+    def _get_database_hash(self, migration_name: str) -> str:
+        query = f"""
+SELECT change_hash
+FROM {self._q(self.table_name)}
+WHERE migration_name = {self.placeholder};
+"""
+        result = self.execute_for_one(query, (migration_name,))
+        if not result or not result[0]:
+            raise ValueError(f"Migration {migration_name} not found in the database")
+        return result[0]
+
+    @override
+    def _update_migration_changelog(self, migration: Migration, hash: str, is_rollback: bool) -> None:
+        if migration.initial and is_rollback:
+            return
+
+        path = self.migrations_dir / migration.name
+        if is_rollback and not migration.initial:
+            query = f"""
+DELETE FROM {self._q(self.table_name)}
+WHERE migration_name = {self.placeholder}
+    AND change_hash = {self.placeholder};
+"""
+        else:
+            query = f"""
+INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
+VALUES ({self.placeholder}, {self.placeholder});
+"""
+        self.execute(query, (path.name, hash))
+
     @override
     def _patch_sql_statement(self, sql: str) -> str:
-        sql = self._remove_sql_comments(sql.upper())
+        sql = remove_sql_comments(sql.upper())
 
         if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
             return sql

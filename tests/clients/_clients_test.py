@@ -8,7 +8,6 @@ import pytest
 import sqlfluff
 
 from migrateit.clients._client import SqlClient
-from migrateit.constants import ROLLBACK_SPLIT_TAG
 from migrateit.models.changelog import ChangelogFile, SupportedDatabase
 from migrateit.models.config import MigrateItConfig
 from migrateit.models.connection import get_connection
@@ -137,45 +136,6 @@ def test_validate_config(table_name: object, expected_error: type[Exception], ex
     )
     with pytest.raises(expected_error, match=expected_match):
         SqlClient.validate_config(config)
-
-
-# --- get_migration_content_and_hash tests ---
-
-
-@pytest.mark.unit
-def test_get_migration_content_and_hash_no_rollback(temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-
-    migrations_dir.mkdir(parents=True, exist_ok=True)
-    with open(migrations_dir / MIGRATION_NAME, "w") as f:
-        f.write("SELECT 1;")
-
-    with pytest.raises(ValueError, match="No rollback"):
-        SqlClient.get_migration_content_and_hash(migrations_dir / MIGRATION_NAME)
-
-
-@pytest.mark.unit
-def test_get_migration_content_and_hash_more_than_one_rollback(temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-
-    migrations_dir.mkdir(parents=True, exist_ok=True)
-    with open(migrations_dir / MIGRATION_NAME, "w") as f:
-        f.write("SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;" + ROLLBACK_SPLIT_TAG + "SELECT 3;")
-
-    with pytest.raises(ValueError, match="Too many rollback"):
-        SqlClient.get_migration_content_and_hash(migrations_dir / MIGRATION_NAME)
-
-
-@pytest.mark.unit
-def test_get_migration_content_clean_comments(temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-
-    migrations_dir.mkdir(parents=True, exist_ok=True)
-    with open(migrations_dir / MIGRATION_NAME, "w") as f:
-        f.write("-- Comment\n" + "SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;")
-
-    code, _, _ = SqlClient.get_migration_content_and_hash(migrations_dir / MIGRATION_NAME)
-    assert "--" not in code
 
 
 # --- create_migrations_table tests ---

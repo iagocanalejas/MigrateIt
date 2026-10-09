@@ -308,7 +308,7 @@ def cmd_drop(client: SqlClient[Any], name: str) -> int:
     if target_migration.initial:
         raise ValueError(f"Cannot drop the initial migration {name}.")
 
-    path = client.get_migration_path(target_migration)
+    path = target_migration.get_full_path(client.migrations_dir)
     if not path.exists():
         raise FileNotFoundError(f"Migration file {path.name} does not exist.")
 
