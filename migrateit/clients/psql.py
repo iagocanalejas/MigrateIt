@@ -181,13 +181,13 @@ WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND NOT trig.tgisint
     @override
     def _patch_sql_statement(self, sql: str) -> str:
         sql = super()._patch_sql_statement(sql)
-        if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
-            return sql
-        if "ALTER TABLE" in sql:
-            if "ADD COLUMN" in sql and "IF NOT EXISTS" not in sql:
-                return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", 1)
-            if "DROP COLUMN" in sql and "IF EXISTS" not in sql:
-                return sql.replace("DROP COLUMN", "DROP COLUMN IF EXISTS", 1)
+        upper_sql = sql.upper()
+
+        if "ALTER TABLE" in upper_sql:
+            if "ADD COLUMN" in upper_sql and "IF NOT EXISTS" not in upper_sql:
+                return re.sub("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", sql, flags=re.IGNORECASE)
+            if "DROP COLUMN" in upper_sql and "IF EXISTS" not in upper_sql:
+                return re.sub("DROP COLUMN", "DROP COLUMN IF EXISTS", sql, flags=re.IGNORECASE)
         return sql
 
 

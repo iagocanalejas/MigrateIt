@@ -1,4 +1,5 @@
 import os
+import re
 from collections import defaultdict
 from functools import partial
 from typing import TYPE_CHECKING, Any, override
@@ -215,11 +216,11 @@ WHERE trigger_schema {schemas_filter};
     @override
     def _patch_sql_statement(self, sql: str) -> str:
         sql = super()._patch_sql_statement(sql)
-        if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
-            return sql
-        if "ALTER TABLE" in sql:
-            if "ADD COLUMN" in sql and "IF NOT EXISTS" not in sql:
-                return sql.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", 1)
+        upper_sql = sql.upper()
+
+        if "ALTER TABLE" in upper_sql:
+            if "ADD COLUMN" in upper_sql and "IF NOT EXISTS" not in upper_sql:
+                return re.sub("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", sql, flags=re.IGNORECASE)
         return sql
 
 
@@ -265,10 +266,10 @@ def _process_tables(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[l
             col_def += " AUTO_INCREMENT"
         table_columns[(schema, table)].append(col_def)
 
-        for (schema, table), table_col_defs in table_columns.items():
-            cols_str = ",\n".join(table_col_defs)
-            fwd.append(f"CREATE TABLE IF NOT EXISTS {client._q(schema)}.{client._q(table)} (\n{cols_str}\n);")
-            rb.append(f"DROP TABLE IF EXISTS {client._q(schema)}.{client._q(table)};")
+    for (schema, table), table_col_defs in table_columns.items():
+        cols_str = ",\n".join(table_col_defs)
+        fwd.append(f"CREATE TABLE IF NOT EXISTS {client._q(schema)}.{client._q(table)} (\n{cols_str}\n);")
+        rb.append(f"DROP TABLE IF EXISTS {client._q(schema)}.{client._q(table)};")
     return fwd, list(reversed(rb))
 
 
