@@ -9,7 +9,7 @@ from migrateit.models.migration import Migration, MigrationStatus
 class ExportItem:
     name: str
     metadata_query: str
-    process_row: Callable[[Any], tuple[list[str], list[str]]]
+    process_rows: Callable[[Any], tuple[list[str], list[str]]]
     query_params: tuple[Any, ...] = ()
 
 

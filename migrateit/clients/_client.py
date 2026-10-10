@@ -243,10 +243,9 @@ WHERE migration_name = {self.placeholder};
         for item in self.export_items:
             write_line(f"\tExporting {item.name}...")
             rows = self.execute_for_rows(item.metadata_query, item.query_params)
-            for row in rows:
-                fwd, rb = item.process_row(row)
-                forward_ddl.extend(fwd)
-                rollback_ddl.extend(rb)
+            fwd, rb = item.process_rows(rows)
+            forward_ddl.extend(fwd)
+            rollback_ddl.extend(rb)
 
         migration_path = self.migrations_dir / migration.name
         with open(migration_path, "w", encoding="utf-8") as f:

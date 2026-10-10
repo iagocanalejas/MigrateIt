@@ -103,6 +103,9 @@ class _SqliteLocker(Locker):
         self._connection = connection
         self._table_name = table_name
 
+        self._connection.execute('CREATE TABLE IF NOT EXISTS "migrateit_lock" (id INTEGER PRIMARY KEY)')
+        self._connection.commit()
+
     def __enter__(self) -> Self:
         self.acquire()
         return self
@@ -189,8 +192,6 @@ class DatabaseLock:
             case SupportedDatabase.POSTGRES:
                 return _PsqlLocker(self._connection, self._table_name)  # type: ignore[arg-type]
             case SupportedDatabase.SQLITE:
-                self._connection.execute('CREATE TABLE IF NOT EXISTS "migrateit_lock" (id INTEGER PRIMARY KEY)')  # type: ignore
-                self._connection.commit()
                 return _SqliteLocker(self._connection, "migrateit")  # type: ignore[arg-type]
             case _:  # pragma: no cover
                 return _DummyLocker(self._connection, self._table_name)

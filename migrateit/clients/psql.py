@@ -1,5 +1,6 @@
 import os
 import re
+from collections import defaultdict
 from functools import partial
 from typing import TYPE_CHECKING, Any, override
 
@@ -88,7 +89,7 @@ SELECT EXISTS (
                     "SELECT schema_name FROM information_schema.schemata "
                     "WHERE schema_name NOT IN (%s, %s, %s) AND schema_name NOT LIKE %s;"
                 ),
-                process_row=partial(_process_schemas, self),
+                process_rows=partial(_process_schemas, self),
                 query_params=("pg_catalog", "information_schema", "pg_toast", "pg_temp%"),
             ),
             ExportItem(
@@ -101,7 +102,7 @@ FROM pg_type t
 WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
 GROUP BY n.nspname, t.typname;
                 """,
-                process_row=partial(_process_enums, self),
+                process_rows=partial(_process_enums, self),
             ),
             ExportItem(
                 name="sequences",
@@ -110,7 +111,7 @@ SELECT sequence_schema, sequence_name
 FROM information_schema.sequences
 WHERE sequence_schema NOT IN ('pg_catalog', 'information_schema');
                 """,
-                process_row=partial(_process_sequences, self),
+                process_rows=partial(_process_sequences, self),
             ),
             ExportItem(
                 name="tables",
@@ -122,12 +123,7 @@ FROM information_schema.columns c
 WHERE t.table_type = 'BASE TABLE' AND c.table_schema NOT IN ('pg_catalog', 'information_schema')
 ORDER BY c.table_schema, c.table_name, c.ordinal_position;
                 """,
-                process_row=partial(_process_tables, self),
-            ),
-            ExportItem(
-                name="tables_emit",
-                metadata_query="SELECT 1;",
-                process_row=partial(_emit_tables, self),
+                process_rows=partial(_process_tables, self),
             ),
             ExportItem(
                 name="functions and procedures",
@@ -137,7 +133,7 @@ FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND p.prokind IN ('f', 'p');
                 """,
-                process_row=partial(_process_functions, self),
+                process_rows=partial(_process_functions, self),
             ),
             ExportItem(
                 name="views",
@@ -146,7 +142,7 @@ SELECT table_schema, table_name, view_definition
 FROM information_schema.views
 WHERE table_schema NOT IN ('pg_catalog', 'information_schema');
                 """,
-                process_row=partial(_process_views, self),
+                process_rows=partial(_process_views, self),
             ),
             ExportItem(
                 name="constraints",
@@ -157,7 +153,7 @@ FROM pg_constraint con
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname NOT IN ('pg_catalog', 'information_schema');
                 """,
-                process_row=partial(_process_constraints, self),
+                process_rows=partial(_process_constraints, self),
             ),
             ExportItem(
                 name="indexes",
@@ -167,7 +163,7 @@ FROM pg_indexes
 WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
   AND indexname NOT IN (SELECT conname FROM pg_constraint WHERE contype IN ('p', 'u'));
                 """,
-                process_row=partial(_process_indexes, self),
+                process_rows=partial(_process_indexes, self),
             ),
             ExportItem(
                 name="triggers",
@@ -178,7 +174,7 @@ FROM pg_trigger trig
     JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND NOT trig.tgisinternal;
                 """,
-                process_row=partial(_process_triggers, self),
+                process_rows=partial(_process_triggers, self),
             ),
         ]
 
@@ -200,110 +196,102 @@ WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND NOT trig.tgisint
 # ---------------------------------------------------------------------------
 
 
-def _process_schemas(client: PsqlClient, row: tuple[str]) -> tuple[list[str], list[str]]:
-    schema = row[0]
-    if schema != "public":
-        fwd = [f"CREATE SCHEMA IF NOT EXISTS {client._q(schema)};"]
-        rb = [f"DROP SCHEMA IF EXISTS {client._q(schema)} CASCADE;"]
-    else:
-        fwd, rb = [], []
+def _process_schemas(client: PsqlClient, rows: list[tuple[str]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for (schema,) in rows:
+        if schema != "public":
+            fwd.append(f"CREATE SCHEMA IF NOT EXISTS {client._q(schema)};")
+            rb.append(f"DROP SCHEMA IF EXISTS {client._q(schema)} CASCADE;")
     return fwd, rb
 
 
-def _process_enums(client: PsqlClient, row: tuple[str, str, list[str]]) -> tuple[list[str], list[str]]:
-    schema, typname, labels = row
-    formatted_labels = ", ".join(f"'{lbl}'" for lbl in labels)
-    fwd = [f"CREATE TYPE {client._q(schema)}.{client._q(typname)} AS ENUM ({formatted_labels});"]
-    rb = [f"DROP TYPE IF EXISTS {client._q(schema)}.{client._q(typname)};"]
+def _process_enums(client: PsqlClient, rows: list[tuple[str, str, list[str]]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for schema, typname, labels in rows:
+        formatted_labels = ", ".join(f"'{lbl}'" for lbl in labels)
+        fwd.append(f"CREATE TYPE {client._q(schema)}.{client._q(typname)} AS ENUM ({formatted_labels});")
+        rb.append(f"DROP TYPE IF EXISTS {client._q(schema)}.{client._q(typname)};")
     return fwd, rb
 
 
-def _process_sequences(client: PsqlClient, row: tuple[str, str]) -> tuple[list[str], list[str]]:
-    schema, seq_name = row
-    fwd = [f"CREATE SEQUENCE IF NOT EXISTS {client._q(schema)}.{client._q(seq_name)};"]
-    rb = [f"DROP SEQUENCE IF EXISTS {client._q(schema)}.{client._q(seq_name)} CASCADE;"]
+def _process_sequences(client: PsqlClient, rows: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for schema, seq_name in rows:
+        fwd.append(f"CREATE SEQUENCE IF NOT EXISTS {client._q(schema)}.{client._q(seq_name)};")
+        rb.append(f"DROP SEQUENCE IF EXISTS {client._q(schema)}.{client._q(seq_name)} CASCADE;")
     return fwd, rb
 
 
-def _process_tables(
-    client: PsqlClient,
-    row: tuple[str, str, str, str, str, int | None, str, Any],
-) -> tuple[list[str], list[str]]:
-    schema, table, col, dtype, udt_name, char_len, nullable, default = row
+def _process_tables(client: PsqlClient, rows: list[tuple[Any, ...]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    table_columns = defaultdict(list)
+    for schema, table, col, dtype, udt_name, char_len, nullable, default in rows:
+        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
 
-    if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
+        if char_len and dtype in ("character varying", "character"):
+            col_type = f"{dtype}({char_len})"
+        elif dtype == "USER-DEFINED":
+            col_type = f"{client._q(schema)}.{client._q(udt_name)}"
+        else:
+            col_type = dtype
 
-    if char_len and dtype in ("character varying", "character"):
-        col_type = f"{dtype}({char_len})"
-    elif dtype == "USER-DEFINED":
-        col_type = f"{client._q(schema)}.{client._q(udt_name)}"
-    else:
-        col_type = dtype
+        col_def = f"    {client._q(col)} {col_type}"
+        if nullable == "NO":
+            col_def += " NOT NULL"
+        if default is not None:
+            col_def += f" DEFAULT {default}"
+        table_columns[(schema, table)].append(col_def)
 
-    col_def = f"    {client._q(col)} {col_type}"
-    if nullable == "NO":
-        col_def += " NOT NULL"
-    if default is not None:
-        col_def += f" DEFAULT {default}"
-
-    # Accumulate columns per table using a mutable side-channel on the client
-    if not hasattr(client, "_export_columns"):
-        client._export_columns = {}  # type: ignore[attr-defined]
-    client._export_columns.setdefault((schema, table), []).append(col_def)  # type: ignore[attr-defined]
-    return [], []
-
-
-def _emit_tables(client: PsqlClient, _row: Any) -> tuple[list[str], list[str]]:
-    """Emit CREATE TABLE / DROP TABLE statements after all columns have been accumulated."""
-    columns = getattr(client, "_export_columns", {})
-    fwd: list[str] = []
-    rb: list[str] = []
-    tables_list: list[tuple[str, str]] = []
-    for (schema, table), cols in columns.items():
+    for (schema, table), cols in table_columns.items():
         cols_str = ",\n".join(cols)
         fwd.append(f"CREATE TABLE IF NOT EXISTS {client._q(schema)}.{client._q(table)} (\n{cols_str}\n);")
-        tables_list.append((schema, table))
-    for schema, table in reversed(tables_list):
         rb.append(f"DROP TABLE IF EXISTS {client._q(schema)}.{client._q(table)} CASCADE;")
+    return fwd, list(reversed(rb))
+
+
+def _process_functions(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for schema, name, func_def, args_sig in rows:
+        if not re.match(r"(CREATE|ALTER)\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE)", func_def, re.IGNORECASE):
+            raise ValueError(f"Invalid function definition for {schema}.{name}")
+        fwd.append(f"{func_def};")
+        rb.append(f"DROP FUNCTION IF EXISTS {client._q(schema)}.{client._q(name)}({args_sig}) CASCADE;")
     return fwd, rb
 
 
-def _process_functions(client: PsqlClient, row: tuple[str, str, str, str]) -> tuple[list[str], list[str]]:
-    schema, name, func_def, args_sig = row
-    if not re.match(r"(CREATE|ALTER)\s+(OR\s+REPLACE\s+)?(FUNCTION|PROCEDURE)", func_def, re.IGNORECASE):
-        raise ValueError(f"Invalid function definition for {schema}.{name}")
-    fwd = [f"{func_def};"]
-    rb = [f"DROP FUNCTION IF EXISTS {client._q(schema)}.{client._q(name)}({args_sig}) CASCADE;"]
+def _process_views(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for schema, view_name, view_def in rows:
+        fwd.append(f"CREATE OR REPLACE VIEW {client._q(schema)}.{client._q(view_name)} AS\n{view_def.strip()};")
+        rb.append(f"DROP VIEW IF EXISTS {client._q(schema)}.{client._q(view_name)};")
     return fwd, rb
 
 
-def _process_views(client: PsqlClient, row: tuple[str, str, str]) -> tuple[list[str], list[str]]:
-    schema, view_name, view_def = row
-    fwd = [f"CREATE OR REPLACE VIEW {client._q(schema)}.{client._q(view_name)} AS\n{view_def.strip()};"]
-    rb = [f"DROP VIEW IF EXISTS {client._q(schema)}.{client._q(view_name)};"]
-    return fwd, rb
-
-
-def _process_constraints(client: PsqlClient, row: tuple[str, str, str, str]) -> tuple[list[str], list[str]]:
-    schema, table, conname, condef = row
-    if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
-    fwd = [f"ALTER TABLE ONLY {client._q(schema)}.{client._q(table)} ADD CONSTRAINT {client._q(conname)} {condef};"]
+def _process_constraints(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd = []
+    for schema, table, conname, condef in rows:
+        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
+        fwd.append(
+            f"ALTER TABLE ONLY {client._q(schema)}.{client._q(table)} ADD CONSTRAINT {client._q(conname)} {condef};"
+        )
     return fwd, []
 
 
-def _process_indexes(client: PsqlClient, row: tuple[str, str, str, str]) -> tuple[list[str], list[str]]:
-    schema, table, indexname, indexdef = row
-    if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
-    fwd = [f"{indexdef};"]
+def _process_indexes(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd = []
+    for schema, table, indexname, indexdef in rows:
+        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
+        fwd.append(f"{indexdef};")
     return fwd, []
 
 
-def _process_triggers(client: PsqlClient, row: tuple[str, str, str, str]) -> tuple[list[str], list[str]]:
-    schema, table, tgname, tgdef = row
-    if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
-    fwd = [f"{tgdef};"]
+def _process_triggers(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd = []
+    for schema, table, tgname, tgdef in rows:
+        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
+        fwd.append(f"{tgdef};")
     return fwd, []
