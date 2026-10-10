@@ -217,7 +217,7 @@ def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
             with client.connection.cursor() as cursor:
                 cursor.execute(
                     "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = %s)",
-                    (TEST_TABLE,),
+                    (table_name,),
                 )
                 result = cursor.fetchone()
                 assert result is not None
@@ -233,7 +233,7 @@ def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
             raise NotImplementedError
 
 
-def _drop_test_table(client: SqlClient[Any], table_name: str = TEST_TABLE) -> None:
+def _drop_test_table(client: SqlClient[Any], table_name: str) -> None:
     match client.changelog.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:

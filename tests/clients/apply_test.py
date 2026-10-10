@@ -42,7 +42,7 @@ def test_apply_migration_success(client: SqlClient[Any], temp_dir: Path) -> None
     assert _migration_is_applied(client, MIGRATION_NAME)
     assert _table_exists(client, TEST_TABLE)
 
-    _drop_test_table(client)
+    _drop_test_table(client, TEST_TABLE)
 
 
 def test_apply_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:

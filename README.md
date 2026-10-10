@@ -140,10 +140,10 @@ DROP TABLE IF EXISTS users;
 # Help
 
 ```sh
-usage: migrateit init [-h] {postgres,sqlite,mysql}
+usage: migrateit init [-h] {postgres,sqlite,mysql,mariadb}
 
 positional arguments:
-  {postgres,sqlite,mysql}   Database type to use
+  {postgres,sqlite,mysql,mariadb}   Database type to use
 
 options:
   -h, --help          show this help message and exit
