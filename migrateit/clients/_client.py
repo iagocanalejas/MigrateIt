@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from abc import ABC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
@@ -292,14 +293,13 @@ VALUES ({self.placeholder}, {self.placeholder});
 
     @override
     def _patch_sql_statement(self, sql: str) -> str:
-        sql = remove_sql_comments(sql.upper())
+        sql = remove_sql_comments(sql)
+        upper_sql = sql.upper()
 
-        if not any(w in sql for w in ("CREATE ", "ALTER ", "DROP ")):
-            return sql
-        if "CREATE TABLE" in sql and "IF NOT EXISTS" not in sql:
-            return sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
-        if "DROP TABLE" in sql and "IF EXISTS" not in sql:
-            return sql.replace("DROP TABLE", "DROP TABLE IF EXISTS", 1)
+        if "CREATE TABLE" in upper_sql and "IF NOT EXISTS" not in upper_sql:
+            return re.sub("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", sql, flags=re.IGNORECASE)
+        if "DROP TABLE" in upper_sql and "IF EXISTS" not in upper_sql:
+            return re.sub("DROP TABLE", "DROP TABLE IF EXISTS", sql, flags=re.IGNORECASE)
         return sql
 
 

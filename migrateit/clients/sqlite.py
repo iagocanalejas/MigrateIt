@@ -47,7 +47,9 @@ DROP TABLE IF EXISTS {cls._q(table_name)};
 
     @override
     def execute(self, query: str, params: tuple[Any, ...] = ()) -> None:
-        self.connection.execute(query, params)
+        cursor = self.connection.execute(query, params)
+        if any(m in query.upper() for m in ("SELECT", "SHOW", "DESCRIBE")):
+            cursor.fetchall()
 
     @override
     def execute_for_one(self, query: str, params: tuple[Any, ...] = ()) -> Any:
