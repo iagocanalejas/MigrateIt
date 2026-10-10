@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from functools import partial
 from typing import TYPE_CHECKING, Any, override
 
@@ -97,7 +98,7 @@ SELECT EXISTS(
                 metadata_query=(
                     f"SELECT schema_name FROM information_schema.schemata WHERE schema_name {schemas_filter};"
                 ),
-                process_row=partial(_process_schemas, self),
+                process_rows=partial(_process_schemas, self),
                 query_params=system_schemas,
             ),
             ExportItem(
@@ -111,13 +112,8 @@ FROM information_schema.columns c
 WHERE t.table_type = 'BASE TABLE' AND c.table_schema {schemas_filter}
 ORDER BY c.table_schema, c.table_name, c.ordinal_position;
                 """,
-                process_row=partial(_process_tables, self),
+                process_rows=partial(_process_tables, self),
                 query_params=system_schemas,
-            ),
-            ExportItem(
-                name="tables_emit",
-                metadata_query="SELECT 1;",
-                process_row=partial(_emit_tables_mysql, self),
             ),
             ExportItem(
                 name="functions and procedures",
@@ -126,7 +122,7 @@ SELECT routine_schema, routine_name, routine_type
 FROM information_schema.routines
 WHERE routine_schema {schemas_filter};
                 """,
-                process_row=partial(_process_routines, self),
+                process_rows=partial(_process_routines, self),
                 query_params=system_schemas,
             ),
             ExportItem(
@@ -136,7 +132,7 @@ SELECT table_schema, table_name, view_definition
 FROM information_schema.views
 WHERE table_schema {schemas_filter};
                 """,
-                process_row=partial(_process_views, self),
+                process_rows=partial(_process_views, self),
                 query_params=system_schemas,
             ),
             ExportItem(
@@ -153,7 +149,7 @@ FROM information_schema.table_constraints tc
 WHERE tc.constraint_schema {schemas_filter} AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
 GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type;
                 """,
-                process_row=partial(_process_pk_unique, self),
+                process_rows=partial(_process_pk_unique, self),
                 query_params=system_schemas,
             ),
             ExportItem(
@@ -177,7 +173,7 @@ WHERE tc.constraint_schema {schemas_filter} AND tc.constraint_type = 'FOREIGN KE
 GROUP BY tc.table_schema, tc.table_name, tc.constraint_name,
     kcu.referenced_table_schema, kcu.referenced_table_name, rc.update_rule, rc.delete_rule;
                 """,
-                process_row=partial(_process_foreign_keys, self),
+                process_rows=partial(_process_foreign_keys, self),
                 query_params=system_schemas,
             ),
             ExportItem(
@@ -189,7 +185,7 @@ FROM information_schema.table_constraints tc
         ON tc.constraint_schema = cc.constraint_schema AND tc.constraint_name = cc.constraint_name
 WHERE tc.constraint_schema {schemas_filter} AND tc.constraint_type = 'CHECK';
                 """,
-                process_row=partial(_process_check_constraints, self),
+                process_rows=partial(_process_check_constraints, self),
                 query_params=system_schemas,
             ),
             ExportItem(
@@ -201,7 +197,7 @@ FROM information_schema.statistics
 WHERE table_schema {schemas_filter} AND index_name != 'PRIMARY'
 GROUP BY table_schema, table_name, index_name, non_unique;
                 """,
-                process_row=partial(_process_indexes, self),
+                process_rows=partial(_process_indexes, self),
                 query_params=system_schemas,
             ),
             ExportItem(
@@ -211,7 +207,7 @@ SELECT trigger_schema, trigger_name, event_object_table
 FROM information_schema.triggers
 WHERE trigger_schema {schemas_filter};
                 """,
-                process_row=partial(_process_triggers, self),
+                process_rows=partial(_process_triggers, self),
                 query_params=system_schemas,
             ),
         ]
@@ -232,159 +228,170 @@ WHERE trigger_schema {schemas_filter};
 # ---------------------------------------------------------------------------
 
 
-def _process_schemas(client: MySqlClient, row: tuple[str]) -> tuple[list[str], list[str]]:
-    schema = _to_str(row[0])
-    fwd = [f"CREATE DATABASE IF NOT EXISTS {client._q(schema)};"]
-    rb = [f"DROP DATABASE IF EXISTS {client._q(schema)};"]
+def _process_schemas(client: MySqlClient, rows: list[tuple[str]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for row in rows:
+        schema = _to_str(row[0])
+        fwd.append(f"CREATE DATABASE IF NOT EXISTS {client._q(schema)};")
+        rb.append(f"DROP DATABASE IF EXISTS {client._q(schema)};")
     return fwd, rb
 
 
-def _process_tables(client: MySqlClient, row: tuple[str, ...]) -> tuple[list[str], list[str]]:
-    schema = _to_str(row[0])
-    table = _to_str(row[1])
-    col = _to_str(row[2])
-    col_type = _to_str(row[3])
-    nullable = _to_str(row[4])
-    default = row[5]
-    extra = _to_str(row[6])
+def _process_tables(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    table_columns = defaultdict(list)
+    for row in rows:
+        schema = _to_str(row[0])
+        table = _to_str(row[1])
+        col = _to_str(row[2])
+        col_type = _to_str(row[3])
+        nullable = _to_str(row[4])
+        default = row[5]
+        extra = _to_str(row[6])
 
-    if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
+        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
 
-    col_def = f"    {client._q(col)} {col_type}"
-    if nullable == "NO":
-        col_def += " NOT NULL"
-    if default is not None:
-        default_str = _to_str(default)
-        if default_str.upper() in ("CURRENT_TIMESTAMP", "NULL") or default_str.isdigit():
-            col_def += f" DEFAULT {default_str}"
-        else:
-            col_def += f" DEFAULT '{default_str}'"
-    if "auto_increment" in extra.lower():
-        col_def += " AUTO_INCREMENT"
+        col_def = f"    {client._q(col)} {col_type}"
+        if nullable == "NO":
+            col_def += " NOT NULL"
+        if default is not None:
+            default_str = _to_str(default)
+            if default_str.upper() in ("CURRENT_TIMESTAMP", "NULL") or default_str.isdigit():
+                col_def += f" DEFAULT {default_str}"
+            else:
+                col_def += f" DEFAULT '{default_str}'"
+        if "auto_increment" in extra.lower():
+            col_def += " AUTO_INCREMENT"
+        table_columns[(schema, table)].append(col_def)
 
-    if not hasattr(client, "_export_columns"):
-        client._export_columns = {}  # type: ignore[attr-defined]
-    client._export_columns.setdefault((schema, table), []).append(col_def)  # type: ignore[attr-defined]
-    return [], []
+        for (schema, table), table_col_defs in table_columns.items():
+            cols_str = ",\n".join(table_col_defs)
+            fwd.append(f"CREATE TABLE IF NOT EXISTS {client._q(schema)}.{client._q(table)} (\n{cols_str}\n);")
+            rb.append(f"DROP TABLE IF EXISTS {client._q(schema)}.{client._q(table)};")
+    return fwd, list(reversed(rb))
 
 
-def _emit_tables_mysql(client: MySqlClient, _row: Any) -> tuple[list[str], list[str]]:
-    columns = getattr(client, "_export_columns", {})
-    fwd: list[str] = []
-    rb: list[str] = []
-    tables_list: list[tuple[str, str]] = []
-    for (schema, table), table_col_defs in columns.items():
-        cols_str = ",\n".join(table_col_defs)
-        fwd.append(f"CREATE TABLE IF NOT EXISTS {client._q(schema)}.{client._q(table)} (\n{cols_str}\n);")
-        tables_list.append((schema, table))
-    for schema, table in reversed(tables_list):
-        rb.append(f"DROP TABLE IF EXISTS {client._q(schema)}.{client._q(table)};")
+def _process_routines(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for row in rows:
+        schema = _to_str(row[0])
+        r_name = _to_str(row[1])
+        r_type = _to_str(row[2])
+
+        if r_type.upper() not in ("FUNCTION", "PROCEDURE"):
+            raise ValueError(f"Unexpected routine type: {r_type!r}")
+
+        show_row = client.execute_for_one(f"SHOW CREATE {r_type} {client._q(schema)}.{client._q(r_name)}")
+        fwd.append(f"{_to_str(show_row[2])};")
+        rb.append(f"DROP {r_type} IF EXISTS {client._q(schema)}.{client._q(r_name)};")
     return fwd, rb
 
 
-def _process_routines(client: MySqlClient, row: tuple[str, ...]) -> tuple[list[str], list[str]]:
-    schema = _to_str(row[0])
-    r_name = _to_str(row[1])
-    r_type = _to_str(row[2])
+def _process_views(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for row in rows:
+        schema = _to_str(row[0])
+        view_name = _to_str(row[1])
+        view_def = _to_str(row[2])
 
-    if r_type.upper() not in ("FUNCTION", "PROCEDURE"):
-        raise ValueError(f"Unexpected routine type: {r_type!r}")
-
-    show_row = client.execute_for_one(f"SHOW CREATE {r_type} {client._q(schema)}.{client._q(r_name)}")
-    fwd = [f"{_to_str(show_row[2])};"]
-    rb = [f"DROP {r_type} IF EXISTS {client._q(schema)}.{client._q(r_name)};"]
+        fwd.append(f"CREATE OR REPLACE VIEW {client._q(schema)}.{client._q(view_name)} AS\n{view_def.strip()};")
+        rb.append(f"DROP VIEW IF EXISTS {client._q(schema)}.{client._q(view_name)};")
     return fwd, rb
 
 
-def _process_views(client: MySqlClient, row: tuple[str, ...]) -> tuple[list[str], list[str]]:
-    schema = _to_str(row[0])
-    view_name = _to_str(row[1])
-    view_def = _to_str(row[2])
+def _process_pk_unique(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd = []
+    for row in rows:
+        schema = _to_str(row[0])
+        table = _to_str(row[1])
+        conname = _to_str(row[2])
+        contype = _to_str(row[3])
+        con_cols = _to_str(row[4])
 
-    fwd = [f"CREATE OR REPLACE VIEW {client._q(schema)}.{client._q(view_name)} AS\n{view_def.strip()};"]
-    rb = [f"DROP VIEW IF EXISTS {client._q(schema)}.{client._q(view_name)};"]
-    return fwd, rb
+        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
+
+        if contype == "PRIMARY KEY":
+            fwd.append(f"ALTER TABLE {client._q(schema)}.{client._q(table)} ADD PRIMARY KEY ({con_cols});")
+        elif contype == "UNIQUE":
+            fwd.append(
+                f"ALTER TABLE {client._q(schema)}.{client._q(table)} "
+                f"ADD CONSTRAINT {client._q(conname)} UNIQUE ({con_cols});"
+            )
+        else:  # pragma: no cover[safety]
+            raise ValueError(f"Unsupported constraint type: {contype}")
+    return fwd, []
 
 
-def _process_pk_unique(client: MySqlClient, row: tuple[str, ...]) -> tuple[list[str], list[str]]:
-    schema = _to_str(row[0])
-    table = _to_str(row[1])
-    conname = _to_str(row[2])
-    contype = _to_str(row[3])
-    con_cols = _to_str(row[4])
+def _process_foreign_keys(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd = []
+    for row in rows:
+        schema = _to_str(row[0])
+        table = _to_str(row[1])
+        conname = _to_str(row[2])
+        fk_cols = _to_str(row[3])
+        ref_schema = _to_str(row[4])
+        ref_table = _to_str(row[5])
+        ref_cols_str = _to_str(row[6])
+        up_rule = _to_str(row[7])
+        del_rule = _to_str(row[8])
 
-    if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
-    if contype == "PRIMARY KEY":
-        fwd = [f"ALTER TABLE {client._q(schema)}.{client._q(table)} ADD PRIMARY KEY ({con_cols});"]
-    elif contype == "UNIQUE":
-        fwd = [
+        fwd.append(
+            f"ALTER TABLE {client._q(schema)}.{client._q(table)} ADD CONSTRAINT {client._q(conname)} "
+            f"FOREIGN KEY ({fk_cols}) REFERENCES {client._q(ref_schema)}.{client._q(ref_table)} ({ref_cols_str}) "
+            f"ON UPDATE {up_rule} ON DELETE {del_rule};"
+        )
+    return fwd, []
+
+
+def _process_check_constraints(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd = []
+    for row in rows:
+        schema = _to_str(row[0])
+        table = _to_str(row[1])
+        conname = _to_str(row[2])
+        check_clause = _to_str(row[3])
+
+        fwd.append(
             f"ALTER TABLE {client._q(schema)}.{client._q(table)} "
-            f"ADD CONSTRAINT {client._q(conname)} UNIQUE ({con_cols});"
-        ]
-    else:  # pragma: no cover[safety]
-        raise ValueError(f"Unsupported constraint type: {contype}")
+            f"ADD CONSTRAINT {client._q(conname)} CHECK ({check_clause});"
+        )
     return fwd, []
 
 
-def _process_foreign_keys(client: MySqlClient, row: tuple[str, ...]) -> tuple[list[str], list[str]]:
-    schema = _to_str(row[0])
-    table = _to_str(row[1])
-    conname = _to_str(row[2])
-    fk_cols = _to_str(row[3])
-    ref_schema = _to_str(row[4])
-    ref_table = _to_str(row[5])
-    ref_cols_str = _to_str(row[6])
-    up_rule = _to_str(row[7])
-    del_rule = _to_str(row[8])
+def _process_indexes(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd = []
+    for row in rows:
+        schema = _to_str(row[0])
+        table = _to_str(row[1])
+        indexname = _to_str(row[2])
+        non_unique = row[3]
+        idx_cols = _to_str(row[4])
 
-    fk_def = (
-        f"ALTER TABLE {client._q(schema)}.{client._q(table)} ADD CONSTRAINT {client._q(conname)} "
-        f"FOREIGN KEY ({fk_cols}) REFERENCES {client._q(ref_schema)}.{client._q(ref_table)} ({ref_cols_str}) "
-        f"ON UPDATE {up_rule} ON DELETE {del_rule};"
-    )
-    return [fk_def], []
+        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
 
-
-def _process_check_constraints(client: MySqlClient, row: tuple[str, ...]) -> tuple[list[str], list[str]]:
-    schema = _to_str(row[0])
-    table = _to_str(row[1])
-    conname = _to_str(row[2])
-    check_clause = _to_str(row[3])
-
-    fwd = [
-        f"ALTER TABLE {client._q(schema)}.{client._q(table)} "
-        f"ADD CONSTRAINT {client._q(conname)} CHECK ({check_clause});"
-    ]
+        unique_kw = "" if non_unique else "UNIQUE "
+        fwd.append(
+            f"CREATE {unique_kw}INDEX {client._q(indexname)} ON {client._q(schema)}.{client._q(table)} ({idx_cols});"
+        )
     return fwd, []
 
 
-def _process_indexes(client: MySqlClient, row: tuple[str, str, str, Any, str]) -> tuple[list[str], list[str]]:
-    schema = _to_str(row[0])
-    table = _to_str(row[1])
-    indexname = _to_str(row[2])
-    non_unique = row[3]
-    idx_cols = _to_str(row[4])
+def _process_triggers(client: MySqlClient, rows: list[tuple[str, str, str]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for row in rows:
+        schema = _to_str(row[0])
+        tgname = _to_str(row[1])
+        table = _to_str(row[2])
 
-    if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
-    unique_kw = "" if non_unique else "UNIQUE "
-    fwd = [f"CREATE {unique_kw}INDEX {client._q(indexname)} ON {client._q(schema)}.{client._q(table)} ({idx_cols});"]
-    return fwd, []
+        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
 
-
-def _process_triggers(client: MySqlClient, row: tuple[str, str, str]) -> tuple[list[str], list[str]]:
-    schema = _to_str(row[0])
-    tgname = _to_str(row[1])
-    table = _to_str(row[2])
-
-    if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
-
-    show_row = client.execute_for_one(f"SHOW CREATE TRIGGER {client._q(schema)}.{client._q(tgname)}")
-    fwd = [f"{_to_str(show_row[-1])};"]
-    rb = [f"DROP TRIGGER IF EXISTS {client._q(schema)}.{client._q(tgname)};"]
+        show_row = client.execute_for_one(f"SHOW CREATE TRIGGER {client._q(schema)}.{client._q(tgname)}")
+        fwd.append(f"{_to_str(show_row[-1])};")
+        rb.append(f"DROP TRIGGER IF EXISTS {client._q(schema)}.{client._q(tgname)};")
     return fwd, rb
 
 

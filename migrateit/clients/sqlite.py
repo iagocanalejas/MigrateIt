@@ -82,12 +82,7 @@ FROM sqlite_schema
 WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
 ORDER BY name;
                 """,
-                process_row=partial(_process_tables, self),
-            ),
-            ExportItem(
-                name="tables_emit",
-                metadata_query="SELECT 1;",
-                process_row=partial(_emit_tables, self),
+                process_rows=partial(_process_tables, self),
             ),
             ExportItem(
                 name="views",
@@ -97,7 +92,7 @@ FROM sqlite_schema
 WHERE type = 'view' AND name NOT LIKE 'sqlite_%'
 ORDER BY name;
                 """,
-                process_row=partial(_process_views, self),
+                process_rows=partial(_process_views, self),
             ),
             ExportItem(
                 name="indexes",
@@ -107,7 +102,7 @@ FROM sqlite_schema
 WHERE type = 'index' AND sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
 ORDER BY name;
                 """,
-                process_row=partial(_process_indexes, self),
+                process_rows=partial(_process_indexes, self),
             ),
             ExportItem(
                 name="triggers",
@@ -117,7 +112,7 @@ FROM sqlite_schema
 WHERE type = 'trigger' AND name NOT LIKE 'sqlite_%'
 ORDER BY name;
                 """,
-                process_row=partial(_process_triggers, self),
+                process_rows=partial(_process_triggers, self),
             ),
         ]
 
@@ -134,73 +129,58 @@ def _ensure_if_not_exists(sql: str, prefix: str) -> str:
     return sql
 
 
-def _process_tables(client: SqliteClient, row: tuple[str, str]) -> tuple[list[str], list[str]]:
-    name, sql = row
-    if name.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
+def _process_tables(client: SqliteClient, rows: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for name, sql in rows:
+        if name.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
 
-    sql_str = sql.strip()
-    if not sql_str.endswith(";"):  # pragma: no cover[safety]
-        sql_str += ";"
-
-    sql_str = _ensure_if_not_exists(sql_str, "CREATE TABLE ")
-
-    # Accumulate columns per table using a mutable side-channel on the client
-    if not hasattr(client, "_export_columns_fwr"):
-        client._export_columns_fwr = []  # type: ignore[attr-defined]
-    if not hasattr(client, "_export_columns_rb"):
-        client._export_columns_rb = []  # type: ignore[attr-defined]
-    client._export_columns_fwr.append(sql_str)  # type: ignore[attr-defined]
-    client._export_columns_rb.append(f"DROP TABLE IF EXISTS {client._q(name)};")  # type: ignore[attr-defined]
-    return [], []
+        sql_str = sql.strip()
+        if not sql_str.endswith(";"):  # pragma: no cover[safety]
+            sql_str += ";"
+        fwd.append(_ensure_if_not_exists(sql_str, "CREATE TABLE "))
+        rb.append(f"DROP TABLE IF EXISTS {client._q(name)};")
+    return fwd, list(reversed(rb))
 
 
-def _emit_tables(client: SqliteClient, _row: Any) -> tuple[list[str], list[str]]:
-    fwr: list[str] = getattr(client, "_export_columns_fwr", [])
-    rb: list[str] = getattr(client, "_export_columns_rb", [])
-    return fwr, list(reversed(rb))
-
-
-def _process_views(client: SqliteClient, row: tuple[str, str]) -> tuple[list[str], list[str]]:
-    name, sql = row
-
-    sql_str = sql.strip()
-    if not sql_str.endswith(";"):  # pragma: no cover[safety]
-        sql_str += ";"
-
-    sql_str = _ensure_if_not_exists(sql_str, "CREATE VIEW ")
-
-    fwd = [sql_str]
-    rb = [f"DROP VIEW IF EXISTS {client._q(name)};"]
+def _process_views(client: SqliteClient, rows: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for name, sql in rows:
+        sql_str = sql.strip()
+        if not sql_str.endswith(";"):  # pragma: no cover[safety]
+            sql_str += ";"
+        fwd.append(_ensure_if_not_exists(sql_str, "CREATE VIEW "))
+        rb.append(f"DROP VIEW IF EXISTS {client._q(name)};")
     return fwd, rb
 
 
-def _process_indexes(client: SqliteClient, row: tuple[str, str, str]) -> tuple[list[str], list[str]]:
-    _name, tbl_name, sql = row
-    if tbl_name.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
+def _process_indexes(client: SqliteClient, rows: list[tuple[str, str, str]]) -> tuple[list[str], list[str]]:
+    fwd = []
+    for _name, tbl_name, sql in rows:
+        if tbl_name.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
 
-    sql_str = sql.strip()
-    if not sql_str.endswith(";"):  # pragma: no cover[safety]
-        sql_str += ";"
+        sql_str = sql.strip()
+        if not sql_str.endswith(";"):  # pragma: no cover[safety]
+            sql_str += ";"
 
-    sql_str = _ensure_if_not_exists(sql_str, "CREATE UNIQUE INDEX ")
-    sql_str = _ensure_if_not_exists(sql_str, "CREATE INDEX ")
-
+        sql_str = _ensure_if_not_exists(sql_str, "CREATE UNIQUE INDEX ")
+        sql_str = _ensure_if_not_exists(sql_str, "CREATE INDEX ")
+        fwd.append(sql_str)
     # Rollback omitted: SQLite automatically drops indexes when the table is dropped.
-    return [sql_str], []
+    return fwd, []
 
 
-def _process_triggers(client: SqliteClient, row: tuple[str, str, str]) -> tuple[list[str], list[str]]:
-    _name, tbl_name, sql = row
-    if tbl_name.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-        return [], []
+def _process_triggers(client: SqliteClient, rows: list[tuple[str, str, str]]) -> tuple[list[str], list[str]]:
+    fwd = []
+    for _name, tbl_name, sql in rows:
+        if tbl_name.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+            continue
 
-    sql_str = sql.strip()
-    if not sql_str.endswith(";"):  # pragma: no cover[safety]
-        sql_str += ";"
+        sql_str = sql.strip()
+        if not sql_str.endswith(";"):  # pragma: no cover[safety]
+            sql_str += ";"
 
-    sql_str = _ensure_if_not_exists(sql_str, "CREATE TRIGGER ")
-
+        fwd.append(_ensure_if_not_exists(sql_str, "CREATE TRIGGER "))
     # Rollback omitted: SQLite automatically drops triggers when the table is dropped.
-    return [sql_str], []
+    return fwd, []
