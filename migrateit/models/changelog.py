@@ -56,7 +56,7 @@ class ChangelogFile:
         return str(self)
 
     @staticmethod
-    def from_json(json_str: str, file_path: Path) -> "ChangelogFile":
+    def from_json(json_str: str, file_path: Path) -> ChangelogFile:
         data = json.loads(json_str)
         try:
             migrations = [Migration(**m) for m in data.get("migrations", [])]
