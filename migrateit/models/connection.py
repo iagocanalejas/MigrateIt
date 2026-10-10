@@ -24,7 +24,7 @@ def get_connection(database: SupportedDatabase) -> Connection:
             return pg_conn
         case SupportedDatabase.SQLITE:
             params = SqliteClient.get_connection_params()
-            file_name = params.get("file_name", params.get("url", "").replace("sqlite:///", ""))
+            file_name = params.get("file_name") or params.get("url", "").replace("sqlite:///", "")
             sqlite_conn = sqlite3.connect(file_name, autocommit=False)
             return sqlite_conn
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:

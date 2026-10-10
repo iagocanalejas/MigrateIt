@@ -105,7 +105,6 @@ class ChangelogFile:
         for migration in self.migrations:
             if migration.name.split("_")[0] == index:
                 return migration
-
         raise ValueError(f"Migration '{name}' not found in changelog")
 
     def create_new_migration(

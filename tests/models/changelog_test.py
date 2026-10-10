@@ -1,4 +1,6 @@
 from pathlib import Path
+import re
+from unittest.mock import patch
 
 import pytest
 
@@ -464,7 +466,16 @@ def test_print_list() -> None:
         "0000_init.sql": MigrationStatus.APPLIED,
         "0001_add.sql": MigrationStatus.NOT_APPLIED,
     }
-    changelog.print_list(status_map)
+
+    lines = []
+    with patch("migrateit.models.changelog.write_line", lines.append):
+        changelog.print_list(status_map)
+
+    assert len(lines) == 2
+    assert "0000_init.sql" in lines[0]
+    assert "Applied" in lines[0]
+    assert "0001_add.sql" in lines[1]
+    assert "Not Applied" in lines[1]
 
 
 @pytest.mark.unit
@@ -480,12 +491,28 @@ def test_print_dag() -> None:
         "0001_add.sql": MigrationStatus.NOT_APPLIED,
         "0002_two.sql": MigrationStatus.NOT_APPLIED,
     }
-    changelog.print_dag(status_map)
+
+    lines = []
+    with patch("migrateit.models.changelog.write_line", lines.append):
+        changelog.print_dag(status_map)
+
+    assert len(lines) == 4
+    assert "0000_init.sql" in lines[0]
+    assert "└─ 0001_add.sql" in lines[1]
+    assert "Applied" in lines[0]
+    assert "Not Applied" in lines[1]
 
 
 @pytest.mark.unit
-def test_print_dag_no_children() -> None:
+def test_print_dag_no_children(monkeypatch) -> None:
     m = Migration(name="0000_init.sql", initial=True, parents=())
     changelog = ChangelogFile(version=1, migrations=[m])
     status_map: dict[str, MigrationStatus] = {"0000_init.sql": MigrationStatus.APPLIED}
-    changelog.print_dag(status_map)
+
+    lines = []
+    with patch("migrateit.models.changelog.write_line", lines.append):
+        changelog.print_dag(status_map)
+
+    assert len(lines) == 1
+    assert "0000_init.sql" in lines[0]
+    assert "Applied" in lines[0]
