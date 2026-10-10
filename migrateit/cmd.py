@@ -126,7 +126,12 @@ def cmd_new(
     editor = os.getenv("EDITOR", "notepad.exe" if platform.system() == "Windows" else "vim")
     editor = _validate_editor(editor)
     cmd = shlex.split(editor) + [str(client.migrations_dir / migration.name)]
-    rc = subprocess.run(cmd, timeout=30).returncode
+    try:
+        rc = subprocess.run(cmd).returncode
+    except FileNotFoundError:  # pragma: no cover
+        editor_name = shlex.split(editor)[0] if editor else "unknown"
+        write_line(f"Error: Could not find editor executable '{editor_name}'.")
+        return 1
     if rc != 0:  # pragma: no cover
         write_line(f"Editor exited with code {rc}")
     return rc

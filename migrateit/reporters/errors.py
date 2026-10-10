@@ -20,14 +20,12 @@ class FatalError(RuntimeError):
 def error_handler() -> Generator[None]:
     try:
         yield
-    except (RuntimeError, ValueError, FileNotFoundError, KeyboardInterrupt) as e:
-        if isinstance(e, FatalError):
-            msg, ret_code = "An error has occurred", 1
-        elif isinstance(e, KeyboardInterrupt):
-            msg, ret_code = "Interrupted (^C)", 130
-        else:
-            msg, ret_code = "An unexpected error has occurred", 3
-        _log_and_exit("\n\n" + msg, ret_code, e, traceback.format_exc())
+    except FatalError as e:
+        _log_and_exit("\n\n" + "An error has occurred", 1, e, traceback.format_exc())
+    except KeyboardInterrupt as e:
+        _log_and_exit("\n\n" + "Interrupted (^C)", 130, e, traceback.format_exc())
+    except (RuntimeError, ValueError, FileNotFoundError) as e:
+        _log_and_exit("\n\n" + "An unexpected error has occurred", 3, e, traceback.format_exc())
 
 
 def _log_and_exit(

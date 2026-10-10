@@ -103,7 +103,7 @@ class _SqliteLocker(Locker):
         self._connection = connection
         self._table_name = table_name
 
-        self._connection.execute('CREATE TABLE IF NOT EXISTS "migrateit_lock" (id INTEGER PRIMARY KEY)')
+        self._connection.execute(f"CREATE TABLE IF NOT EXISTS {self.lock_table} (id INTEGER PRIMARY KEY)")
         self._connection.commit()
 
     def __enter__(self) -> Self:

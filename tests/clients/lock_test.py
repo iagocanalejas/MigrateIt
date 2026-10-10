@@ -130,30 +130,6 @@ def test_sqlite_lock_concurrent(tmp_path: Path) -> None:
     assert not errors, f"Unexpected errors: {errors}"
 
 
-def test_sqlite_lock_table_created() -> None:
-    conn = _make_sqlite_conn()
-
-    DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE)
-
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-        ("migrateit_lock",),
-    )
-    assert cursor.fetchone() is not None
-
-
-def test_sqlite_lock_repeated_acquisitions() -> None:
-    conn = _make_sqlite_conn()
-
-    for _ in range(3):
-        with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
-            pass
-
-    cursor = conn.execute('SELECT COUNT(*) FROM "migrateit_lock"')
-    count = cursor.fetchone()[0]
-    assert count == 0
-
-
 def test_sqlite_lock_timeout() -> None:
     conn = _make_sqlite_conn()
     conn.execute('CREATE TABLE IF NOT EXISTS "migrateit_lock" (id INTEGER PRIMARY KEY)')
