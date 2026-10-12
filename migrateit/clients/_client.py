@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import os
 import re
 from abc import ABC
@@ -11,9 +12,10 @@ from sqlfluff.core import Linter
 
 from migrateit import constants as C
 from migrateit.clients._protocol import SqlClientProtocol, SqlConnectionProtocol
-from migrateit.models.changelog import ChangelogFile, SupportedDatabase
-from migrateit.models.config import MigrateItConfig
+from migrateit.models.changelog import Changelog
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
+from migrateit.models.migration_manager import MigrationManager
 from migrateit.models.sql import remove_sql_comments
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
@@ -49,8 +51,12 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
         return self.config.migrations_dir
 
     @property
-    def changelog(self) -> ChangelogFile:
+    def changelog(self) -> Changelog:
         return self.config.changelog
+
+    @functools.cached_property
+    def migrations(self) -> MigrationManager:
+        return MigrationManager(self.config.changelog)
 
     @classmethod
     def _q(cls, name: str, QUOTE_CHAR: str = '"') -> str:
@@ -211,7 +217,7 @@ WHERE migration_name = {self.placeholder};
         if conflict_migrations:
             errors: list[str] = []
             for conflict_migration in conflict_migrations:
-                migration = self.changelog.get_migration_by_name(conflict_migration)
+                migration = self.migrations.get_migration_by_name(conflict_migration)
                 _, _, migration_hash = migration.get_content_and_hash(self.migrations_dir)
                 errors.append(
                     f"Migration {conflict_migration} has a different hash in the database: "

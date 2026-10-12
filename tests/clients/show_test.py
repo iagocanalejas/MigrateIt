@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus
 from tests.clients.apply_test import MIGRATION_NAME
 from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, TEST_TABLE, _create_migration_file

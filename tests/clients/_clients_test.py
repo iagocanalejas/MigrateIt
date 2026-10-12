@@ -8,8 +8,8 @@ import pytest
 import sqlfluff
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.changelog import ChangelogFile, SupportedDatabase
-from migrateit.models.config import MigrateItConfig
+from migrateit.models.changelog import Changelog
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.connection import get_connection
 from migrateit.models.migration import Migration, MigrationStatus
 from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file, _drop_test_table
@@ -94,7 +94,7 @@ def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
     config = MigrateItConfig(
         table_name="migrations",
         migrations_dir=temp_dir,
-        changelog=ChangelogFile(version=1, path=temp_dir / "changelog.json"),
+        changelog=Changelog(version=1, path=temp_dir / "changelog.json"),
     )
     with pytest.raises(ValueError, match="connection cannot be None"):
         SqlClient[None](None, config)  # type: ignore
@@ -108,7 +108,7 @@ def test_sql_client_valid_config(temp_dir: Path) -> None:
     config = MigrateItConfig(
         table_name="migrations",
         migrations_dir=temp_dir,
-        changelog=ChangelogFile(version=1, path=temp_dir / "changelog.json"),
+        changelog=Changelog(version=1, path=temp_dir / "changelog.json"),
     )
     mock_conn = MagicMock()
     client: SqlClient[MagicMock] = SqlClient(mock_conn, config)  # type: ignore[abstract]
@@ -116,7 +116,7 @@ def test_sql_client_valid_config(temp_dir: Path) -> None:
     assert client.connection == mock_conn
     assert client.table_name == "migrations"
     assert client.migrations_dir == temp_dir
-    assert isinstance(client.changelog, ChangelogFile)
+    assert isinstance(client.changelog, Changelog)
 
 
 @pytest.mark.unit
@@ -132,7 +132,7 @@ def test_validate_config(table_name: object, expected_error: type[Exception], ex
     config = MigrateItConfig(
         table_name=table_name,  # type: ignore[arg-type]
         migrations_dir=Path("/tmp/migrations"),
-        changelog=ChangelogFile(version=1, path=Path("/tmp/changelog.json")),
+        changelog=Changelog(version=1, path=Path("/tmp/changelog.json")),
     )
     with pytest.raises(expected_error, match=expected_match):
         SqlClient.validate_config(config)
@@ -217,7 +217,7 @@ def test_no_table_returns_not_applied(client: SqlClient[Any], temp_dir: Path) ->
 
     _create_migration_file(migrations_dir, "0001_test.sql")
     migrations = [Migration(name="0001_test.sql", parents=(INITIAL_MIGRATION,))]
-    client.config.changelog = ChangelogFile(version=1, migrations=[Migration(name=INITIAL_MIGRATION), *migrations])
+    client.config.changelog = Changelog(version=1, migrations=[Migration(name=INITIAL_MIGRATION), *migrations])
 
     statuses = client.retrieve_migration_statuses()
     assert statuses["0001_test.sql"] == MigrationStatus.NOT_APPLIED
@@ -231,7 +231,7 @@ def test_update_migration_hash(client: SqlClient[Any], temp_dir: Path) -> None:
 
     _create_migration_file(migrations_dir, MIGRATION_NAME)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
-    client.config.changelog = ChangelogFile(version=1, migrations=[Migration(name=INITIAL_MIGRATION), migration])
+    client.config.changelog = Changelog(version=1, migrations=[Migration(name=INITIAL_MIGRATION), migration])
 
     client.apply_migration(migration, is_fake=False)
 
