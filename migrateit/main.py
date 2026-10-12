@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -5,9 +7,9 @@ from pathlib import Path
 import migrateit.constants as C
 from migrateit import cmd as commands
 from migrateit.clients._client import get_client
-from migrateit.models.changelog import SupportedDatabase, load_changelog_file
-from migrateit.models.config import MigrateItConfig
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.connection import get_connection
+from migrateit.models.repository import ChangelogRepository
 from migrateit.reporters import FatalError, error_handler, logging_handler, print_logo
 from migrateit.reporters.logs import logger
 
@@ -54,7 +56,7 @@ def main() -> int:
                     database=SupportedDatabase(args.database),
                 )
 
-            changelog = load_changelog_file(root / "changelog.json")
+            changelog = ChangelogRepository.load(root / "changelog.json")
             config = MigrateItConfig(
                 table_name=C.MIGRATEIT_MIGRATIONS_TABLE,
                 migrations_dir=root / "migrations",

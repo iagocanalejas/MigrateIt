@@ -12,8 +12,8 @@ from migrateit import constants as C
 from migrateit.clients._client import SqlClient, get_client
 from migrateit.clients.sqlite import SqliteClient
 from migrateit.cmd import cmd_init
-from migrateit.models.changelog import SupportedDatabase, load_changelog_file
-from migrateit.models.config import MigrateItConfig
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
+from migrateit.models.repository import ChangelogRepository
 
 INITIAL_MIGRATION = "0000_migrateit.sql"
 TEST_MIGRATIONS_TABLE = "migrations"
@@ -149,7 +149,7 @@ def client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlClien
         )
 
         # Reload changelog and create client
-        changelog = load_changelog_file(migrations_file)
+        changelog = ChangelogRepository.load(migrations_file)
         config = MigrateItConfig(
             table_name=TEST_MIGRATIONS_TABLE,
             migrations_dir=migrations_dir,

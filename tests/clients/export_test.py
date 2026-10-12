@@ -5,7 +5,7 @@ import pytest
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.constants import MIGRATEIT_MIGRATIONS_TABLE
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.config import SupportedDatabase
 
 
 def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
@@ -53,12 +53,12 @@ def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
 
 
 def test_export_invalid_parents(client: SqlClient[Any]) -> None:
-    client.changelog.create_new_migration(
+    client.migrations.create_new_migration(
         migrations_dir=client.migrations_dir,
         name="migration_1",
         dependencies=("0000_migrateit.sql",),
     )
-    migration = client.changelog.create_new_migration(
+    migration = client.migrations.create_new_migration(
         migrations_dir=client.migrations_dir,
         name="full_export",
         dependencies=("0001",),
@@ -70,7 +70,7 @@ def test_export_invalid_parents(client: SqlClient[Any]) -> None:
 
 def _export_and_read(client: SqlClient[Any], migration_name: str = "full_export") -> str:
     root = client.changelog.root
-    migration = client.changelog.create_new_migration(
+    migration = client.migrations.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=migration_name,
         dependencies=(root.name,),

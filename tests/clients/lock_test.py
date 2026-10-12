@@ -14,7 +14,7 @@ from migrateit.clients._lock import (
     _PsqlLocker,
     _SqliteLocker,
 )
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.config import SupportedDatabase
 from tests.conftest import TEST_MIGRATIONS_TABLE
 
 # SQLite DDL for the migrations table (matches the actual schema)

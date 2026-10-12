@@ -4,7 +4,8 @@ from typing import Any
 import pytest
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.changelog import ChangelogFile, SupportedDatabase
+from migrateit.models.changelog import Changelog
+from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus
 from tests.clients._clients_test import MIGRATION_NAME
 from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file, _table_exists
@@ -182,7 +183,7 @@ def test_validate_migrations_success(client: SqlClient[Any]) -> None:
         Migration(name=INITIAL_MIGRATION, initial=True, parents=()),
         Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,)),
     ]
-    client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+    client.config.changelog = Changelog(version=1, migrations=migrations)
     status_map = {
         INITIAL_MIGRATION: MigrationStatus.APPLIED,
         MIGRATION_NAME: MigrationStatus.APPLIED,
@@ -191,14 +192,14 @@ def test_validate_migrations_success(client: SqlClient[Any]) -> None:
 
 
 def test_validate_empty_migrations(client: SqlClient[Any]) -> None:
-    client.config.changelog = ChangelogFile(version=1, migrations=[])
+    client.config.changelog = Changelog(version=1, migrations=[])
     statuses: dict[str, MigrationStatus] = {}
     client.validate_migrations(statuses)
 
 
 def test_validate_no_initial_raises(client: SqlClient[Any]) -> None:
     migrations = [Migration(name="0001_test.sql", parents=())]
-    client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+    client.config.changelog = Changelog(version=1, migrations=migrations)
     statuses: dict[str, MigrationStatus] = {}
     with pytest.raises(ValueError, match="Initial migration is not defined"):
         client.validate_migrations(statuses)
@@ -209,7 +210,7 @@ def test_validate_multiple_initial_raises(client: SqlClient[Any]) -> None:
         Migration(name="0000_a.sql", initial=True, parents=()),
         Migration(name="0001_b.sql", initial=True, parents=()),
     ]
-    client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+    client.config.changelog = Changelog(version=1, migrations=migrations)
     statuses: dict[str, MigrationStatus] = {}
     with pytest.raises(ValueError, match="Multiple initial migrations found"):
         client.validate_migrations(statuses)
@@ -217,7 +218,7 @@ def test_validate_multiple_initial_raises(client: SqlClient[Any]) -> None:
 
 def test_validate_removed_raises(client: SqlClient[Any]) -> None:
     migrations = [Migration(name="0000_init.sql", initial=True, parents=())]
-    client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+    client.config.changelog = Changelog(version=1, migrations=migrations)
     statuses = {"0000_init.sql": MigrationStatus.APPLIED, "ghost.sql": MigrationStatus.REMOVED}
     with pytest.raises(ValueError, match="Removed migrations found"):
         client.validate_migrations(statuses)
@@ -228,7 +229,7 @@ def test_validate_parent_not_applied(client: SqlClient[Any]) -> None:
         Migration(name="0000_init.sql", initial=True, parents=()),
         Migration(name="0001_child.sql", parents=("0000_init.sql",)),
     ]
-    client.config.changelog = ChangelogFile(version=1, migrations=migrations)
+    client.config.changelog = Changelog(version=1, migrations=migrations)
     statuses = {
         "0000_init.sql": MigrationStatus.NOT_APPLIED,
         "0001_child.sql": MigrationStatus.APPLIED,
@@ -257,7 +258,7 @@ def test_validate_conflict_raises(client: SqlClient[Any], temp_dir: Path) -> Non
 
 def test_show_migrations_order_error(client: SqlClient[Any]) -> None:
     """Test validate_migrations raises when child is applied before parent."""
-    changelog = ChangelogFile(
+    changelog = Changelog(
         version=1,
         migrations=[
             Migration(name="0000_migrateit.sql", initial=True, parents=()),

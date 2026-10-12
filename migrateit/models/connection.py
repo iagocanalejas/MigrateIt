@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sqlite3
 
 import mysql.connector
@@ -8,7 +10,7 @@ from mysql.connector.pooling import PooledMySQLConnection
 from migrateit.clients.mysql import MySqlClient
 from migrateit.clients.psql import PsqlClient
 from migrateit.clients.sqlite import SqliteClient
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.config import SupportedDatabase
 
 type _PsqlConnection = psycopg.Connection
 type _SqliteConnection = sqlite3.Connection

@@ -5,7 +5,8 @@ import pytest
 from tests.clients._clients_test import MIGRATION_NAME
 
 from migrateit.constants import ROLLBACK_SPLIT_TAG
-from migrateit.models.changelog import ChangelogFile, SupportedDatabase
+from migrateit.models.changelog import Changelog
+from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import (
     Migration,
     create_migration_directory,
@@ -136,7 +137,7 @@ def test_changelog_file_from_json_valid(database: SupportedDatabase) -> None:
         }
     )
     path = Path("/tmp/test_changelog.json")
-    changelog = ChangelogFile.from_json(json_str, path)
+    changelog = Changelog.from_json(json_str, path)
     assert changelog.version == 1
     assert changelog.database == database
     assert len(changelog.migrations) == 1
@@ -148,7 +149,7 @@ def test_changelog_file_from_json_valid(database: SupportedDatabase) -> None:
 def test_changelog_file_from_json_no_migrations() -> None:
     json_str = '{"version": 1}'
     path = Path("/tmp/test_changelog.json")
-    changelog = ChangelogFile.from_json(json_str, path)
+    changelog = Changelog.from_json(json_str, path)
     assert changelog.version == 1
     assert changelog.migrations == []
 
@@ -156,13 +157,13 @@ def test_changelog_file_from_json_no_migrations() -> None:
 @pytest.mark.unit
 def test_changelog_file_from_json_invalid_json() -> None:
     with pytest.raises(ValueError, match="Expecting property name"):
-        ChangelogFile.from_json("{invalid json", Path("/tmp/test.json"))
+        Changelog.from_json("{invalid json", Path("/tmp/test.json"))
 
 
 @pytest.mark.unit
 def test_changelog_file_from_json_missing_version() -> None:
     with pytest.raises(ValueError, match="'version'"):
-        ChangelogFile.from_json('{"migrations": []}', Path("/tmp/test.json"))
+        Changelog.from_json('{"migrations": []}', Path("/tmp/test.json"))
 
 
 # --- create_migration_directory tests ---
