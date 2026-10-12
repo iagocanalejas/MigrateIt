@@ -22,7 +22,7 @@ def test_cmd_show_list_mode(temp_dir: Path) -> None:
         Migration(name="0002_test.sql", parents=("0001_init.sql",)),
     ]
 
-    with patch.object(client.changelog, "print_list") as mock_print_list:
+    with patch.object(client.migrations, "print_list") as mock_print_list:
         cmd_show(client, list_mode=True)
         mock_print_list.assert_called_once()
 
@@ -40,7 +40,7 @@ def test_cmd_show_dag_mode(temp_dir: Path) -> None:
         Migration(name="0002_child.sql", parents=("0001_init.sql",)),
     ]
 
-    with patch.object(client.changelog, "print_dag") as mock_print_dag:
+    with patch.object(client.migrations, "print_dag") as mock_print_dag:
         cmd_show(client, list_mode=False)
         mock_print_dag.assert_called_once()
 

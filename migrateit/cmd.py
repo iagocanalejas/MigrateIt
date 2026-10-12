@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import platform
 import shlex
@@ -11,7 +13,7 @@ import inquirer
 from migrateit.clients._client import SqlClient
 from migrateit.clients._lock import DatabaseLock
 from migrateit.constants import VALID_EDITORS
-from migrateit.models.changelog import SupportedDatabase, create_changelog_file
+from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import (
     Migration,
     MigrationStatus,
@@ -19,6 +21,8 @@ from migrateit.models.migration import (
     retrieve_migration_sqls,
     write_into_migration_file,
 )
+from migrateit.models.migration_manager import MigrationManager
+from migrateit.models.repository import ChangelogRepository
 from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, write_line
 from migrateit.reporters.logs import logger
 
@@ -39,33 +43,39 @@ def _validate_editor(editor: str) -> str:
 def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, database: SupportedDatabase) -> int:
     write_line(f"Initializing {database.value} database migrations")
     write_line(f"\tCreating migrations file: {migrations_file}")
-    changelog = create_changelog_file(migrations_file, database)
+    changelog = ChangelogRepository.create(migrations_file, database)
 
     write_line(f"\tCreating migrations directory: {migrations_dir}")
     create_migration_directory(migrations_dir)
 
     write_line(f"\tCreating migration for table: {table_name}")
-    migration = changelog.create_new_migration(migrations_dir=migrations_dir, name="migrateit")
+    migration = MigrationManager(changelog).create_new_migration(migrations_dir=migrations_dir, name="migrateit")
+
+    sql, rollback = _get_init_migration_sql(database, table_name)
+    write_into_migration_file(Path(migrations_dir / migration.name), sql=sql, rollback=rollback)
+    ChangelogRepository.save(changelog)
+    write_line(f"Initialization complete: table={table_name} directory={migrations_dir}")
+
+    return 0
+
+
+def _get_init_migration_sql(database: SupportedDatabase, table_name: str) -> tuple[str, str]:
+    """Get the migration SQL for creating the migrations table."""
     match database:
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             from migrateit.clients.mysql import MySqlClient
 
-            sql, rollback = MySqlClient.create_migrations_table_str(table_name=table_name)
+            return MySqlClient.create_migrations_table_str(table_name=table_name)
         case SupportedDatabase.POSTGRES:
             from migrateit.clients.psql import PsqlClient
 
-            sql, rollback = PsqlClient.create_migrations_table_str(table_name=table_name)
+            return PsqlClient.create_migrations_table_str(table_name=table_name)
         case SupportedDatabase.SQLITE:
             from migrateit.clients.sqlite import SqliteClient
 
-            sql, rollback = SqliteClient.create_migrations_table_str(table_name=table_name)
+            return SqliteClient.create_migrations_table_str(table_name=table_name)
         case _:
             raise NotImplementedError(f"Database {database} is not supported yet")
-
-    write_into_migration_file(Path(migrations_dir / migration.name), sql=sql, rollback=rollback)
-    write_line(f"Initialization complete: table={table_name} directory={migrations_dir}")
-
-    return 0
 
 
 def cmd_export(client: SqlClient[Any], name: str | None) -> int:
@@ -73,7 +83,7 @@ def cmd_export(client: SqlClient[Any], name: str | None) -> int:
         name = f"{client.changelog.database.value}_backup"
 
     write_line(f"Creating new migration: {name}")
-    migration = client.changelog.create_new_migration(
+    migration = client.migrations.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=name,
         dependencies=(client.changelog.root.name,),
@@ -81,6 +91,7 @@ def cmd_export(client: SqlClient[Any], name: str | None) -> int:
     write_line(f"Migration file created: {migration.name}")
 
     client.export_database_schema(migration)
+    ChangelogRepository.save(client.changelog)
     write_line(f"Full database exported to: {migration.name}")
     return 0
 
@@ -113,12 +124,13 @@ def cmd_new(
         dependencies = choices.get("dependencies", None) if choices else None
 
     write_line(f"Creating new migration: {name}")
-    migration = client.changelog.create_new_migration(
+    migration = client.migrations.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=name,
         dependencies=dependencies,
     )
     write_line(f"Migration file created: {migration.name}")
+    ChangelogRepository.save(client.changelog)
 
     if no_edit:
         return 0
@@ -152,7 +164,7 @@ def cmd_run(
     if is_hash_update:
         if name is None:
             raise ValueError("Hash update requires a target migration name")
-        return _cmd_run_hash_update(client, client.changelog.get_migration_by_name(name))
+        return _cmd_run_hash_update(client, client.migrations.get_migration_by_name(name))
 
     if is_rollback and not name:
         raise ValueError("Rollback requires a target migration name")
@@ -160,11 +172,11 @@ def cmd_run(
     statuses = client.retrieve_migration_statuses()
     client.validate_migrations(statuses)
 
-    target_migration = client.changelog.get_migration_by_name(name) if name else None
+    target_migration = client.migrations.get_migration_by_name(name) if name else None
     if target_migration:
         write_line(f"Target: {target_migration.name}")
 
-    migration_plan = client.changelog.build_migration_plan(
+    migration_plan = client.migrations.build_migration_plan(
         statuses_map=statuses,
         target_migration=target_migration,
         is_rollback=is_rollback,
@@ -218,29 +230,29 @@ def cmd_squash(
             raise ValueError("Cannot squash less than 3 migrations.")
         end_migration = client.changelog.migrations[-1].name
 
-    start_migration = client.changelog.get_migration_by_name(start_migration).name
-    end_migration = client.changelog.get_migration_by_name(end_migration).name
+    start_migration = client.migrations.get_migration_by_name(start_migration).name
+    end_migration = client.migrations.get_migration_by_name(end_migration).name
     write_line(f"Squashing migrations from {start_migration} to {end_migration}.")
 
-    to_squash = client.changelog.find_path(start_migration, end_migration)
+    to_squash = client.migrations.find_path(start_migration, end_migration)
     write_line(f"Following migrations will be squashed: {', '.join(to_squash)}")
     if not to_squash:
         raise ValueError(f"No path found from {start_migration} to {end_migration}.")
-    if any(m.initial for m in (client.changelog.get_migration_by_name(m) for m in to_squash)):
+    if any(m.initial for m in (client.migrations.get_migration_by_name(m) for m in to_squash)):
         raise ValueError("Cannot squash initial migrations.")
 
     statuses = client.retrieve_migration_statuses()
     if not all(statuses[m] == statuses[to_squash[0]] for m in to_squash):
         raise ValueError("Cannot squash migrations that are not in the same state.")
 
-    squashed_migration = client.changelog.create_new_migration(
+    squashed_migration = client.migrations.create_new_migration(
         migrations_dir=client.migrations_dir,
         name=name if name else f"squashed_{start_migration}_{end_migration}",
-        dependencies=client.changelog.get_migration_by_name(start_migration).parents,
+        dependencies=client.migrations.get_migration_by_name(start_migration).parents,
     )
 
     for migration_name in to_squash:
-        migration = client.changelog.get_migration_by_name(migration_name)
+        migration = client.migrations.get_migration_by_name(migration_name)
         logger.debug("Merging %s into %s", migration.name, squashed_migration.name)
         write_line(f"Squashing migration: {migration.name}")
         sql, rollback = retrieve_migration_sqls(client.migrations_dir / migration.name)
@@ -257,7 +269,7 @@ def cmd_squash(
         write_line(f"Squashed migration {squashed_migration.name} applied in the database.")
 
     client.changelog.migrations = [m for m in client.changelog.migrations if m.name not in to_squash]
-    client.changelog.save()
+    ChangelogRepository.save(client.changelog)
     write_line(f"Changelog updated: removed {len(to_squash)} migration(s), added {squashed_migration.name}")
 
     return 0
@@ -273,9 +285,9 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
     write_line("-" * 60)
 
     if list_mode:
-        client.changelog.print_list(status_map)
+        client.migrations.print_list(status_map)
     else:
-        client.changelog.print_dag(status_map=status_map)
+        client.migrations.print_dag(status_map=status_map)
 
     write_line("\nSummary:")
     for status, label in {
@@ -310,7 +322,7 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
 
 
 def cmd_drop(client: SqlClient[Any], name: str) -> int:
-    target_migration = client.changelog.get_migration_by_name(name)
+    target_migration = client.migrations.get_migration_by_name(name)
     if any(target_migration.name in m.parents for m in client.changelog.migrations):
         raise ValueError(f"Cannot drop migration {name}, it is a parent of other migrations.")
     if target_migration.initial:
@@ -329,7 +341,7 @@ def cmd_drop(client: SqlClient[Any], name: str) -> int:
     write_line(f"Migration file removed: {path.name}")
 
     client.changelog.migrations.remove(target_migration)
-    client.changelog.save()
+    ChangelogRepository.save(client.changelog)
     write_line(f"Migration {target_migration.name} dropped and removed from changelog.")
     return 0
 

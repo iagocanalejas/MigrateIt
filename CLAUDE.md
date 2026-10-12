@@ -63,19 +63,24 @@ migrateit drop migration_name          # rollback and delete a migration
 
 1. **Protocol/ABC pattern for database clients**: `SqlClientProtocol` in `_protocol.py` defines the interface with 13 abstract methods plus an `export_items` property. A separate `SqlConnectionProtocol` defines connection-level methods (`execute`, `execute_for_one`, `execute_for_rows`, `placeholder`). `SqlClient[T: Connection]` is a generic ABC combining both protocols, holding a typed `connection` and `MigrateItConfig`. Three concrete implementations exist: `PsqlClient` (PostgreSQL, uses cursor-based execution), `SqliteClient` (SQLite, uses `executescript`), and `MySqlClient` (MySQL/MariaDB, uses `mysql-connector-python` with cursor-based execution). New databases implement both protocols and subclass `SqlClient`.
 
-2. **Migration DAG**: Migrations form a directed acyclic graph via `parents` lists on `Migration` objects. `build_migration_plan()` on `ChangelogFile` does a BFS topological traversal to produce an execution plan, supporting forward migrations, rollbacks, target-specific runs, and bottom-up plans. `find_path()` on `ChangelogFile` finds paths in the migration tree for squashing (previously in a separate `tree.py`, now consolidated in `changelog.py`).
+2. **Three-layer data/access architecture**:
+   - **Data model** (`ChangelogFile` in `models/changelog.py`): Pure dataclass holding migration metadata (`version`, `database`, `migrations`, `path`). Provides data accessors (`root` — initial migration, `migrations_tree` — DAG) and serialization (`to_dict`, `to_json`, `from_json`). Contains no operation methods.
+   - **Operations** (`MigrationManager` in `models/migration_manager.py`): Wraps a `ChangelogFile` and provides all migration management methods: `create_new_migration()`, `get_migration_by_name()`, `exist_migration_by_name()`, `build_migration_plan()` (BFS topological traversal), `find_path()` (DAG path finding), `print_list()`, `print_dag()`. Accessed via `client.migrations` on `SqlClient`.
+   - **Persistence** (`ChangelogRepository` in `models/repository.py`): Handles all disk I/O — `load()`, `save()`, `create()`. Convenience functions `create_changelog_file()` and `load_changelog_file()` delegate to the repository.
 
-3. **Changelog as source of truth**: `changelog.json` on disk tracks all migrations (names, parents, initial flag, database type). The database's changelog table tracks applied migrations with SHA-256 hashes. Status is computed by diffing file-system migrations against database records, yielding `APPLIED`, `NOT_APPLIED`, `REMOVED` (in DB but not on disk), or `CONFLICT` (hash mismatch).
+3. **Migration DAG**: Migrations form a directed acyclic graph via `parents` lists on `Migration` objects. `MigrationManager.build_migration_plan()` does a BFS topological traversal to produce an execution plan, supporting forward migrations, rollbacks, target-specific runs, and bottom-up plans. `MigrationManager.find_path()` finds paths in the migration tree for squashing.
 
-4. **Migration file format**: SQL files follow `NNNN_name.sql` convention with a header comment (`-- Migration {name}\n-- Created on {timestamp}`). Forward and rollback SQL are separated by the `-- Rollback migration` tag. `get_content_and_hash()` on `Migration` splits on this tag and computes a SHA-256 of the full content, returning `(forward_sql, rollback_sql, hash)`.
+4. **Changelog as source of truth**: `changelog.json` on disk tracks all migrations (names, parents, initial flag, database type). The database's changelog table tracks applied migrations with SHA-256 hashes. Status is computed by diffing file-system migrations against database records, yielding `APPLIED`, `NOT_APPLIED`, `REMOVED` (in DB but not on disk), or `CONFLICT` (hash mismatch).
 
-5. **Connection model**: `models/connection.py` defines typed connection aliases (`_PsqlConnection`, `_SqliteConnection`, `_MySqlConnection`) and a union `Connection` type. `get_connection(database: SupportedDatabase)` opens and returns the appropriate typed connection. `get_client(config, connection)` in `_client.py` dispatches to the correct concrete client (`MySqlClient`, `PsqlClient`, or `SqliteClient`).
+5. **Migration file format**: SQL files follow `NNNN_name.sql` convention with a header comment (`-- Migration {name}\n-- Created on {timestamp}`). Forward and rollback SQL are separated by the `-- Rollback migration` tag. `get_content_and_hash()` on `Migration` splits on this tag and computes a SHA-256 of the full content, returning `(forward_sql, rollback_sql, hash)`.
 
-6. **Context manager patterns**: `error_handler()` and `logging_handler()` are context managers in `reporters/` used in `main.py` to wrap CLI execution. `ExitStack` is no longer used — the old multi-stream pattern was replaced by individual context managers.
+6. **Connection model**: `models/connection.py` defines typed connection aliases (`_PsqlConnection`, `_SqliteConnection`, `_MySqlConnection`) and a union `Connection` type. `get_connection(database: SupportedDatabase)` opens and returns the appropriate typed connection. `get_client(config, connection)` in `_client.py` dispatches to the correct concrete client (`MySqlClient`, `PsqlClient`, or `SqliteClient`).
 
-7. **SQL validation**: `validate_sql_syntax()` uses `sqlfluff` with per-database dialects to validate migration SQL. Works without a live database connection. The `_patch_sql_statement()` base method in `SqlClient` adds `IF NOT EXISTS` guards for `CREATE TABLE`, `DROP TABLE`, and `ALTER TABLE ADD COLUMN` statements to make validation more permissive. MariaDB uses the same MySQL dialect.
+7. **Context manager patterns**: `error_handler()` and `logging_handler()` are context managers in `reporters/` used in `main.py` to wrap CLI execution. `ExitStack` is no longer used — the old multi-stream pattern was replaced by individual context managers.
 
-8. **Schema export**: `export_database_schema()` in `SqlClient` iterates over `export_items` (per-database property defining metadata queries and row processors) to generate forward DDL and reversed rollback DDL into a migration file.
+8. **SQL validation**: `validate_sql_syntax()` uses `sqlfluff` with per-database dialects to validate migration SQL. Works without a live database connection. The `_patch_sql_statement()` base method in `SqlClient` adds `IF NOT EXISTS` guards for `CREATE TABLE`, `DROP TABLE`, and `ALTER TABLE ADD COLUMN` statements to make validation more permissive. MariaDB uses the same MySQL dialect.
+
+9. **Schema export**: `export_database_schema()` in `SqlClient` iterates over `export_items` (per-database property defining metadata queries and row processors) to generate forward DDL and reversed rollback DDL into a migration file.
 
 ### Config
 
@@ -86,16 +91,16 @@ migrateit drop migration_name          # rollback and delete a migration
 
 DB credentials are read via `VARNAME_DB_*` prefixed env variables with hardcoded defaults in each client class:
 
-| Variable                    | PostgreSQL                | MySQL                     | SQLite    |
-| --------------------------- | ------------------------- | ------------------------- | --------- |
-| `DB_URL`                    | `DB_URL`                  | `DB_URL`                  | `DB_URL`  |
-| File (alt)                  | —                         | —                         | `DB_FILE` |
-| Host                        | `DB_HOST` (localhost)     | `DB_HOST` (localhost)     | —         |
-| Port                        | `DB_PORT` (5432)          | `DB_PORT` (3306)          | —         |
-| User                        | `DB_USER` (postgres)      | `DB_USER` (root)          | —         |
-| Password                    | `DB_PASS`                 | `DB_PASS`                 | —         |
-| Database                    | `DB_NAME` (migrateit)     | `DB_NAME` (migrateit)     | —         |
-| Timeout (seconds)           | `DB_TIMEOUT_SECONDS` (30) | `DB_TIMEOUT_SECONDS` (30) | —         |
+| Variable          | PostgreSQL                | MySQL                     | SQLite    |
+| ----------------- | ------------------------- | ------------------------- | --------- |
+| `DB_URL`          | `DB_URL`                  | `DB_URL`                  | `DB_URL`  |
+| File (alt)        | —                         | —                         | `DB_FILE` |
+| Host              | `DB_HOST` (localhost)     | `DB_HOST` (localhost)     | —         |
+| Port              | `DB_PORT` (5432)          | `DB_PORT` (3306)          | —         |
+| User              | `DB_USER` (postgres)      | `DB_USER` (root)          | —         |
+| Password          | `DB_PASS`                 | `DB_PASS`                 | —         |
+| Database          | `DB_NAME` (migrateit)     | `DB_NAME` (migrateit)     | —         |
+| Timeout (seconds) | `DB_TIMEOUT_SECONDS` (30) | `DB_TIMEOUT_SECONDS` (30) | —         |
 
 ## Supported Databases
 

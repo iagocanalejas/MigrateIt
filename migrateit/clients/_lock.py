@@ -1,22 +1,3 @@
-"""Database-level migration lock to prevent concurrent migration runs.
-
-Each database uses its native locking mechanism:
-
-- PostgreSQL: ``pg_advisory_lock`` / ``pg_advisory_unlock`` within the transaction.
-- MySQL/MariaDB: ``GET_LOCK`` / ``RELEASE_LOCK`` with a 30-second timeout.
-- SQLite: A dedicated ``migrateit_lock`` table with ``INSERT OR IGNORE`` and
-  a 30-second retry loop with 0.5s back-off.
-
-Usage::
-
-    from migrateit.clients._lock import DatabaseLock
-
-    with DatabaseLock(connection, table_name):
-        # execute migrations
-        ...
-
-"""
-
 from __future__ import annotations
 
 import sqlite3
@@ -25,7 +6,7 @@ from typing import Any, Protocol, Self, cast, override
 
 import psycopg
 
-from migrateit.models.changelog import SupportedDatabase
+from migrateit.models.config import SupportedDatabase
 from migrateit.models.connection import Connection, _MySqlConnection
 from migrateit.reporters.logs import logger
 
