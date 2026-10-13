@@ -31,6 +31,7 @@ from tests.conftest import (
         pytest.param(SupportedDatabase.POSTGRES, "migrateit.models.connection.psycopg.connect", id="postgres"),
         pytest.param(SupportedDatabase.MYSQL, "migrateit.models.connection.mysql.connector.connect", id="mysql"),
         pytest.param(SupportedDatabase.MARIADB, "migrateit.models.connection.mysql.connector.connect", id="mariadb"),
+        pytest.param(SupportedDatabase.ORACLE, "migrateit.models.connection.oracledb.connect", id="oracle"),
     ],
 )
 def test_get_connection(database: SupportedDatabase, driver: str) -> None:
@@ -68,6 +69,19 @@ def test_get_connection_mysql_connection_string() -> None:
 
 
 @pytest.mark.unit
+def test_get_connection_oracle_connection_string() -> None:
+    with (
+        patch("migrateit.models.connection.oracledb.connect") as mock_connect,
+        patch.dict(os.environ, {"DB_URL": "oracle+oracledb://user:pass@host:1521/service"}),
+    ):
+        mock_conn: Any = MagicMock()
+        mock_connect.return_value = mock_conn
+        result = get_connection(SupportedDatabase.ORACLE)
+        assert result == mock_conn
+        mock_connect.assert_called_once()
+
+
+@pytest.mark.unit
 def test_get_environment_url_from_db_url_psql() -> None:
     from migrateit.clients.psql import PsqlClient
 
@@ -92,6 +106,38 @@ def test_get_environment_url_from_db_url_sqlite() -> None:
     with patch.dict(os.environ, {"DB_URL": "sqlite:///mydb"}):
         url = SqliteClient.get_connection_params()["url"]
         assert url == "sqlite:///mydb"
+
+
+@pytest.mark.unit
+def test_get_environment_url_from_db_url_oracle() -> None:
+    from migrateit.clients.oracle import OracleClient
+
+    with patch.dict(os.environ, {"DB_URL": "oracle+oracledb://user:pass@host:1521/service"}):
+        params = OracleClient.get_connection_params()
+        assert params["dsn"] == "oracle+oracledb://user:pass@host:1521/service"
+
+
+@pytest.mark.unit
+def test_get_environment_params_from_env_vars_oracle() -> None:
+    from migrateit.clients.oracle import OracleClient
+
+    with patch.dict(
+        os.environ,
+        {
+            "DB_HOST": "oraclehost",
+            "DB_PORT": "1522",
+            "DB_USER": "oracleuser",
+            "DB_PASS": "oraclepass",
+            "DB_NAME": "oracleservice",
+        },
+        clear=True,
+    ):
+        params = OracleClient.get_connection_params()
+        assert params["host"] == "oraclehost"
+        assert params["port"] == 1522
+        assert params["user"] == "oracleuser"
+        assert params["password"] == "oraclepass"
+        assert params["service_name"] == "oracleservice"
 
 
 @pytest.mark.unit

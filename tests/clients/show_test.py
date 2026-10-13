@@ -16,6 +16,12 @@ def _update_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -
                     f"UPDATE {table_name} SET change_hash = %s WHERE migration_name = %s",
                     (hash_value, name),
                 )
+        case SupportedDatabase.ORACLE:
+            with client.connection.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE {table_name} SET change_hash = :param WHERE migration_name = :param",
+                    (hash_value, name),
+                )
         case SupportedDatabase.SQLITE:
             client.connection.execute(
                 f"UPDATE {table_name} SET change_hash = ? WHERE migration_name = ?",

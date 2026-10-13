@@ -54,6 +54,16 @@ DB_NAME=migrateit
 DB_USER=root
 DB_PASS=
 
+# oracle
+DB_URL=oracle+oracledb://oracle:password@localhost:1521/migrateit
+# or
+DB_HOST=localhost
+DB_PORT=1521
+DB_NAME=migrateit          # service name
+DB_USER=oracle
+DB_PASS=password
+DB_SID=migrateit           # SID (alternative to service name)
+
 # common
 DB_TIMEOUT_SECONDS=30
 ```
@@ -68,6 +78,8 @@ DB_TIMEOUT_SECONDS=30
 migrateit init postgres
 migrateit init sqlite
 migrateit init mysql
+migrateit init mariadb
+migrateit init oracle
 
 # Create a new migration file
 migrateit new first_migration
@@ -140,10 +152,10 @@ DROP TABLE IF EXISTS users;
 # Help
 
 ```sh
-usage: migrateit init [-h] {postgres,sqlite,mysql,mariadb}
+usage: migrateit init [-h] {postgres,sqlite,mysql,mariadb,oracle}
 
 positional arguments:
-  {postgres,sqlite,mysql,mariadb}   Database type to use
+  {postgres,sqlite,mysql,mariadb,oracle}   Database type to use
 
 options:
   -h, --help          show this help message and exit

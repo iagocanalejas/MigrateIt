@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class SqliteClient(SqlClient["sqlite3.Connection"]):
+    VARNAME_DB_FILE = os.getenv("VARNAME_DB_FILE", "DB_FILE")
+
     @property
     @override
     def placeholder(self) -> str:

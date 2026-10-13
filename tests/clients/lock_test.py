@@ -7,7 +7,13 @@ from unittest.mock import MagicMock, patch
 import psycopg
 import pytest
 
-from migrateit.clients._lock import DatabaseLock, _MySqlLocker, _PsqlLocker, _SqliteLocker
+from migrateit.clients._lock import (
+    DatabaseLock,
+    _MySqlLocker,
+    _OracleLocker,
+    _PsqlLocker,
+    _SqliteLocker,
+)
 from migrateit.models.config import SupportedDatabase
 from tests.conftest import TEST_MIGRATIONS_TABLE
 
@@ -52,7 +58,7 @@ def test_compute_advisory_key_non_negative() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SQLite lock
+# SQLite/Oracle lock
 # ---------------------------------------------------------------------------
 
 
@@ -131,10 +137,10 @@ def test_sqlite_lock_timeout() -> None:
 
     # Hold the lock on the same connection to force timeout
     with (
-        _SqliteLocker(conn, "migrateit"),
+        _SqliteLocker(conn, TEST_MIGRATIONS_TABLE),
         patch("migrateit.clients._lock.LOCK_TIMEOUT_SECONDS", 5),
     ):
-        locker = _SqliteLocker(conn, "migrateit")
+        locker = _SqliteLocker(conn, TEST_MIGRATIONS_TABLE)
         with pytest.raises(RuntimeError, match="Could not acquire lock"):
             with locker:
                 pass  # Should not reach here
@@ -151,6 +157,141 @@ def test_sqlite_locker_release() -> None:
     cursor = conn.execute(f'SELECT COUNT(*) FROM "{TEST_MIGRATIONS_TABLE}_lock"')
     count = cursor.fetchone()[0]
     assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# Oracle lock (mocked)
+# ---------------------------------------------------------------------------
+
+
+def test_oracle_locker_init_creates_table() -> None:
+    mock_conn = MagicMock()
+    cursor = mock_conn.cursor.return_value
+    cursor.__enter__ = MagicMock(return_value=cursor)
+    cursor.__exit__ = MagicMock(return_value=False)
+
+    _ = _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)  # side-effect: creates lock table
+
+    cursor.execute.assert_called_once()
+    mock_conn.commit.assert_called_once()
+
+
+def test_oracle_locker_init_already_exists() -> None:
+    import oracledb
+
+    mock_conn = MagicMock()
+    cursor = mock_conn.cursor.return_value
+    error = oracledb.DatabaseError()
+    error.args = (MagicMock(),)
+    error.args[0].code = 955  # ORA-00955: name already used
+    cursor.__enter__ = MagicMock(side_effect=error)
+    cursor.__exit__ = MagicMock(return_value=False)
+
+    _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
+
+    mock_conn.rollback.assert_called_once()
+
+
+def test_oracle_locker_init_raises_unhandled() -> None:
+    import oracledb
+
+    mock_conn = MagicMock()
+    cursor = mock_conn.cursor.return_value
+    error = oracledb.DatabaseError()
+    error.args = (MagicMock(),)
+    error.args[0].code = 942  # ORA-00942: table does not exist
+    cursor.__enter__ = MagicMock(side_effect=error)
+    cursor.__exit__ = MagicMock(return_value=False)
+
+    with pytest.raises(oracledb.DatabaseError):
+        _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
+
+    mock_conn.rollback.assert_not_called()
+    mock_conn.commit.assert_not_called()
+
+
+def test_oracle_locker_acquire_and_release() -> None:
+    mock_conn = MagicMock()
+    cursor = mock_conn.cursor.return_value
+    cursor.__enter__ = MagicMock(return_value=cursor)
+    cursor.__exit__ = MagicMock(return_value=False)
+    cursor.rowcount = 1
+
+    locker = _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
+    # Reset init calls
+    cursor.execute.reset_mock()
+    mock_conn.commit.reset_mock()
+
+    locker.acquire()
+    locker.release()
+
+    assert cursor.execute.call_count == 2
+    calls = [c[0][0] for c in cursor.execute.call_args_list]
+    assert any("INSERT" in c for c in calls)
+    assert any("DELETE" in c for c in calls)
+
+
+def test_oracle_locker_context_manager() -> None:
+    mock_conn = MagicMock()
+    cursor = mock_conn.cursor.return_value
+    cursor.__enter__ = MagicMock(return_value=cursor)
+    cursor.__exit__ = MagicMock(return_value=False)
+    cursor.rowcount = 1
+
+    locker = _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
+    # Reset init calls
+    cursor.execute.reset_mock()
+    mock_conn.commit.reset_mock()
+
+    with locker:
+        pass
+
+    assert cursor.execute.call_count == 2
+
+
+def test_oracle_locker_release_on_error() -> None:
+    mock_conn = MagicMock()
+    cursor = mock_conn.cursor.return_value
+    cursor.__enter__ = MagicMock(return_value=cursor)
+    cursor.__exit__ = MagicMock(return_value=False)
+    cursor.rowcount = 1
+
+    locker = _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
+    # Reset init calls
+    cursor.execute.reset_mock()
+    mock_conn.commit.reset_mock()
+
+    with pytest.raises(RuntimeError, match="simulated"):
+        with locker:
+            raise RuntimeError("simulated")
+
+    # Verify release (DELETE) was called despite the error
+    calls = [c[0][0] for c in cursor.execute.call_args_list]
+    assert any("DELETE" in c for c in calls)
+
+
+def test_oracle_locker_timeout() -> None:
+    mock_conn = MagicMock()
+    cursor = mock_conn.cursor.return_value
+    cursor.__enter__ = MagicMock(return_value=cursor)
+    cursor.__exit__ = MagicMock(return_value=False)
+    cursor.rowcount = 0
+
+    with (
+        patch("migrateit.clients._lock.LOCK_TIMEOUT_SECONDS", 0.1),
+        patch("migrateit.clients._lock.LOCK_RETRY_SECONDS", 0.01),
+    ):
+        locker = _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
+        # Reset init calls
+        cursor.execute.reset_mock()
+        mock_conn.commit.reset_mock()
+
+        with pytest.raises(RuntimeError, match="Could not acquire lock"):
+            locker.acquire()
+
+    # Verify multiple INSERT attempts were made
+    insert_calls = [c for c in cursor.execute.call_args_list if "INSERT" in str(c)]
+    assert len(insert_calls) >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -266,3 +407,14 @@ def test_database_lock_builds_mysql_locker() -> None:
     # MagicMock without spec should be treated as MySQL
     lock = DatabaseLock(mock_conn, SupportedDatabase.MARIADB, TEST_MIGRATIONS_TABLE)  # noqa: F841
     assert isinstance(lock._locker, _MySqlLocker)  # noqa: SLF001
+
+
+def test_database_lock_builds_oracle_locker() -> None:
+    mock_cursor = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    mock_cursor.rowcount = 1
+
+    lock = DatabaseLock(mock_conn, SupportedDatabase.ORACLE, TEST_MIGRATIONS_TABLE)  # noqa: F841
+    assert isinstance(lock._locker, _OracleLocker)  # noqa: SLF001

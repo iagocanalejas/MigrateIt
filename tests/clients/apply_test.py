@@ -5,9 +5,9 @@ import pytest
 
 from migrateit.clients._client import SqlClient
 from migrateit.models.migration import Migration, MigrationStatus
-from tests.clients._clients_test import MIGRATION_NAME
 from tests.conftest import (
     INITIAL_MIGRATION,
+    MIGRATION_NAME,
     TEST_MIGRATIONS_TABLE,
     TEST_TABLE,
     _create_migration_file,

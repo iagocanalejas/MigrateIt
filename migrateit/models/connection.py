@@ -3,11 +3,13 @@ from __future__ import annotations
 import sqlite3
 
 import mysql.connector
+import oracledb
 import psycopg
 from mysql.connector.abstracts import MySQLConnectionAbstract
 from mysql.connector.pooling import PooledMySQLConnection
 
 from migrateit.clients.mysql import MySqlClient
+from migrateit.clients.oracle import OracleClient
 from migrateit.clients.psql import PsqlClient
 from migrateit.clients.sqlite import SqliteClient
 from migrateit.models.config import SupportedDatabase
@@ -15,7 +17,8 @@ from migrateit.models.config import SupportedDatabase
 type _PsqlConnection = psycopg.Connection
 type _SqliteConnection = sqlite3.Connection
 type _MySqlConnection = MySQLConnectionAbstract | PooledMySQLConnection
-type Connection = _PsqlConnection | _SqliteConnection | _MySqlConnection
+type _OracleConnection = oracledb.Connection
+type Connection = _PsqlConnection | _SqliteConnection | _MySqlConnection | _OracleConnection
 
 
 def get_connection(database: SupportedDatabase) -> Connection:
@@ -43,5 +46,18 @@ def get_connection(database: SupportedDatabase) -> Connection:
                 "connection_timeout": int(params["connection_timeout"]) if "connection_timeout" in params else None,
             }
             return mysql.connector.connect(**conn_kwargs)
+        case SupportedDatabase.ORACLE:
+            params = OracleClient.get_connection_params()
+            if "dsn" in params:
+                return oracledb.connect(dsn=params["dsn"], autocommit=False)
+            conn_kwargs = {
+                "user": params["user"],
+                "password": params["password"],
+                "host": params.get("host", "localhost"),
+                "port": params.get("port", 1521),
+                "service_name": params.get("service_name"),
+                "sid": params.get("sid"),
+            }
+            return oracledb.connect(**conn_kwargs)
         case _:
             raise NotImplementedError(f"Database {database} is not supported")

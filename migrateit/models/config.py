@@ -14,6 +14,7 @@ class SupportedDatabase(Enum):
     SQLITE = "sqlite"
     MYSQL = "mysql"
     MARIADB = "mariadb"
+    ORACLE = "oracle"
 
 
 @dataclass(kw_only=True)

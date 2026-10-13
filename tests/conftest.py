@@ -90,6 +90,87 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
                 mysql_conn.commit()
                 mysql_conn.close()
 
+        case SupportedDatabase.ORACLE:
+            import oracledb
+
+            from migrateit.clients.oracle import OracleClient
+
+            params = OracleClient.get_connection_params()
+            conn_kwargs = {
+                "user": params["user"],
+                "password": params["password"],
+                "host": params.get("host", "localhost"),
+                "port": params.get("port", 1521),
+                "service_name": params.get("service_name"),
+                "sid": params.get("sid"),
+            }
+            oracle_conn = oracledb.connect(**conn_kwargs)
+            try:
+                yield oracle_conn
+            finally:
+                try:
+                    oracle_conn.rollback()
+                except Exception:  # pragma: no cover[safety]
+                    pass
+                with oracle_conn.cursor() as cursor:
+                    cursor.execute("""
+BEGIN
+    -- 1. Drop Views
+    FOR v IN (SELECT view_name FROM user_views) LOOP
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP VIEW "' || v.view_name || '"';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+
+    -- 2. Drop Materialized Views
+    FOR mv IN (SELECT mview_name FROM user_mviews) LOOP
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP MATERIALIZED VIEW "' || mv.mview_name || '"';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+
+    -- 3. Drop Packages, Procedures, Functions, Triggers, and Synonyms
+    FOR o IN (SELECT object_name, object_type FROM user_objects
+              WHERE object_type IN ('PACKAGE', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'SYNONYM')) LOOP
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP ' || o.object_type || ' "' || o.object_name || '"';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+
+    -- 4. Drop Types (using FORCE to handle type dependencies)
+    FOR tp IN (SELECT type_name FROM user_types) LOOP
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP TYPE "' || tp.type_name || '" FORCE';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+
+    -- 5. Drop Tables (with CASCADE CONSTRAINTS)
+    FOR t IN (SELECT table_name FROM user_tables) LOOP
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP TABLE "' || t.table_name || '" CASCADE CONSTRAINTS';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+
+    -- 6. Drop Standalone Sequences
+    FOR s IN (SELECT sequence_name FROM user_sequences
+              WHERE sequence_name NOT IN (SELECT NVL(sequence_name, 'DUMMY') FROM user_tab_identity_cols)) LOOP
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP SEQUENCE "' || s.sequence_name || '"';
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+END;
+                    """)
+                    # Purge recycle bin to prevent ORA-00955 naming conflicts
+                    cursor.execute("PURGE RECYCLEBIN")
+                oracle_conn.commit()
+                oracle_conn.close()
+
         case SupportedDatabase.SQLITE:
             sqlite_conn: sqlite3.Connection = sqlite3.connect(":memory:", autocommit=False)
             try:
@@ -111,6 +192,7 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
         pytest.param(SupportedDatabase.MYSQL, marks=pytest.mark.mysql, id="mysql"),
         pytest.param(SupportedDatabase.MARIADB, marks=pytest.mark.mariadb, id="mariadb"),
         pytest.param(SupportedDatabase.SQLITE, marks=pytest.mark.sqlite, id="sqlite"),
+        pytest.param(SupportedDatabase.ORACLE, marks=pytest.mark.oracle, id="oracle"),
     ]
 )
 def client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlClient[Any]]:
@@ -158,7 +240,9 @@ def _create_migration_file(
 
 def _get_query_rows(client: SqlClient[Any], query: str) -> list[tuple[Any, ...]]:
     match client.changelog.database:
-        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
+        case (
+            SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB | SupportedDatabase.ORACLE
+        ):
             with client.connection.cursor() as cursor:
                 cursor.execute(query)
                 return cursor.fetchall()
@@ -175,6 +259,15 @@ def _migration_is_applied(client: SqlClient[Any], migration_name: str) -> bool:
             with client.connection.cursor() as cursor:
                 cursor.execute(
                     f"SELECT COUNT(*) FROM {table_name} WHERE migration_name = %s",
+                    (migration_name,),
+                )
+                result = cursor.fetchone()
+                assert result is not None
+                return bool(result[0])
+        case SupportedDatabase.ORACLE:
+            with client.connection.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM {table_name} WHERE migration_name = :1",
                     (migration_name,),
                 )
                 result = cursor.fetchone()
@@ -203,6 +296,15 @@ def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
                 result = cursor.fetchone()
                 assert result is not None
                 return result[0]
+        case SupportedDatabase.ORACLE:
+            with client.connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM user_tables WHERE UPPER(table_name) = UPPER(:1)",
+                    (table_name,),
+                )
+                result = cursor.fetchone()
+                assert result is not None
+                return bool(result[0])
         case SupportedDatabase.SQLITE:
             cursor = client.connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -218,6 +320,9 @@ def _mock_create_migration(temp_dir: Path, database: SupportedDatabase) -> None:
     migrations_dir = temp_dir / "migrations"
     query = f"""CREATE TABLE IF NOT EXISTS {TEST_TABLE} (id SERIAL PRIMARY KEY);"""
     rollback = f"""DROP TABLE IF EXISTS {TEST_TABLE};"""
+    if database == SupportedDatabase.ORACLE:
+        query = f"""CREATE TABLE "{TEST_TABLE}" (id NUMBER PRIMARY KEY);"""
+        rollback = f"""DROP TABLE "{TEST_TABLE}";"""
     _create_migration_file(migrations_dir, MIGRATION_NAME, sql=query, rollback_sql=rollback)
 
 
@@ -227,6 +332,17 @@ def _drop_test_table(client: SqlClient[Any], table_name: str) -> None:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+        case SupportedDatabase.ORACLE:
+            import oracledb
+
+            with client.connection.cursor() as cursor:
+                try:
+                    cursor.execute(f"DROP TABLE {table_name} CASCADE CONSTRAINTS PURGE")
+                except oracledb.DatabaseError as e:  # pragma: no cover[safety]
+                    (error,) = e.args
+                    if error.code != 942:
+                        raise
+                cursor.execute("PURGE RECYCLEBIN")
         case SupportedDatabase.SQLITE:
             client.connection.execute(f"DROP TABLE IF EXISTS {table_name}")
         case _:

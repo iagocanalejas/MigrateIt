@@ -2,7 +2,7 @@
 
 ## Project
 
-**migrateit** — A CLI database migration tool for PostgreSQL, SQLite, MySQL, and MariaDB. Manages database schema changes through versioned SQL files with support for dependency trees, squashing, rollback, schema export, hash-based change detection, and migration dropping.
+**migrateit** — A CLI database migration tool for PostgreSQL, SQLite, MySQL, MariaDB, and Oracle. Manages database schema changes through versioned SQL files with support for dependency trees, squashing, rollback, schema export, hash-based change detection, and migration dropping.
 
 ## Python & Code Style Guidelines
 
@@ -17,7 +17,7 @@
 - **Tooling Configuration**:
   - `mypy`, `ruff`, `pyright`, and `pytest` settings are centralized in `pyproject.toml`.
   - `pre-commit` manages Git hooks via `.pre-commit-config.yaml`.
-- **Testing**: Write type-annotated test functions under `tests/` mirroring the core package layout. Test fixtures are parameterized across all supported databases (postgres, mysql, sqlite).
+- **Testing**: Write type-annotated test functions under `tests/` mirroring the core package layout. Test fixtures are parameterized across all supported databases (postgres, mysql, sqlite, oracle).
 - **mypy overrides**: Third-party stubs (e.g., `inquirer.*`) use `ignore_missing_imports = true`.
 
 ## AI Assistant Operational Rules
@@ -34,6 +34,7 @@ migrateit init postgres
 migrateit init sqlite
 migrateit init mysql
 migrateit init mariadb
+migrateit init oracle
 migrateit new migration_name
 migrateit new migration_name -d dep1 dep2
 migrateit new migration_name --interactive
@@ -61,7 +62,7 @@ migrateit drop migration_name          # rollback and delete a migration
 
 ### Key architectural patterns
 
-1. **Protocol/ABC pattern for database clients**: `SqlClientProtocol` in `_protocol.py` defines the interface with 13 abstract methods plus an `export_items` property. A separate `SqlConnectionProtocol` defines connection-level methods (`execute`, `execute_for_one`, `execute_for_rows`, `placeholder`). `SqlClient[T: Connection]` is a generic ABC combining both protocols, holding a typed `connection` and `MigrateItConfig`. Three concrete implementations exist: `PsqlClient` (PostgreSQL, uses cursor-based execution), `SqliteClient` (SQLite, uses `executescript`), and `MySqlClient` (MySQL/MariaDB, uses `mysql-connector-python` with cursor-based execution). New databases implement both protocols and subclass `SqlClient`.
+1. **Protocol/ABC pattern for database clients**: `SqlClientProtocol` in `_protocol.py` defines the interface with 13 abstract methods plus an `export_items` property. A separate `SqlConnectionProtocol` defines connection-level methods (`execute`, `execute_for_one`, `execute_for_rows`, `placeholder`). `SqlClient[T: Connection]` is a generic ABC combining both protocols, holding a typed `connection` and `MigrateItConfig`. Four concrete implementations exist: `PsqlClient` (PostgreSQL, uses cursor-based execution), `SqliteClient` (SQLite, uses `executescript`), `MySqlClient` (MySQL/MariaDB, uses `mysql-connector-python` with cursor-based execution), and `OracleClient` (Oracle, uses `oracledb` with cursor-based execution and named parameters). New databases implement both protocols and subclass `SqlClient`.
 
 2. **Three-layer data/access architecture**:
    - **Data model** (`ChangelogFile` in `models/changelog.py`): Pure dataclass holding migration metadata (`version`, `database`, `migrations`, `path`). Provides data accessors (`root` — initial migration, `migrations_tree` — DAG) and serialization (`to_dict`, `to_json`, `from_json`). Contains no operation methods.
@@ -74,13 +75,15 @@ migrateit drop migration_name          # rollback and delete a migration
 
 5. **Migration file format**: SQL files follow `NNNN_name.sql` convention with a header comment (`-- Migration {name}\n-- Created on {timestamp}`). Forward and rollback SQL are separated by the `-- Rollback migration` tag. `get_content_and_hash()` on `Migration` splits on this tag and computes a SHA-256 of the full content, returning `(forward_sql, rollback_sql, hash)`.
 
-6. **Connection model**: `models/connection.py` defines typed connection aliases (`_PsqlConnection`, `_SqliteConnection`, `_MySqlConnection`) and a union `Connection` type. `get_connection(database: SupportedDatabase)` opens and returns the appropriate typed connection. `get_client(config, connection)` in `_client.py` dispatches to the correct concrete client (`MySqlClient`, `PsqlClient`, or `SqliteClient`).
+6. **Connection model**: `models/connection.py` defines typed connection aliases (`_PsqlConnection`, `_SqliteConnection`, `_MySqlConnection`, `_OracleConnection`) and a union `Connection` type. `get_connection(database: SupportedDatabase)` opens and returns the appropriate typed connection. `get_client(config, connection)` in `_client.py` dispatches to the correct concrete client (`MySqlClient`, `PsqlClient`, `SqliteClient`, or `OracleClient`).
 
 7. **Context manager patterns**: `error_handler()` and `logging_handler()` are context managers in `reporters/` used in `main.py` to wrap CLI execution. `ExitStack` is no longer used — the old multi-stream pattern was replaced by individual context managers.
 
-8. **SQL validation**: `validate_sql_syntax()` uses `sqlfluff` with per-database dialects to validate migration SQL. Works without a live database connection. The `_patch_sql_statement()` base method in `SqlClient` adds `IF NOT EXISTS` guards for `CREATE TABLE`, `DROP TABLE`, and `ALTER TABLE ADD COLUMN` statements to make validation more permissive. MariaDB uses the same MySQL dialect.
+8. **SQL validation**: `validate_sql_syntax()` uses `sqlfluff` with per-database dialects to validate migration SQL. Works without a live database connection. The `_patch_sql_statement()` base method in `SqlClient` adds `IF NOT EXISTS` guards for `CREATE TABLE`, `DROP TABLE`, and `ALTER TABLE ADD COLUMN` statements to make validation more permissive. MariaDB uses the same MySQL dialect. Oracle uses the `oracle` dialect and strips `IF EXISTS` guards (Oracle does not support them).
 
-9. **Schema export**: `export_database_schema()` in `SqlClient` iterates over `export_items` (per-database property defining metadata queries and row processors) to generate forward DDL and reversed rollback DDL into a migration file.
+9. **Schema export**: `export_database_schema()` in `SqlClient` iterates over `export_items` (per-database property defining metadata queries and row processors) to generate forward DDL and reversed rollback DDL into a migration file. Oracle exports tables/columns, indexes, constraints (PK/Unique), foreign keys, views, sequences, and triggers.
+
+10. **Oracle client**: `OracleClient` in `clients/oracle.py` uses `oracledb` with cursor-based execution. Oracle uses named parameters (`:param` → `:1`, `:2`, ...) instead of positional placeholders. The changelog table uses a `SEQUENCE` for auto-incrementing IDs and `NUMBER(1)` for the `squashed` flag. Oracle uses `MERGE INTO ... USING ...` for upserts and `SELECT ... FROM DUAL` for scalar queries. The `_OracleLocker` uses a lock table with `NUMBER GENERATED BY DEFAULT AS IDENTITY` primary key. Oracle exports metadata from `all_tab_columns`, `all_indexes`, `all_constraints`, `all_views`, `user_sequences`, and `user_triggers`. SQL validation uses the `oracle` dialect via sqlfluff.
 
 ### Config
 
@@ -91,16 +94,17 @@ migrateit drop migration_name          # rollback and delete a migration
 
 DB credentials are read via `VARNAME_DB_*` prefixed env variables with hardcoded defaults in each client class:
 
-| Variable          | PostgreSQL                | MySQL                     | SQLite    |
-| ----------------- | ------------------------- | ------------------------- | --------- |
-| `DB_URL`          | `DB_URL`                  | `DB_URL`                  | `DB_URL`  |
-| File (alt)        | —                         | —                         | `DB_FILE` |
-| Host              | `DB_HOST` (localhost)     | `DB_HOST` (localhost)     | —         |
-| Port              | `DB_PORT` (5432)          | `DB_PORT` (3306)          | —         |
-| User              | `DB_USER` (postgres)      | `DB_USER` (root)          | —         |
-| Password          | `DB_PASS`                 | `DB_PASS`                 | —         |
-| Database          | `DB_NAME` (migrateit)     | `DB_NAME` (migrateit)     | —         |
-| Timeout (seconds) | `DB_TIMEOUT_SECONDS` (30) | `DB_TIMEOUT_SECONDS` (30) | —         |
+| Variable          | PostgreSQL                | MySQL                     | SQLite    | Oracle                    |
+| ----------------- | ------------------------- | ------------------------- | --------- | ------------------------- |
+| `DB_URL`          | `DB_URL`                  | `DB_URL`                  | `DB_URL`  | `DB_URL` (DSN string)     |
+| File (alt)        | —                         | —                         | `DB_FILE` | —                         |
+| Host              | `DB_HOST` (localhost)     | `DB_HOST` (localhost)     | —         | `DB_HOST` (localhost)     |
+| Port              | `DB_PORT` (5432)          | `DB_PORT` (3306)          | —         | `DB_PORT` (1521)          |
+| User              | `DB_USER` (postgres)      | `DB_USER` (root)          | —         | `DB_USER` (oracle)        |
+| Password          | `DB_PASS`                 | `DB_PASS`                 | —         | `DB_PASS` (password)      |
+| Database          | `DB_NAME` (migrateit)     | `DB_NAME` (migrateit)     | —         | `DB_NAME` (service_name)  |
+| Timeout (seconds) | `DB_TIMEOUT_SECONDS` (30) | `DB_TIMEOUT_SECONDS` (30) | —         | —                         |
+| Additional        | —                         | —                         | —         | `DB_SID` (SID, alternative to service_name) |
 
 ## Supported Databases
 
@@ -110,6 +114,7 @@ DB credentials are read via `VARNAME_DB_*` prefixed env variables with hardcoded
 | SQLite     | `sqlite3` (stdlib)       | `executescript`-based              |
 | MySQL      | `mysql-connector-python` | Full feature support, cursor-based |
 | MariaDB    | `mysql-connector-python` | Same dialect as MySQL              |
+| Oracle     | `oracledb`               | Full feature support, cursor-based |
 
 ## Test Markers
 
@@ -119,4 +124,5 @@ DB credentials are read via `VARNAME_DB_*` prefixed env variables with hardcoded
 | `sqlite`   | Tests requiring a SQLite connection     |
 | `mysql`    | Tests requiring a MySQL connection      |
 | `mariadb`  | Tests requiring a MariaDB connection    |
+| `oracle`   | Tests requiring an Oracle connection    |
 | `unit`     | Fast unit tests with no database        |
