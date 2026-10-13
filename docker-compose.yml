@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ""
+      POSTGRES_DB: migrateit
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ""
+      MYSQL_DATABASE: migrateit
+      MYSQL_ALLOW_EMPTY_PASSWORD: true
+    ports:
+      - "3317:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mariadb:
+    image: mariadb:12
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ""
+      MARIADB_DATABASE: migrateit
+      MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: true
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  mysql_data:
+  mariadb_data:

@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import tempfile
 from collections.abc import Generator
@@ -10,6 +11,7 @@ import pytest
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient, get_client
+from migrateit.clients.mysql import MySqlClient
 from migrateit.clients.sqlite import SqliteClient
 from migrateit.cmd import cmd_init
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
@@ -18,6 +20,12 @@ from migrateit.models.repository import ChangelogRepository
 INITIAL_MIGRATION = "0000_migrateit.sql"
 TEST_MIGRATIONS_TABLE = "migrations"
 TEST_TABLE = "test_entity"
+
+
+def _get_mysql_port(database: SupportedDatabase) -> int:
+    if database is SupportedDatabase.MARIADB:
+        return int(os.getenv("DB_PORT_MARIADB", "3306"))
+    return int(os.getenv("DB_PORT_MYSQL", "3317"))
 
 
 @pytest.fixture(autouse=True)
@@ -63,9 +71,10 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             import mysql.connector
 
-            from migrateit.clients.mysql import MySqlClient
-
+            # Override the host port so the fixture can target MySQL (3317) or
+            # MariaDB (3306) running in docker-compose independently.
             params = MySqlClient.get_connection_params()
+            params["port"] = _get_mysql_port(database_type)
             db_name = params["database"].lstrip("/")
             mysql_conn = mysql.connector.connect(**params)
             try:
