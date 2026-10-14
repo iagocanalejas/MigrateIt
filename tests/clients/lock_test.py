@@ -7,13 +7,7 @@ from unittest.mock import MagicMock, patch
 import psycopg
 import pytest
 
-from migrateit.clients._lock import (
-    LOCK_NAME,
-    DatabaseLock,
-    _MySqlLocker,
-    _PsqlLocker,
-    _SqliteLocker,
-)
+from migrateit.clients._lock import DatabaseLock, _MySqlLocker, _PsqlLocker, _SqliteLocker
 from migrateit.models.config import SupportedDatabase
 from tests.conftest import TEST_MIGRATIONS_TABLE
 
@@ -68,7 +62,7 @@ def test_sqlite_lock_acquire_and_release() -> None:
     with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
         pass
 
-    cursor = conn.execute('SELECT COUNT(*) FROM "migrateit_lock"')
+    cursor = conn.execute(f'SELECT COUNT(*) FROM "{TEST_MIGRATIONS_TABLE}_lock"')
     count = cursor.fetchone()[0]
     assert count == 0
 
@@ -80,7 +74,7 @@ def test_sqlite_lock_released_on_error() -> None:
         with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
             raise RuntimeError("simulated")
 
-    cursor = conn.execute('SELECT COUNT(*) FROM "migrateit_lock"')
+    cursor = conn.execute(f'SELECT COUNT(*) FROM "{TEST_MIGRATIONS_TABLE}_lock"')
     count = cursor.fetchone()[0]
     assert count == 0
 
@@ -132,7 +126,7 @@ def test_sqlite_lock_concurrent(tmp_path: Path) -> None:
 
 def test_sqlite_lock_timeout() -> None:
     conn = _make_sqlite_conn()
-    conn.execute('CREATE TABLE IF NOT EXISTS "migrateit_lock" (id INTEGER PRIMARY KEY)')
+    conn.execute(f'CREATE TABLE IF NOT EXISTS "{TEST_MIGRATIONS_TABLE}_lock" (id INTEGER PRIMARY KEY)')
     conn.commit()
 
     # Hold the lock on the same connection to force timeout
@@ -148,13 +142,13 @@ def test_sqlite_lock_timeout() -> None:
 
 def test_sqlite_locker_release() -> None:
     conn = _make_sqlite_conn()
-    conn.execute('CREATE TABLE IF NOT EXISTS "migrateit_lock" (id INTEGER PRIMARY KEY)')
+    conn.execute(f'CREATE TABLE IF NOT EXISTS "{TEST_MIGRATIONS_TABLE}_lock" (id INTEGER PRIMARY KEY)')
     conn.commit()
     locker = _SqliteLocker(conn, "migrateit")
     locker.acquire()
     locker.release()
 
-    cursor = conn.execute('SELECT COUNT(*) FROM "migrateit_lock"')
+    cursor = conn.execute(f'SELECT COUNT(*) FROM "{TEST_MIGRATIONS_TABLE}_lock"')
     count = cursor.fetchone()[0]
     assert count == 0
 
@@ -219,7 +213,7 @@ def test_mysql_locker_acquire_timeout() -> None:
     mock_cursor.fetchone.return_value = (0,)
 
     locker = _MySqlLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-    with pytest.raises(RuntimeError, match=f"Could not acquire lock '{LOCK_NAME}'"):
+    with pytest.raises(RuntimeError, match="Could not acquire lock"):
         locker.acquire()
 
 
