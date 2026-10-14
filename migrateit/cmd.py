@@ -208,12 +208,12 @@ def cmd_run(
                 write_line(f"{action.lower().capitalize()} migration: {migration.name}")
                 client.apply_migration(migration, is_fake=is_fake, is_rollback=is_rollback)
             client.connection.commit()
-        except Exception as e:
+        except Exception:
             try:
                 client.connection.rollback()
             except Exception:  # pragma: no cover
                 pass
-            raise e
+            raise
     direction = "Migration" if not is_rollback else "Rollback"
     write_line(f"{direction} complete: {len(migration_plan)} migration(s) applied")
     return 0
@@ -315,8 +315,7 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
         write_line("\nValidating SQL migrations...")
         has_err = False
         for migration in client.changelog.migrations:
-            err = client.validate_sql_syntax(migration)
-            if err:
+            if err := client.validate_sql_syntax(migration):
                 has_err = True
                 pretty_print_sql_error(err[0], err[1])
         msg = "failed. Please fix the errors above." if has_err else "passed. No errors found."

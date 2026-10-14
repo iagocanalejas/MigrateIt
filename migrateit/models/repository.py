@@ -39,6 +39,7 @@ class ChangelogRepository:
                 raise ValueError(f"Migration name {m.name} has a duplicated index")
             seen_indexes.add(index)
 
+            # NOTE: Works because migrations should be ordered topologically
             if not all(p in seen_names for p in m.parents):
                 raise ValueError(f"Migration {m.name} references a non-existent parent")
 

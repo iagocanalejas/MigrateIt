@@ -53,9 +53,13 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
     def changelog(self) -> Changelog:
         return self.config.changelog
 
-    @functools.cached_property
+    @property
     def migrations(self) -> MigrationManager:
         return MigrationManager(self.config.changelog)
+
+    @functools.cached_property
+    def _linter(self) -> Linter:
+        return Linter(dialect=self.changelog.database.value)
 
     @classmethod
     def _q(cls, name: str, QUOTE_CHAR: str = '"') -> str:
@@ -117,7 +121,8 @@ FROM {self._q(self.table_name)};
 
     @override
     def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
-        if not migration.initial and not (self.is_migration_applied(migration) == is_rollback):
+        is_applied = self.is_migration_applied(migration) if not migration.initial else False
+        if not migration.initial and is_applied != is_rollback:
             if is_rollback:
                 raise ValueError(f"Migration {migration.name} is not applied, cannot undo it")
             raise ValueError(f"Migration {migration.name} is already applied, cannot apply it again")
@@ -126,7 +131,7 @@ FROM {self._q(self.table_name)};
 
         code = migration_code if not is_rollback else reverse_migration_code
         if not is_fake and code.strip():
-            parsed = Linter(dialect=self.changelog.database.value).parse_string(code)
+            parsed = self._linter.parse_string(code)
             if len(parsed.violations) > 0:
                 raise ValueError(parsed.violations)
             statements = [seg.raw.strip() for seg in parsed.tree.recursive_crawl("statement")]

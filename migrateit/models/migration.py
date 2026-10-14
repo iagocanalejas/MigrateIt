@@ -35,12 +35,6 @@ class Migration:
     def is_valid_name(path: Path) -> bool:
         return path.is_file() and re.match(C.MIGRATION_PATTERN, path.name) is not None
 
-    @staticmethod
-    def is_same_migration_name(name1: str, name2: str) -> bool:
-        if not name1 or not name2:
-            return False
-        return name1 == name2 or name1.startswith(name2.split("_")[0])
-
     def get_full_path(self, migrations_dir: Path) -> Path:
         path = migrations_dir / self.name
         if not path.is_file() or not path.name.endswith(".sql"):

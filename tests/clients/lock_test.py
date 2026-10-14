@@ -53,8 +53,8 @@ def test_compute_advisory_key(name: str) -> None:
 
 def test_sqlite_lock_error_cleanup(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
-    sqlite3.connect(db_path).executescript(_MIGRATIONS_TABLE_DDL)
-    sqlite3.connect(db_path).close()
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(_MIGRATIONS_TABLE_DDL)
 
     conn = sqlite3.connect(db_path, timeout=5.0)
     with pytest.raises(RuntimeError, match="simulated"):
@@ -62,14 +62,15 @@ def test_sqlite_lock_error_cleanup(tmp_path: Path) -> None:
             raise RuntimeError("simulated")
     conn.close()
 
-    count = sqlite3.connect(db_path).execute(f'SELECT COUNT(*) FROM "{TEST_MIGRATIONS_TABLE}_lock"').fetchone()[0]
+    with sqlite3.connect(db_path) as conn:
+        count = conn.execute(f'SELECT COUNT(*) FROM "{TEST_MIGRATIONS_TABLE}_lock"').fetchone()[0]
     assert count == 0
 
 
 def test_sqlite_lock_concurrent(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
-    sqlite3.connect(db_path).executescript(_MIGRATIONS_TABLE_DDL)
-    sqlite3.connect(db_path).close()
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(_MIGRATIONS_TABLE_DDL)
 
     errors: list[BaseException] = []
     acquired = threading.Event()
@@ -79,7 +80,7 @@ def test_sqlite_lock_concurrent(tmp_path: Path) -> None:
             conn = sqlite3.connect(db_path, timeout=5.0)
             with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
                 acquired.set()
-                time.sleep(1)
+                time.sleep(0.1)
             conn.close()
         except BaseException as exc:  # pragma: no cover
             errors.append(exc)

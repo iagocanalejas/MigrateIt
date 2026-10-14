@@ -44,26 +44,6 @@ def test_valid_nonexistent_file() -> None:
     assert Migration.is_valid_name(path) is False
 
 
-# --- migration.is_same_migration_name tests ---
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    "name1,name2, expected",
-    [
-        ("0001_test.sql", "0001_test.sql", True),
-        ("0001_test.sql", "0001_test_v2.sql", True),
-        ("0001_test.sql", "0002_test.sql", False),
-        ("test.sql", "test.sql", True),
-        ("", "0001_test.sql", False),
-        ("0001_test.sql", "", False),
-        ("", "", False),
-    ],
-)
-def test_migration_is_same_migration_name(name1: str, name2: str, expected: bool) -> None:
-    assert Migration.is_same_migration_name(name1, name2) is expected
-
-
 # --- get_content_and_hash tests ---
 
 

@@ -34,7 +34,7 @@ class OracleClient(SqlClient["oracledb.Connection"]):
             "host": os.getenv(cls.VARNAME_DB_HOST, "localhost"),
             "port": int(os.getenv(cls.VARNAME_DB_PORT, "1521")),
             "user": os.getenv(cls.VARNAME_DB_USER, "oracle"),
-            "password": os.getenv(cls.VARNAME_DB_PASS, "password"),
+            "password": os.getenv(cls.VARNAME_DB_PASS, ""),
             "service_name": os.getenv(cls.VARNAME_DB_NAME, "migrateit"),
             "sid": os.getenv(cls.VARNAME_DB_SID),
         }
@@ -90,7 +90,7 @@ FROM dual
 WHERE EXISTS (SELECT 1 FROM {self._q(self.table_name)} WHERE migration_name = {self.placeholder})
 """
         result = self.execute_for_one(query, (migration.name,))
-        return bool(result[0]) if result else False
+        return result is not None and result[0] == 1
 
     @override
     def is_migrations_table_created(self) -> bool:
@@ -100,7 +100,7 @@ FROM user_tables
 WHERE UPPER(table_name) = UPPER(:1)
 """
         result = self.execute_for_one(query, (self.table_name,))
-        return bool(result[0]) if result else False
+        return result is not None and result[0] == 1
 
     @override
     def _update_migration_changelog(self, migration: Migration, hash: str, is_rollback: bool) -> None:
