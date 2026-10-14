@@ -43,8 +43,7 @@ def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
     assert "drop view " in rollback_part
 
     if client.changelog.database != SupportedDatabase.SQLITE:
-        if client.changelog.database != SupportedDatabase.POSTGRES:  # TODO: needs to work
-            assert "5,3" in forward_part
+        assert "5,3" in forward_part
 
     if client.changelog.database == SupportedDatabase.POSTGRES:
         # contains schemas
@@ -115,6 +114,7 @@ FROM users JOIN posts ON users.id = posts.user_id;
 CREATE TABLE audit_log (
     id SERIAL PRIMARY KEY,
     user_id INTEGER,
+    no_precission NUMERIC(5),
     precision_number NUMERIC(5,3),
     old_name VARCHAR(100),
     new_name VARCHAR(100)

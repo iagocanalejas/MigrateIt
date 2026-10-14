@@ -119,7 +119,8 @@ WHERE sequence_schema NOT IN ('pg_catalog', 'information_schema');
                 name="tables",
                 metadata_query="""
 SELECT c.table_schema, c.table_name, c.column_name, c.data_type, c.udt_name,
-    c.character_maximum_length, c.is_nullable, c.column_default
+    c.character_maximum_length, c.numeric_precision, c.numeric_scale,
+    c.is_nullable, c.column_default
 FROM information_schema.columns c
     JOIN information_schema.tables t ON c.table_schema = t.table_schema AND c.table_name = t.table_name
 WHERE t.table_type = 'BASE TABLE' AND c.table_schema NOT IN ('pg_catalog', 'information_schema')
@@ -227,12 +228,17 @@ def _process_sequences(client: PsqlClient, rows: list[tuple[str, str]]) -> tuple
 def _process_tables(client: PsqlClient, rows: list[tuple[Any, ...]]) -> tuple[list[str], list[str]]:
     fwd, rb = [], []
     table_columns = defaultdict(list)
-    for schema, table, col, dtype, udt_name, char_len, nullable, default in rows:
+    for schema, table, col, dtype, udt_name, char_len, num_prec, num_scale, nullable, default in rows:
         if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
             continue
 
         if char_len and dtype in ("character varying", "character"):
             col_type = f"{dtype}({char_len})"
+        elif dtype in ("numeric", "decimal") and num_prec is not None:
+            if num_scale:
+                col_type = f"{dtype}({num_prec},{num_scale})"
+            else:
+                col_type = f"{dtype}({num_prec})"
         elif dtype == "USER-DEFINED":
             col_type = f"{client._q(schema)}.{client._q(udt_name)}"
         else:
