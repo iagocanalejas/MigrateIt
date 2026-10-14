@@ -130,7 +130,9 @@ FROM {self._q(self.table_name)};
             parsed = Linter(dialect=self.changelog.database.value).parse_string(code)
             if len(parsed.violations) > 0:
                 raise ValueError(parsed.violations)
-            statements = [seg.raw.strip() for seg in parsed.tree.segments if seg.is_type("statement")]
+            statements = [seg.raw.strip() for seg in parsed.tree.recursive_crawl("statement")]
+            if len(statements) == 0:
+                raise ValueError("No statements found in migration code")
             for stmt in statements:
                 self.execute(stmt)
         self._update_migration_changelog(migration, migration_hash, is_rollback)
