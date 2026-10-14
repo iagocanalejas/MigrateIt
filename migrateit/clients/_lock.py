@@ -1,16 +1,20 @@
 from __future__ import annotations
 
-import sqlite3
 import time
-from typing import Any, Protocol, Self, cast, override
-
-import psycopg
+from typing import TYPE_CHECKING, Any, Protocol, Self, cast, override
 
 from migrateit.models.config import SupportedDatabase
-from migrateit.models.connection import Connection, _MySqlConnection
+from migrateit.models.connection import Connection
 from migrateit.reporters.logs import logger
 
-LOCK_NAME = "migrateit_migration_lock"
+if TYPE_CHECKING:
+    import sqlite3  # noqa: F401
+
+    import psycopg  # noqa: F401
+
+    from migrateit.models.connection import _MySqlConnection  # noqa: F401
+
+
 LOCK_TIMEOUT_SECONDS = 30
 LOCK_RETRY_SECONDS = 0.5
 
@@ -108,9 +112,15 @@ class _SqliteLocker(Locker):
     @override
     def release(self) -> None:
         self._connection.execute(f"DELETE FROM {self.lock_table} WHERE id = 1")
+        self._connection.commit()
+        logger.debug("Released SQLite lock for table %s", self._table_name)
 
 
 class _MySqlLocker(Locker):
+    @property
+    def lock_name(self) -> str:
+        return f'"{self._table_name}_lock"'
+
     def __init__(self, connection: _MySqlConnection, table_name: str) -> None:
         self._connection = connection
         self._table_name = table_name
@@ -126,23 +136,20 @@ class _MySqlLocker(Locker):
     def acquire(self) -> None:
         query = "SELECT GET_LOCK(%s, %s)"
         with self._connection.cursor() as cursor:
-            cursor.execute(query, (LOCK_NAME, LOCK_TIMEOUT_SECONDS))
+            cursor.execute(query, (self.lock_name, LOCK_TIMEOUT_SECONDS))
             result = cast(tuple[object, ...], cursor.fetchone())
             if result is None or result[0] == 0:
-                raise RuntimeError(
-                    f"Could not acquire lock '{LOCK_NAME}' for {self._table_name} within {LOCK_TIMEOUT_SECONDS}s"
-                )
+                raise RuntimeError(f"Could not acquire lock '{self.lock_name}' for {self._table_name}")
             cursor.fetchall()
-        logger.debug("Acquired MySQL lock '%s' for table %s", LOCK_NAME, self._table_name)
+        logger.debug("Acquired MySQL lock '%s' for table %s", self.lock_name, self._table_name)
 
     @override
     def release(self) -> None:
         query = "SELECT RELEASE_LOCK(%s)"
         with self._connection.cursor() as cursor:
-            cursor.execute(query, (LOCK_NAME,))
-            cursor.fetchone()
+            cursor.execute(query, (self.lock_name,))
             cursor.fetchall()
-        logger.debug("Released MySQL lock '%s' for table %s", LOCK_NAME, self._table_name)
+        logger.debug("Released MySQL lock '%s' for table %s", self.lock_name, self._table_name)
 
 
 class DatabaseLock:
@@ -173,6 +180,6 @@ class DatabaseLock:
             case SupportedDatabase.POSTGRES:
                 return _PsqlLocker(self._connection, self._table_name)  # type: ignore[arg-type]
             case SupportedDatabase.SQLITE:
-                return _SqliteLocker(self._connection, "migrateit")  # type: ignore[arg-type]
+                return _SqliteLocker(self._connection, self._table_name)  # type: ignore[arg-type]
             case _:  # pragma: no cover
                 return _DummyLocker(self._connection, self._table_name)
