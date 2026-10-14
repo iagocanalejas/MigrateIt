@@ -49,13 +49,11 @@ def test_cmd_squash_not_all_applied(client: SqlClient[Any]) -> None:
 
 
 def test_cmd_squash_no_end_too_few_migrations(client: SqlClient[Any]) -> None:
-    """Test cmd_squash raises ValueError when end_migration is None and fewer than 3 migrations."""
     with pytest.raises(ValueError, match="squash less than 3"):
         cmd_squash(client, start_migration="0000_migrateit.sql")
 
 
 def test_cmd_squash_no_end_uses_last_migration(client: SqlClient[Any]) -> None:
-    """Test cmd_squash uses the last migration as end_migration when not provided."""
     cmd_new(client, name="first", no_edit=True)
     _create_migration_file(client.migrations_dir, "0001_first.sql")
 

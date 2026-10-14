@@ -1,5 +1,3 @@
-"""Tests for ChangelogRepository."""
-
 from pathlib import Path
 
 import pytest

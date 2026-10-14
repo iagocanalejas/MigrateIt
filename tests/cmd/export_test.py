@@ -4,19 +4,7 @@ from migrateit.clients._client import SqlClient
 from migrateit.cmd import cmd_export
 
 
-def _ensure_root_applied(client: SqlClient[Any]) -> None:
-    """Apply the root migration if it hasn't been already.
-
-    Session-scoped PostgreSQL connections may carry state between tests,
-    so the root migration might already be applied.
-    """
-    client.apply_migration(client.changelog.root, is_fake=True)
-    client.connection.commit()
-
-
 def test_cmd_export_no_name_creates_default(client: SqlClient[Any]) -> None:
-    """Test cmd_export creates a migration with a default name when no name is provided."""
-    _ensure_root_applied(client)
     result = cmd_export(client, name=None)
 
     assert result == 0
@@ -27,8 +15,6 @@ def test_cmd_export_no_name_creates_default(client: SqlClient[Any]) -> None:
 
 
 def test_cmd_export_with_name(client: SqlClient[Any]) -> None:
-    """Test cmd_export creates a migration with the provided name."""
-    _ensure_root_applied(client)
     result = cmd_export(client, name="my_full_export")
 
     assert result == 0

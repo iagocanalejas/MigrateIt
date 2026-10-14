@@ -60,7 +60,6 @@ def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, datab
 
 
 def _get_init_migration_sql(database: SupportedDatabase, table_name: str) -> tuple[str, str]:
-    """Get the migration SQL for creating the migrations table."""
     match database:
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             from migrateit.clients.mysql import MySqlClient

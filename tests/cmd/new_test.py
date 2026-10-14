@@ -12,7 +12,6 @@ from .conftest import _mock_client
 
 @pytest.mark.unit
 def test_cmd_new_with_editor(temp_dir: Path) -> None:
-    """Test cmd_new launches editor subprocess when no_edit is False."""
     mock_client = _mock_client(temp_dir)
 
     with (
@@ -29,7 +28,6 @@ def test_cmd_new_with_editor(temp_dir: Path) -> None:
 
 @pytest.mark.unit
 def test_cmd_new_without_editor(temp_dir: Path) -> None:
-    """Test cmd_new launches editor subprocess when no_edit is False."""
     mock_client = _mock_client(temp_dir)
 
     with (
@@ -43,7 +41,6 @@ def test_cmd_new_without_editor(temp_dir: Path) -> None:
 
 @pytest.mark.unit
 def test_cmd_new_with_existing_migration(temp_dir: Path) -> None:
-    """Test cmd_new raises FileExistsError when migration file already exists."""
     mock_client = _mock_client(temp_dir)
 
     # Pre-create the migration file
@@ -87,7 +84,6 @@ def test_cmd_new_with_existing_migration_overwrite(temp_dir: Path) -> None:
 
 @pytest.mark.unit
 def test_cmd_new_with_dependencies(temp_dir: Path) -> None:
-    """Test cmd_new creates migrations with explicit dependencies."""
     mock_client = _mock_client(temp_dir)
 
     cmd_new(client=mock_client, name="test_table", no_edit=True)
@@ -103,7 +99,6 @@ def test_cmd_new_with_dependencies(temp_dir: Path) -> None:
 
 @pytest.mark.unit
 def test_cmd_new_interactive_with_dependencies_raises_value_error(temp_dir: Path) -> None:
-    """Test cmd_new raises ValueError when both interactive mode and explicit dependencies are passed."""
     mock_client = _mock_client(temp_dir)
 
     with pytest.raises(ValueError, match="Cannot specify both `--interactive` and `--dependencies`"):
@@ -118,7 +113,6 @@ def test_cmd_new_interactive_with_dependencies_raises_value_error(temp_dir: Path
 
 @pytest.mark.unit
 def test_cmd_new_interactive_selection(temp_dir: Path) -> None:
-    """Test cmd_new prompts user for dependencies when interactive is True."""
     mock_client = _mock_client(temp_dir)
 
     prompt_result = {"dependencies": ["0000_migrateit.sql"]}
@@ -139,7 +133,6 @@ def test_cmd_new_interactive_selection(temp_dir: Path) -> None:
 
 @pytest.mark.unit
 def test_cmd_new_interactive_cancelled(temp_dir: Path) -> None:
-    """Test cmd_new gracefully handles prompt cancellation (None returned from inquirer)."""
     mock_client = _mock_client(temp_dir)
 
     with patch("migrateit.cmd.inquirer.prompt", return_value=None) as mock_prompt:
@@ -153,7 +146,6 @@ def test_cmd_new_interactive_cancelled(temp_dir: Path) -> None:
 
 
 def test_validate_editor_known_safe() -> None:
-    """Test that known safe editors pass validation."""
     from migrateit.cmd import _validate_editor
 
     for editor in ("vim", "nano", "code", "subl", "emacs", "atom", "zed", "vi"):
@@ -162,8 +154,6 @@ def test_validate_editor_known_safe() -> None:
 
 
 def test_validate_editor_absolute_path_valid() -> None:
-    """Test that absolute paths to valid executables pass validation."""
-
     from migrateit.cmd import _validate_editor
 
     # /bin/sh is a valid executable
@@ -172,7 +162,6 @@ def test_validate_editor_absolute_path_valid() -> None:
 
 
 def test_validate_editor_unknown_raises() -> None:
-    """Test that unknown editors raise ValueError."""
     from migrateit.cmd import _validate_editor
 
     with pytest.raises(ValueError, match="Unsafe editor"):

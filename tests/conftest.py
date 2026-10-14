@@ -12,12 +12,12 @@ import pytest
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient, get_client
 from migrateit.clients.mysql import MySqlClient
-from migrateit.clients.sqlite import SqliteClient
-from migrateit.cmd import cmd_init
+from migrateit.cmd import cmd_init, cmd_run
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.repository import ChangelogRepository
 
 INITIAL_MIGRATION = "0000_migrateit.sql"
+MIGRATION_NAME = "0001_test_table.sql"
 TEST_MIGRATIONS_TABLE = "migrations"
 TEST_TABLE = "test_entity"
 
@@ -39,7 +39,6 @@ def suppress_write() -> Generator[None]:
 
 @pytest.fixture()
 def temp_dir() -> Generator[Path]:
-    """Provides a temporary directory as a string path."""
     with tempfile.TemporaryDirectory() as tmpdir:
         yield Path(tmpdir)
 
@@ -115,40 +114,11 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
     ]
 )
 def client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlClient[Any]]:
-    """Parameterized fixture that yields a fully initialized client.
-
-    Runs cmd_init(), loads the changelog, and returns a fresh client
-    with the loaded changelog. The migrations table is created automatically.
-    """
     database_type = request.param
     # Shared setup
     migrations_dir = temp_dir / "migrations"
     migrations_file = temp_dir / "changelog.json"
     with connection(database_type) as conn:
-        if database_type is SupportedDatabase.POSTGRES:
-            from migrateit.clients.psql import PsqlClient
-
-            # Create migrations table
-            sql, _ = PsqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-            with conn.cursor() as cursor:
-                cursor.execute(sql)  # pyright: ignore
-            conn.commit()
-        elif database_type is SupportedDatabase.MYSQL or database_type is SupportedDatabase.MARIADB:
-            from migrateit.clients.mysql import MySqlClient
-
-            # Create migrations table
-            sql, _ = MySqlClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-            with conn.cursor() as cursor:
-                cursor.execute(sql)  # pyright: ignore
-            conn.commit()
-        elif database_type is SupportedDatabase.SQLITE:
-            # Create the migrations table
-            sql, _ = SqliteClient.create_migrations_table_str(TEST_MIGRATIONS_TABLE)
-            conn.executescript(sql)
-            conn.commit()
-        else:
-            raise ValueError(f"Unsupported database type: {database_type}")
-
         # Run cmd_init to create the initial migration (includes changelog creation)
         cmd_init(
             table_name=TEST_MIGRATIONS_TABLE,
@@ -164,8 +134,11 @@ def client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlClien
             migrations_dir=migrations_dir,
             changelog=changelog,
         )
+        client = get_client(config, conn)
 
-        yield get_client(config, conn)
+        # Run cmd_run to apply initial migration
+        cmd_run(client=client)
+        yield client
 
 
 def _create_migration_file(
@@ -174,7 +147,6 @@ def _create_migration_file(
     sql: str = "SELECT 1;",
     rollback_sql: str = "SELECT 2;",
 ) -> Path:
-    """Create a migration file with the standard rollback split tag."""
     migrations_dir.mkdir(parents=True, exist_ok=True)
     path = migrations_dir / filename
     with open(path, "w") as f:
@@ -185,7 +157,6 @@ def _create_migration_file(
 
 
 def _get_query_rows(client: SqlClient[Any], query: str) -> list[tuple[Any, ...]]:
-    """Execute a query and return rows, handling cursor vs direct execution."""
     match client.changelog.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
@@ -198,11 +169,12 @@ def _get_query_rows(client: SqlClient[Any], query: str) -> list[tuple[Any, ...]]
 
 
 def _migration_is_applied(client: SqlClient[Any], migration_name: str) -> bool:
+    table_name = client._q(TEST_MIGRATIONS_TABLE)
     match client.changelog.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
-                    f"SELECT COUNT(*) FROM {TEST_MIGRATIONS_TABLE} WHERE migration_name = %s",
+                    f"SELECT COUNT(*) FROM {table_name} WHERE migration_name = %s",
                     (migration_name,),
                 )
                 result = cursor.fetchone()
@@ -210,7 +182,7 @@ def _migration_is_applied(client: SqlClient[Any], migration_name: str) -> bool:
                 return bool(result[0])
         case SupportedDatabase.SQLITE:
             cursor = client.connection.execute(
-                f"SELECT COUNT(*) FROM {TEST_MIGRATIONS_TABLE} WHERE migration_name = ?",
+                f"SELECT COUNT(*) FROM {table_name} WHERE migration_name = ?",
                 (migration_name,),
             )
             result = cursor.fetchone()
@@ -242,7 +214,15 @@ def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
             raise NotImplementedError
 
 
+def _mock_create_migration(temp_dir: Path, database: SupportedDatabase) -> None:
+    migrations_dir = temp_dir / "migrations"
+    query = f"""CREATE TABLE IF NOT EXISTS {TEST_TABLE} (id SERIAL PRIMARY KEY);"""
+    rollback = f"""DROP TABLE IF EXISTS {TEST_TABLE};"""
+    _create_migration_file(migrations_dir, MIGRATION_NAME, sql=query, rollback_sql=rollback)
+
+
 def _drop_test_table(client: SqlClient[Any], table_name: str) -> None:
+    table_name = client._q(table_name)
     match client.changelog.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
