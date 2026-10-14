@@ -18,13 +18,6 @@ def force_bytes(exc: Any) -> bytes:
 
 
 def format_color(text: str, color: str, use_color_setting: bool) -> str:
-    """Format text with color.
-
-    Args:
-        text - Text to be formatted with color if `use_color`
-        color - The color start string
-        use_color_setting - Whether or not to color
-    """
     if use_color_setting:
         return f"{color}{text}{NORMAL}"
     else:

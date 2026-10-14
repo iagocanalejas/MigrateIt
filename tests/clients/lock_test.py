@@ -218,7 +218,6 @@ def test_mysql_locker_acquire_timeout() -> None:
 
 
 def test_mysql_locker_release() -> None:
-    """Test MySQL lock release."""
     mock_cursor = MagicMock()
     mock_conn = MagicMock()
     mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)

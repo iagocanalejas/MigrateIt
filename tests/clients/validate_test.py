@@ -7,21 +7,27 @@ from migrateit.clients._client import SqlClient
 from migrateit.models.changelog import Changelog
 from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus
-from tests.clients._clients_test import MIGRATION_NAME
-from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file, _table_exists
+from tests.conftest import (
+    INITIAL_MIGRATION,
+    MIGRATION_NAME,
+    TEST_MIGRATIONS_TABLE,
+    _create_migration_file,
+    _table_exists,
+)
 
 
 def _insert_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -> None:
+    table_name = client._q(TEST_MIGRATIONS_TABLE)
     match client.changelog.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
-                    f"INSERT INTO {TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES (%s, %s)",
+                    f"INSERT INTO {table_name} (migration_name, change_hash) VALUES (%s, %s)",
                     (name, hash_value),
                 )
         case SupportedDatabase.SQLITE:
             client.connection.execute(
-                f"INSERT INTO {TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES (?, ?)",
+                f"INSERT INTO {table_name} (migration_name, change_hash) VALUES (?, ?)",
                 (name, hash_value),
             )
         case _:
@@ -257,7 +263,6 @@ def test_validate_conflict_raises(client: SqlClient[Any], temp_dir: Path) -> Non
 
 
 def test_show_migrations_order_error(client: SqlClient[Any]) -> None:
-    """Test validate_migrations raises when child is applied before parent."""
     changelog = Changelog(
         version=1,
         migrations=[

@@ -4,7 +4,7 @@ import pytest
 
 from migrateit.clients._client import SqlClient
 from migrateit.cmd import cmd_drop, cmd_new, cmd_run
-from tests.conftest import _create_migration_file, _get_query_rows
+from tests.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file, _get_query_rows
 
 
 def test_cmd_drop(client: SqlClient[Any]) -> None:
@@ -16,16 +16,15 @@ def test_cmd_drop(client: SqlClient[Any]) -> None:
 
 
 def test_cmd_drop_applied(client: SqlClient[Any]) -> None:
-    """Test cmd_run applies a new migration and is a no-op on re-run."""
-    cmd_new(client, name="new", no_edit=True)
+    cmd_new(client, name="new", dependencies=("0000",), no_edit=True)
     _create_migration_file(client.migrations_dir, "0001_new.sql")
 
     cmd_run(client=client)
-    rows = _get_query_rows(client, "SELECT migration_name FROM migrations")
+    rows = _get_query_rows(client, f"SELECT migration_name FROM {client._q(TEST_MIGRATIONS_TABLE)}")
     assert len(rows) == 2  # migrateit + new
 
     cmd_drop(client=client, name="0001")
-    rows = _get_query_rows(client, "SELECT migration_name FROM migrations")
+    rows = _get_query_rows(client, f"SELECT migration_name FROM {client._q(TEST_MIGRATIONS_TABLE)}")
     assert len(rows) == 1
 
 

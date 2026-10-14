@@ -30,7 +30,6 @@ class SqliteClient(SqlClient["sqlite3.Connection"]):
     @override
     @classmethod
     def create_migrations_table_str(cls, table_name: str) -> tuple[str, str]:
-        """Create SQLite DDL for the migrations table."""
         if not table_name.isidentifier():
             raise ValueError(f"Unsafe table name: {table_name}")
         migrations_query = f"""
@@ -65,7 +64,6 @@ DROP TABLE IF EXISTS {cls._q(table_name)};
 
     @override
     def is_migrations_table_created(self) -> bool:
-        """Check if the migrations table exists in SQLite."""
         query = """
 SELECT name
 FROM sqlite_master
@@ -127,7 +125,6 @@ ORDER BY name;
 
 
 def _ensure_if_not_exists(sql: str, prefix: str) -> str:
-    """Add IF NOT EXISTS to a CREATE statement if not already present."""
     if prefix not in sql.upper():
         return re.sub(rf"(?i){re.escape(prefix)}", prefix + "IF NOT EXISTS ", sql, count=1)
     return sql

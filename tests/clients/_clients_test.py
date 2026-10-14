@@ -12,9 +12,14 @@ from migrateit.models.changelog import Changelog
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.connection import get_connection
 from migrateit.models.migration import Migration, MigrationStatus
-from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file, _drop_test_table
-
-MIGRATION_NAME = "0001_test_table.sql"
+from migrateit.models.sql import sql_to_statements
+from tests.conftest import (
+    INITIAL_MIGRATION,
+    MIGRATION_NAME,
+    TEST_MIGRATIONS_TABLE,
+    _create_migration_file,
+    _drop_test_table,
+)
 
 # --- get_connection tests ---
 
@@ -142,19 +147,19 @@ def test_validate_config(table_name: object, expected_error: type[Exception], ex
 
 
 def test_create_migrations_table(client: SqlClient[Any]) -> None:
-    """Test that the migrations table SQL is generated correctly."""
     table_name = "test_migrations"
     sql, rollback = client.create_migrations_table_str(table_name)
 
-    lint_errors = sqlfluff.lint(sql, dialect=client.changelog.database.value)
-    assert not [e for e in lint_errors if e["code"] == "PRS"]
+    for stmt in sql_to_statements(sql):
+        lint_errors = sqlfluff.lint(stmt, dialect=client.changelog.database.value)
+        assert not [e for e in lint_errors if e["code"] == "PRS"]
 
-    lint_errors = sqlfluff.lint(rollback, dialect=client.changelog.database.value)
-    assert not [e for e in lint_errors if e["code"] == "PRS"]
+    for stmt in sql_to_statements(rollback):
+        lint_errors = sqlfluff.lint(stmt, dialect=client.changelog.database.value)
+        assert not [e for e in lint_errors if e["code"] == "PRS"]
 
 
 def test_safety_table_name(client: SqlClient[Any]) -> None:
-    """Test unsafe table name rejection."""
     with pytest.raises(ValueError, match="Unsafe table name"):
         client.create_migrations_table_str("invalid-name")
 

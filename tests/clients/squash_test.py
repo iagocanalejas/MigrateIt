@@ -4,26 +4,32 @@ from typing import Any
 from migrateit.clients._client import SqlClient
 from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration
-from tests.clients._clients_test import MIGRATION_NAME
-from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file, _migration_is_applied
+from tests.conftest import (
+    INITIAL_MIGRATION,
+    MIGRATION_NAME,
+    TEST_MIGRATIONS_TABLE,
+    _create_migration_file,
+    _migration_is_applied,
+)
 
 
 def _migrations_got_squashed(client: SqlClient[Any], migrations: list[str]) -> bool:
+    table_name = client._q(TEST_MIGRATIONS_TABLE)
     match client.changelog.database:
         case SupportedDatabase.POSTGRES:
             with client.connection.cursor() as cursor:
                 query = f"""
-SELECT COUNT(*) FROM {TEST_MIGRATIONS_TABLE}
-WHERE migration_name = ANY(%(migrations)s) AND squashed = TRUE
+SELECT COUNT(*) FROM {table_name}
+WHERE migration_name = ANY(%s) AND squashed = TRUE
 """
-                cursor.execute(query, {"migrations": migrations})
+                cursor.execute(query, (migrations,))
                 result = cursor.fetchone()
                 assert result is not None
                 return result[0] == len(migrations)
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 query = f"""
-SELECT COUNT(*) FROM {TEST_MIGRATIONS_TABLE}
+SELECT COUNT(*) FROM {table_name}
 WHERE migration_name IN ({", ".join(["%s"] * len(migrations))}) AND squashed = TRUE
 """
                 cursor.execute(query, migrations)
@@ -32,7 +38,7 @@ WHERE migration_name IN ({", ".join(["%s"] * len(migrations))}) AND squashed = T
                 return result[0] == len(migrations)
         case SupportedDatabase.SQLITE:
             query = f"""
-SELECT COUNT(*) FROM {TEST_MIGRATIONS_TABLE}
+SELECT COUNT(*) FROM {table_name}
 WHERE migration_name IN ({",".join("?" for _ in migrations)}) AND squashed = TRUE
 """
             cursor = client.connection.execute(query, migrations)
@@ -44,11 +50,7 @@ WHERE migration_name IN ({",".join("?" for _ in migrations)}) AND squashed = TRU
 
 
 def test_squash_migrations_marks_old_as_squashed_and_applies_new(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test squashing applied migrations across databases."""
     migrations_dir = temp_dir / "migrations"
-
-    # Apply the initial migration (fake — table already exists from client fixture)
-    client.apply_migration(client.changelog.migrations[0], is_fake=True)
 
     old_migrations = (MIGRATION_NAME, "0002_migration.sql")
     new_migration_name = "0012_squashed.sql"

@@ -34,7 +34,6 @@ def test_cmd_init(database: SupportedDatabase, temp_dir: Path) -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
 def test_cmd_init_already_initialized(database: SupportedDatabase, temp_dir: Path) -> None:
-    """Test cmd_init raises FileExistsError when changelog file already exists."""
     dir_name = temp_dir / "test_dir"
     dir_name.mkdir(parents=True, exist_ok=True)
     (dir_name / "changelog.json").touch()

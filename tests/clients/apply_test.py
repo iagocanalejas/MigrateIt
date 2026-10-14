@@ -13,25 +13,13 @@ from tests.conftest import (
     _create_migration_file,
     _drop_test_table,
     _migration_is_applied,
+    _mock_create_migration,
     _table_exists,
 )
 
 
 def test_apply_migration_success(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test applying a migration and checking it's recorded in the DB."""
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(
-        migrations_dir,
-        MIGRATION_NAME,
-        sql=f"""
-            CREATE TABLE IF NOT EXISTS {TEST_TABLE} (
-                id SERIAL PRIMARY KEY,
-                data TEXT
-            );
-        """,
-    )
-
+    _mock_create_migration(temp_dir, client.changelog.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -46,20 +34,7 @@ def test_apply_migration_success(client: SqlClient[Any], temp_dir: Path) -> None
 
 
 def test_apply_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test fake applying a migration (recorded but SQL not executed)."""
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(
-        migrations_dir,
-        MIGRATION_NAME,
-        sql=f"""
-            CREATE TABLE IF NOT EXISTS {TEST_TABLE} (
-                id SERIAL PRIMARY KEY,
-                data TEXT
-            );
-        """,
-    )
-
+    _mock_create_migration(temp_dir, client.changelog.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -72,16 +47,7 @@ def test_apply_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
 
 
 def test_rollback_migration_success(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test rolling back a migration."""
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(
-        migrations_dir,
-        MIGRATION_NAME,
-        sql=f"CREATE TABLE IF NOT EXISTS {TEST_TABLE} (id SERIAL PRIMARY KEY);",
-        rollback_sql=f"DROP TABLE IF EXISTS {TEST_TABLE};",
-    )
-
+    _mock_create_migration(temp_dir, client.changelog.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -95,8 +61,6 @@ def test_rollback_migration_success(client: SqlClient[Any], temp_dir: Path) -> N
 
 
 def test_rollback_migration_initial(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test rolling back a migration."""
-
     client.apply_migration(client.changelog.root, is_rollback=True)
 
     statuses = client.retrieve_migration_statuses()
@@ -105,11 +69,8 @@ def test_rollback_migration_initial(client: SqlClient[Any], temp_dir: Path) -> N
 
 
 def test_rollback_fake_migration(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test fake applying then rollback."""
     migrations_dir = temp_dir / "migrations"
-
     _create_migration_file(migrations_dir, MIGRATION_NAME)
-
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -123,35 +84,20 @@ def test_rollback_fake_migration(client: SqlClient[Any], temp_dir: Path) -> None
 
 
 def test_fake_rollback_migration(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test fake rolling back a migration."""
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(
-        migrations_dir,
-        MIGRATION_NAME,
-        sql=f"""
-            CREATE TABLE IF NOT EXISTS {TEST_TABLE} (
-                id SERIAL PRIMARY KEY,
-                data TEXT
-            );
-        """,
-    )
-
+    _mock_create_migration(temp_dir, client.changelog.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
     client.apply_migration(migration)
     client.apply_migration(migration, is_fake=True, is_rollback=True)
+
     assert not _migration_is_applied(client, MIGRATION_NAME)
     assert _table_exists(client, TEST_TABLE)
 
 
 def test_apply_migration_already_applied(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test applying an already applied migration raises ValueError."""
     migrations_dir = temp_dir / "migrations"
-
     _create_migration_file(migrations_dir, MIGRATION_NAME)
-
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -161,7 +107,6 @@ def test_apply_migration_already_applied(client: SqlClient[Any], temp_dir: Path)
 
 
 def test_apply_migration_file_missing(client: SqlClient[Any]) -> None:
-    """Test applying a migration with a missing file."""
     migration = Migration(name="not_found.sql", parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -170,11 +115,8 @@ def test_apply_migration_file_missing(client: SqlClient[Any]) -> None:
 
 
 def test_rollback_migration_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:
-    """Test rolling back a migration that was never applied raises ValueError."""
     migrations_dir = temp_dir / "migrations"
-
     _create_migration_file(migrations_dir, MIGRATION_NAME)
-
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
