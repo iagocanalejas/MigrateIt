@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
 class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
     VARNAME_DB_URL = os.getenv("VARNAME_DB_URL", "DB_URL")
-    VARNAME_DB_FILE = os.getenv("VARNAME_DB_FILE", "DB_FILE")
     VARNAME_DB_HOST = os.getenv("VARNAME_DB_HOST", "DB_HOST")
     VARNAME_DB_PORT = os.getenv("VARNAME_DB_PORT", "DB_PORT")
     VARNAME_DB_USER = os.getenv("VARNAME_DB_USER", "DB_USER")
@@ -317,6 +316,10 @@ def get_client(config: MigrateItConfig, connection: Connection) -> SqlClient[Any
             from .mysql import MySqlClient
 
             return MySqlClient(mysql_conn, config)  # type: ignore[arg-type]
+        case (SupportedDatabase.ORACLE, _ as oracle_conn):
+            from .oracle import OracleClient
+
+            return OracleClient(oracle_conn, config)  # type: ignore[arg-type]
         case (SupportedDatabase.POSTGRES, _ as pg_conn):
             from .psql import PsqlClient
 

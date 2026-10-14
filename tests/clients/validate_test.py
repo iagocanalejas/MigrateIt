@@ -30,6 +30,12 @@ def _insert_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -
                 f"INSERT INTO {table_name} (migration_name, change_hash) VALUES (?, ?)",
                 (name, hash_value),
             )
+        case SupportedDatabase.ORACLE:
+            with client.connection.cursor() as cursor:
+                cursor.execute(
+                    f"INSERT INTO {table_name} (migration_name, change_hash) VALUES (:param, :param)",
+                    (name, hash_value),
+                )
         case _:
             raise NotImplementedError
     client.connection.commit()
@@ -137,11 +143,10 @@ def test_validate_drop_table_statement(client: SqlClient[Any], temp_dir: Path) -
 
 def test_validate_alter_table_add_column(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
-    _create_migration_file(
-        migrations_dir,
-        MIGRATION_NAME,
-        sql=f"ALTER TABLE {TEST_MIGRATIONS_TABLE} ADD COLUMN new_col TEXT;",
-    )
+    sql = f"ALTER TABLE {TEST_MIGRATIONS_TABLE} ADD COLUMN new_col VARCHAR(255);"
+    if client.changelog.database == SupportedDatabase.ORACLE:
+        sql = f"ALTER TABLE {TEST_MIGRATIONS_TABLE} ADD new_col VARCHAR(255);"
+    _create_migration_file(migrations_dir, MIGRATION_NAME, sql=sql)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     assert client.validate_sql_syntax(migration) is None
 

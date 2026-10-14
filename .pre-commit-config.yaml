@@ -42,5 +42,6 @@ repos:
           - inquirer
           - mysql-connector-python
           - sqlfluff
+          - oracledb
           - pytest
           - psycopg[binary]

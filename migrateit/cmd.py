@@ -65,6 +65,10 @@ def _get_init_migration_sql(database: SupportedDatabase, table_name: str) -> tup
             from migrateit.clients.mysql import MySqlClient
 
             return MySqlClient.create_migrations_table_str(table_name=table_name)
+        case SupportedDatabase.ORACLE:
+            from migrateit.clients.oracle import OracleClient
+
+            return OracleClient.create_migrations_table_str(table_name=table_name)
         case SupportedDatabase.POSTGRES:
             from migrateit.clients.psql import PsqlClient
 

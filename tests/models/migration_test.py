@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from tests.clients._clients_test import MIGRATION_NAME
+from tests.conftest import MIGRATION_NAME
 
 from migrateit.constants import ROLLBACK_SPLIT_TAG
 from migrateit.models.changelog import Changelog

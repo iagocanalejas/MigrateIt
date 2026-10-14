@@ -2,6 +2,7 @@
 coverage
 mypy
 mysql-connector-python
+oracledb
 psycopg[binary]
 pysqlite3
 pytest

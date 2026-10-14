@@ -4,7 +4,7 @@ import pytest
 
 from migrateit.clients._client import SqlClient
 from migrateit.cmd import cmd_new, cmd_run, cmd_squash
-from tests.conftest import _create_migration_file, _get_query_rows
+from tests.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file, _get_query_rows
 
 
 def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:
@@ -24,7 +24,7 @@ def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:
     assert "0002_second" not in changelog_names
 
     # Verify squashed state in database
-    rows = _get_query_rows(client, "SELECT migration_name, squashed FROM migrations")
+    rows = _get_query_rows(client, f"SELECT migration_name, squashed FROM {client._q(TEST_MIGRATIONS_TABLE)}")
     applied = {row[0]: row[1] for row in rows}
 
     assert "0003_squashed_0001_0002.sql" in applied

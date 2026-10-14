@@ -45,6 +45,17 @@ WHERE migration_name IN ({",".join("?" for _ in migrations)}) AND squashed = TRU
             result = cursor.fetchone()
             assert result is not None
             return result[0] == len(migrations)
+        case SupportedDatabase.ORACLE:
+            with client.connection.cursor() as cursor:
+                placeholders = ", ".join(f":{i + 1}" for i in range(len(migrations)))
+                query = f"""
+SELECT COUNT(*) FROM {table_name}
+WHERE migration_name IN ({placeholders}) AND squashed = 1
+"""
+                cursor.execute(query, migrations)
+                result = cursor.fetchone()
+                assert result is not None
+                return result[0] == len(migrations)
         case _:
             raise NotImplementedError
 

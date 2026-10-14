@@ -48,7 +48,31 @@ services:
       timeout: 5s
       retries: 5
 
+  oracle:
+    image: gvenzl/oracle-free:23-slim-faststart
+    restart: unless-stopped
+    environment:
+      ORACLE_DATABASE: migrateit
+      ORACLE_PASSWORD: password
+      APP_USER: oracle
+      APP_USER_PASSWORD: password
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "timeout 5 bash -c 'cat < /dev/null > /dev/tcp/localhost/1521' && echo OK || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
 volumes:
   postgres_data:
   mysql_data:
   mariadb_data:
+  oracle_data:

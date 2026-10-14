@@ -11,9 +11,10 @@ case "${1:-start}" in
     docker compose up -d --wait
     echo ""
     echo "Ready:"
-    echo "  postgres  → localhost:5432  (user: postgres, db: migrateit, pass: '')"
-    echo "  mysql     → localhost:3317  (user: root,   db: migrateit, pass: '')"
-    echo "  mariadb   → localhost:3306  (user: root,   db: migrateit, pass: '')"
+    echo "  postgres  → localhost:5432  (user: postgres, db: migrateit, pass: 'password')"
+    echo "  mysql     → localhost:3317  (user: root,   db: migrateit, pass: 'password')"
+    echo "  mariadb   → localhost:3306  (user: root,   db: migrateit, pass: 'password')"
+    echo "  oracle    → localhost:1521  (user: oracle, db: migrateit, pass: 'password')"
     ;;
   stop)
     echo "Stopping database containers..."
