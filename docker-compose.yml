@@ -4,9 +4,8 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ""
+      POSTGRES_PASSWORD: "password"
       POSTGRES_DB: migrateit
-      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
     volumes:
@@ -21,9 +20,8 @@ services:
     image: mysql:8.4
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ""
+      MYSQL_ROOT_PASSWORD: "password"
       MYSQL_DATABASE: migrateit
-      MYSQL_ALLOW_EMPTY_PASSWORD: true
     ports:
       - "3317:3306"
     volumes:
@@ -38,9 +36,8 @@ services:
     image: mariadb:12
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: ""
+      MARIADB_ROOT_PASSWORD: "password"
       MARIADB_DATABASE: migrateit
-      MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: true
     ports:
       - "3306:3306"
     volumes:

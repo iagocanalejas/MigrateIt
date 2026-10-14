@@ -17,7 +17,7 @@ case "${1:-start}" in
     ;;
   stop)
     echo "Stopping database containers..."
-    docker compose down
+    docker compose down -v
     ;;
   restart)
     docker compose down

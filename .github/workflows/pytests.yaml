@@ -17,10 +17,12 @@ jobs:
         include:
           - python-version: "3.13"
             postgres-version: "17"
-            mysql-version: "9.7"
+            mysql-version: "8"
+            mariadb-version: "12"
           - python-version: "3.14"
             postgres-version: "18"
-            mysql-version: "26.7"
+            mysql-version: "26"
+            mariadb-version: "12"
 
     services:
       postgres:
@@ -31,15 +33,35 @@ jobs:
           POSTGRES_DB: migrateit
         ports:
           - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
       mysql:
         image: mysql:${{ matrix.mysql-version }}
         env:
           MYSQL_DATABASE: migrateit
           MYSQL_ROOT_PASSWORD: password
         ports:
+          - 3317:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      mariadb:
+        image: mariadb:${{ matrix.mariadb-version }}
+        env:
+          MARIADB_DATABASE: migrateit
+          MARIADB_ROOT_PASSWORD: password
+        ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 5
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v7
