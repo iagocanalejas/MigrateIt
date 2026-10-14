@@ -95,18 +95,20 @@ def write_into_migration_file(migration_file: Path, sql: str | None, rollback: s
         raise ValueError(f"{migration_file=} does not contain a rollback section ({C.ROLLBACK_SPLIT_TAG})")
 
     parts = migration_content.split(C.ROLLBACK_SPLIT_TAG, maxsplit=1)
-    new_content = (
-        parts[0].rstrip()
-        + "\n\n"
-        + (sql.strip() if sql else "")
-        + "\n\n"
-        + C.ROLLBACK_SPLIT_TAG
-        + parts[1].rstrip()
-        + "\n\n"
-        + (rollback.strip() if rollback else "")
-    )
+
+    forward_part = parts[0].rstrip()
+    if sql and sql.strip():
+        forward_part = f"{forward_part}\n\n{sql.strip()}"
+
+    rollback_part = parts[1].rstrip()
+    if rollback and rollback.strip():
+        rollback_part = f"{rollback_part}\n\n{rollback.strip()}"
+
+    new_content = f"{forward_part}\n\n{C.ROLLBACK_SPLIT_TAG}\n\n{rollback_part}\n"
     new_content = re.sub(r"\n{3,}", "\n\n", new_content)
 
+    if not migration_file.exists():
+        raise FileNotFoundError(f"{migration_file=} does not exist. Removed while processing.")
     migration_file.write_text(new_content, encoding="utf-8")
 
 
