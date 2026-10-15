@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -5,6 +6,55 @@ import pytest
 from migrateit.models.changelog import Changelog
 from migrateit.models.migration import Migration, MigrationStatus
 from migrateit.models.migration_manager import MigrationManager
+
+# --- create_new_migration — error paths ---
+
+
+@pytest.mark.unit
+def test_create_new_migration_invalid_name(temp_dir: Path) -> None:
+    path = temp_dir / "migrations"
+    path.mkdir(parents=True, exist_ok=True)
+    changelog = Changelog(version=1, migrations=[Migration(name="0000_init.sql", initial=True, parents=())])
+    manager = MigrationManager(changelog)
+    with pytest.raises(ValueError, match="not a valid identifier"):
+        manager.create_new_migration(migrations_dir=path, name="invalid-name")
+
+
+@pytest.mark.unit
+def test_create_new_migration_dependency_not_found(temp_dir: Path) -> None:
+    path = temp_dir / "migrations"
+    path.mkdir(parents=True, exist_ok=True)
+    changelog = Changelog(version=1, migrations=[Migration(name="0000_init.sql", initial=True, parents=())])
+    manager = MigrationManager(changelog)
+    with pytest.raises(ValueError, match="Some dependencies"):
+        manager.create_new_migration(migrations_dir=path, name="test", dependencies=("9999_missing",))
+
+
+@pytest.mark.unit
+def test_create_new_migration_initial_with_deps_raises(temp_dir: Path) -> None:
+    path = temp_dir / "migrations"
+    path.mkdir(parents=True, exist_ok=True)
+    changelog = Changelog(version=1, migrations=[])
+    manager = MigrationManager(changelog)
+    fake_migration = Migration(name="0000_init.sql", initial=True)
+    with (
+        patch.object(manager, "exist_migration_by_name", return_value=True),
+        patch.object(manager, "get_migration_by_name", return_value=fake_migration),
+    ):
+        with pytest.raises(ValueError, match="Initial migration cannot have dependencies"):
+            manager.create_new_migration(migrations_dir=path, name="test", dependencies=("0000_init.sql",))
+
+
+# --- get_migration_by_name — error path ---
+
+
+@pytest.mark.unit
+def test_get_migration_by_name_invalid_prefix() -> None:
+    changelog = Changelog(version=1, migrations=[Migration(name="0000_init.sql", initial=True)])
+    manager = MigrationManager(changelog)
+    with pytest.raises(ValueError, match="Invalid"):
+        manager.get_migration_by_name("not_a_number")
+
 
 # --- manager.exist_migration_by_name tests ---
 
@@ -79,6 +129,56 @@ def test_changelog_file_get_migration_by_name_abs_path() -> None:
     manager = MigrationManager(changelog)
     result = manager.get_migration_by_name("/some/path/0001_test.sql")
     assert result.name == "0001_test.sql"
+
+
+# --- _get_next_migration_path — overwrite index ---
+
+
+@pytest.mark.unit
+def test_get_next_migration_path_overwrite_index(temp_dir: Path) -> None:
+    path = temp_dir / "migrations"
+    path.mkdir(parents=True, exist_ok=True)
+    # Create a file with index "0002" to match the next migration index
+    # (we have 2 existing migrations, so next is "0002")
+    existing = path / "0002_other.sql"
+    existing.write_text("header\n\n-- Rollback migration\n\nrollback\n")
+
+    changelog = Changelog(
+        version=1,
+        migrations=[
+            Migration(name="0000_init.sql", initial=True, parents=()),
+            Migration(name="0001_existing.sql", parents=("0000_init.sql",)),
+        ],
+    )
+    manager = MigrationManager(changelog)
+
+    with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=True):
+        result = manager._get_next_migration_path(path, "new_name")
+
+    assert result.name == "0002_new_name.sql"
+    # The old file with same index should be gone
+    assert not existing.exists()
+
+
+@pytest.mark.unit
+def test_get_next_migration_path_overwrite_index_declined(temp_dir: Path) -> None:
+    path = temp_dir / "migrations"
+    path.mkdir(parents=True, exist_ok=True)
+    existing = path / "0002_other.sql"
+    existing.write_text("header\n\n-- Rollback migration\n\nrollback\n")
+
+    changelog = Changelog(
+        version=1,
+        migrations=[
+            Migration(name="0000_init.sql", initial=True, parents=()),
+            Migration(name="0001_existing.sql", parents=("0000_init.sql",)),
+        ],
+    )
+    manager = MigrationManager(changelog)
+
+    with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=False):
+        with pytest.raises(FileExistsError, match="Migration index 0002 already exists"):
+            manager._get_next_migration_path(path, "new_name")
 
 
 # --- manager.build_migration_plan tests ---

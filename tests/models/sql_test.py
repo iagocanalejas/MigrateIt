@@ -4,6 +4,7 @@ from migrateit.models.config import SupportedDatabase
 from migrateit.models.sql import patch_sql_statement
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "database, input_sql, expected_sql",
     [

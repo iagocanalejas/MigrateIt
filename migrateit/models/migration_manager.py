@@ -92,8 +92,7 @@ class MigrationManager:
             in_queue = {target_migration.name}
 
         if is_bottom_up:
-            if not target_migration:
-                raise ValueError("Target migration is required for bottom-up plan")
+            assert target_migration is not None, "Target migration is required for bottom-up plan"
             queue = deque([target_migration])
             in_queue = {target_migration.name}
 

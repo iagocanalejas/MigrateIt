@@ -1,9 +1,12 @@
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from migrateit.clients._client import SqlClient
 from migrateit.cmd import cmd_drop, cmd_new, cmd_run
+from migrateit.models.migration import Migration
+from tests.cmd.conftest import _mock_client
 from tests.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file, _get_query_rows
 
 
@@ -34,3 +37,39 @@ def test_cmd_drop_no_exists(client: SqlClient[Any]) -> None:
 
     with pytest.raises(FileNotFoundError, match="does not exist"):
         cmd_drop(client, name="0001")
+
+
+@pytest.mark.unit
+def test_cmd_drop_is_parent(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+    mock_client.changelog.migrations = [
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_child.sql", parents=("0000_init.sql",)),
+    ]
+
+    with pytest.raises(ValueError, match="it is a parent"):
+        cmd_drop(mock_client, name="0000_init.sql")
+
+
+@pytest.mark.unit
+def test_cmd_drop_is_initial(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+    mock_client.changelog.migrations = [
+        Migration(name="0000_init.sql", initial=True, parents=()),
+    ]
+
+    with pytest.raises(ValueError, match="Cannot drop the initial"):
+        cmd_drop(mock_client, name="0000_init.sql")
+
+
+@pytest.mark.unit
+def test_cmd_drop_file_not_exists(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+    # Create a migration that's not a parent and not initial
+    mock_client.changelog.migrations = [
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_test.sql", parents=("0000_init.sql",)),
+    ]
+    # The file doesn't exist (we didn't create it) — get_full_path raises
+    with pytest.raises(FileNotFoundError, match="does not exist or is not a valid SQL file"):
+        cmd_drop(mock_client, name="0001_test.sql")

@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -6,6 +7,7 @@ import pytest
 from migrateit.clients._client import SqlClient
 from migrateit.clients._lock import _DummyLocker
 from migrateit.cmd import cmd_new, cmd_run
+from tests.cmd.conftest import _mock_client
 from tests.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file, _get_query_rows, _table_exists
 
 
@@ -77,6 +79,13 @@ def test_cmd_run_rollbacks_on_error(client: SqlClient[Any]) -> None:
         with pytest.raises(Exception):
             cmd_run(client, name="0001")
         spy_connection.rollback.assert_called_once()
+
+
+@pytest.mark.unit
+def test_cmd_run_rollback_no_name(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+    with pytest.raises(ValueError, match="Rollback requires a target"):
+        cmd_run(mock_client, is_rollback=True)
 
 
 def test_cmd_run_by_name_not_found(client: SqlClient[Any]) -> None:

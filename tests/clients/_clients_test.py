@@ -7,12 +7,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 import sqlfluff
 
-from migrateit.clients._client import SqlClient
+from migrateit.clients._client import SqlClient, get_client
 from migrateit.models.changelog import Changelog
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.connection import get_connection
 from migrateit.models.migration import Migration, MigrationStatus
 from migrateit.models.sql import sql_to_statements
+from tests.clients.conftest import _client_with_mocked_connection
 from tests.conftest import (
     INITIAL_MIGRATION,
     MIGRATION_NAME,
@@ -20,6 +21,22 @@ from tests.conftest import (
     _create_migration_file,
     _drop_test_table,
 )
+
+# --- _q — identifier quoting ---
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("name", "quote_char"),
+    [
+        pytest.param('my"table', '"', id="quote_in_name"),
+        pytest.param("\x00null", '"', id="null_byte"),
+    ],
+)
+def test_q_invalid_name(name: str, quote_char: str) -> None:
+    with pytest.raises(ValueError, match="Invalid identifier"):
+        SqlClient._q(name, quote_char)
+
 
 # --- get_connection tests ---
 
@@ -35,8 +52,8 @@ from tests.conftest import (
     ],
 )
 def test_get_connection(database: SupportedDatabase, driver: str) -> None:
+    mock_conn: Any = MagicMock()
     with patch(driver) as mock_connect:
-        mock_conn: Any = MagicMock()
         mock_connect.return_value = mock_conn
         result = get_connection(database)
         assert result == mock_conn
@@ -79,6 +96,12 @@ def test_get_connection_oracle_connection_string() -> None:
         result = get_connection(SupportedDatabase.ORACLE)
         assert result == mock_conn
         mock_connect.assert_called_once()
+
+
+@pytest.mark.unit
+def test_get_connection_invalid_database() -> None:
+    with pytest.raises(NotImplementedError, match="is not supported"):
+        get_connection("database")  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
@@ -155,8 +178,7 @@ def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
 
 
 def test_create_migrations_table(client: SqlClient[Any]) -> None:
-    table_name = "test_migrations"
-    sql, rollback = client.create_migrations_table_str(table_name)
+    sql, rollback = client.create_migrations_table_str("create_migration_table")
 
     for stmt in sql_to_statements(sql):
         lint_errors = sqlfluff.lint(stmt, dialect=client.database.value)
@@ -224,16 +246,39 @@ def test_not_applied_migration_returns_false(client: SqlClient[Any], temp_dir: P
 # --- retrieve_migration_statuses tests ---
 
 
-def test_no_table_returns_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _drop_test_table(client, TEST_MIGRATIONS_TABLE)
+@pytest.mark.unit
+def test_no_table_returns_not_applied(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
 
-    _create_migration_file(migrations_dir, "0001_test.sql")
-    migrations = [Migration(name="0001_test.sql", parents=(INITIAL_MIGRATION,))]
-    client.config.changelog = Changelog(version=1, migrations=[Migration(name=INITIAL_MIGRATION), *migrations])
-
+    # initial not applied
     statuses = client.retrieve_migration_statuses()
-    assert statuses["0001_test.sql"] == MigrationStatus.NOT_APPLIED
+    assert statuses[INITIAL_MIGRATION] == MigrationStatus.NOT_APPLIED
+
+
+@pytest.mark.unit
+def test_retrieve_migration_statuses_hash_mismatch(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    client.connection.execute.return_value.fetchone.return_value = [True]  # is_migrations_table_created
+    client.connection.execute.return_value.fetchall.return_value = [("0001_test.sql", "db_hash")]
+
+    _create_migration_file(client.migrations_dir, "0001_test.sql")
+    client.config.changelog.migrations.append(Migration(name="0001_test.sql", parents=(INITIAL_MIGRATION,)))
+
+    # return a different hash than the DB
+    with patch.object(Migration, "get_content_and_hash", return_value=("fw", "rb", "file_hash")):
+        statuses = client.retrieve_migration_statuses()
+    assert statuses["0001_test.sql"] == MigrationStatus.CONFLICT
+
+
+@pytest.mark.unit
+def test_retrieve_migration_statuses_removed(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    client.connection.execute.return_value.fetchone.return_value = [True]
+    client.connection.execute.return_value.fetchall.return_value = [("ghost.sql", "some_hash")]
+
+    # ghost.sql appears because it's in the DB but not in the changelog
+    statuses = client.retrieve_migration_statuses()
+    assert statuses["ghost.sql"] == MigrationStatus.REMOVED
 
 
 # --- update_migration_hash tests ---
@@ -259,9 +304,38 @@ def test_update_migration_hash(client: SqlClient[Any], temp_dir: Path) -> None:
     assert old_hash == new_hash  # same file, same hash
 
 
+@pytest.mark.unit
+def test_update_initial_rollback_is_nop(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    migration = Migration(name="0000_init.sql", initial=True)
+
+    client._update_migration_changelog(migration, "hash", is_rollback=True)
+
+    client.connection.cursor.return_value.execute.assert_not_called()
+
+
 # --- _get_database_hash tests ---
 
 
 def test_get_database_hash_not_found(client: SqlClient[Any]) -> None:
     with pytest.raises(ValueError, match="not found in the database"):
         client._get_database_hash("nonexistent.sql")
+
+
+# --- get_client tests ---
+
+
+@pytest.mark.unit
+def test_get_client_no_supported_database() -> None:
+    config = MigrateItConfig(
+        table_name="table",
+        migrations_dir=Path("/tmp"),
+        changelog=Changelog(
+            version=1,
+            path=Path("/tmp/changelog.json"),
+            migrations=[],
+            database="unsupported",  # type: ignore[arg-type]
+        ),
+    )
+    with pytest.raises(NotImplementedError, match="not supported"):
+        get_client(config, MagicMock())

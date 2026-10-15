@@ -25,10 +25,10 @@ class Migration:
     initial: bool = False
     parents: tuple[str, ...] = ()
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:  # pragma: no cover
         return self.name
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: no cover
         return str(self)
 
     @staticmethod

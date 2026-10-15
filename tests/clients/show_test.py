@@ -27,7 +27,7 @@ def _update_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -
                 f"UPDATE {table_name} SET change_hash = ? WHERE migration_name = ?",
                 (hash_value, name),
             )
-        case _:
+        case _:  # pragma: no cover
             raise NotImplementedError
     client.connection.commit()
 

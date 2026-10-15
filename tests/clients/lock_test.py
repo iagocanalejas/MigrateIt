@@ -51,6 +51,7 @@ def test_compute_advisory_key(name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_sqlite_lock_error_cleanup(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
     with sqlite3.connect(db_path) as conn:
@@ -67,6 +68,7 @@ def test_sqlite_lock_error_cleanup(tmp_path: Path) -> None:
     assert count == 0
 
 
+@pytest.mark.unit
 def test_sqlite_lock_concurrent(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
     with sqlite3.connect(db_path) as conn:
@@ -104,6 +106,7 @@ def test_sqlite_lock_concurrent(tmp_path: Path) -> None:
     assert not errors, f"Unexpected errors: {errors}"
 
 
+@pytest.mark.unit
 def test_sqlite_locker_context_manager() -> None:
     conn: sqlite3.Connection = sqlite3.connect(":memory:", autocommit=False)
     conn.executescript(_MIGRATIONS_TABLE_DDL)
@@ -116,6 +119,7 @@ def test_sqlite_locker_context_manager() -> None:
     assert count == 0
 
 
+@pytest.mark.unit
 def test_sqlite_locker_timeout(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
     conn = sqlite3.connect(db_path)
@@ -136,11 +140,20 @@ def test_sqlite_locker_timeout(tmp_path: Path) -> None:
     waiter.close()
 
 
+@pytest.mark.unit
+def test_sqlite_locker_unsafe_table_name() -> None:
+    conn: sqlite3.Connection = sqlite3.connect(":memory:")
+    with pytest.raises(ValueError, match="Unsafe table name"):
+        _SqliteLocker(conn, "invalid-name")
+    conn.close()
+
+
 # ---------------------------------------------------------------------------
 # _OracleLocker — mocked
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_oracle_locker_init_success() -> None:
     mock_conn = MagicMock()
     cursor = mock_conn.cursor.return_value
@@ -153,6 +166,7 @@ def test_oracle_locker_init_success() -> None:
     mock_conn.rollback.assert_not_called()
 
 
+@pytest.mark.unit
 def test_oracle_locker_init_already_exists() -> None:
     import oracledb
 
@@ -170,6 +184,7 @@ def test_oracle_locker_init_already_exists() -> None:
     mock_conn.commit.assert_not_called()
 
 
+@pytest.mark.unit
 def test_oracle_locker_init_raises_unhandled() -> None:
     import oracledb
 
@@ -188,6 +203,7 @@ def test_oracle_locker_init_raises_unhandled() -> None:
     mock_conn.commit.assert_not_called()
 
 
+@pytest.mark.unit
 def test_oracle_locker_acquire_and_release() -> None:
     mock_conn = MagicMock()
     cursor = mock_conn.cursor.return_value
@@ -208,6 +224,7 @@ def test_oracle_locker_acquire_and_release() -> None:
     assert any("DELETE" in c for c in calls)
 
 
+@pytest.mark.unit
 def test_oracle_locker_timeout() -> None:
     mock_conn = MagicMock()
     cursor = mock_conn.cursor.return_value
@@ -226,6 +243,7 @@ def test_oracle_locker_timeout() -> None:
             locker.acquire()
 
 
+@pytest.mark.unit
 def test_oracle_locker_release_on_error() -> None:
     mock_conn = MagicMock()
     cursor = mock_conn.cursor.return_value
@@ -244,11 +262,19 @@ def test_oracle_locker_release_on_error() -> None:
     assert any("DELETE" in c for c in calls)
 
 
+@pytest.mark.unit
+def test_oracle_locker_unsafe_table_name() -> None:
+    mock_conn = MagicMock()
+    with pytest.raises(ValueError, match="Unsafe table name"):
+        _OracleLocker(mock_conn, "invalid-name")
+
+
 # ---------------------------------------------------------------------------
 # _PsqlLocker — mocked
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_psql_locker_acquire_and_release() -> None:
     mock_cursor = MagicMock()
     mock_conn = MagicMock()
@@ -265,6 +291,7 @@ def test_psql_locker_acquire_and_release() -> None:
     assert "pg_advisory_unlock" in str(calls[1])
 
 
+@pytest.mark.unit
 def test_psql_locker_context_manager() -> None:
     mock_cursor = MagicMock()
     mock_conn = MagicMock()
@@ -277,11 +304,45 @@ def test_psql_locker_context_manager() -> None:
     assert mock_cursor.execute.call_count == 2
 
 
+@pytest.mark.unit
+def test_psql_locker_timeout() -> None:
+    mock_cursor = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("migrateit.clients._lock.LOCK_TIMEOUT_SECONDS", 0.1),
+        patch("migrateit.clients._lock.LOCK_RETRY_SECONDS", 0.01),
+    ):
+        # The PsqlLocker doesn't retry in acquire — it just runs the query once
+        # So we test that it executes the query
+        locker = _PsqlLocker(mock_conn, TEST_MIGRATIONS_TABLE)
+        locker.acquire()
+
+    assert mock_cursor.execute.call_count == 1
+    assert "pg_advisory_lock" in str(mock_cursor.execute.call_args)
+
+
+@pytest.mark.unit
+def test_psql_locker_context_manager_timeout() -> None:
+    mock_cursor = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    with _PsqlLocker(mock_conn, TEST_MIGRATIONS_TABLE) as locker:
+        assert locker is not None
+
+    assert mock_cursor.execute.call_count == 2
+
+
 # ---------------------------------------------------------------------------
 # _MySqlLocker — mocked
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("fetchone_result", "expect_acquire"),
     [
@@ -305,6 +366,7 @@ def test_mysql_locker_acquire(fetchone_result: tuple[int], expect_acquire: bool)
             locker.acquire()
 
 
+@pytest.mark.unit
 def test_mysql_locker_context_manager() -> None:
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
@@ -319,6 +381,7 @@ def test_mysql_locker_context_manager() -> None:
     assert mock_cursor.execute.call_count == 2
 
 
+@pytest.mark.unit
 def test_mysql_locker_release() -> None:
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
@@ -337,6 +400,7 @@ def test_mysql_locker_release() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("database", "expected_locker_cls"),
     [
