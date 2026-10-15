@@ -83,16 +83,6 @@ DROP SEQUENCE {seq_name};
             return cursor.fetchall()
 
     @override
-    def is_migration_applied(self, migration: Migration) -> bool:
-        query = f"""
-SELECT 1
-FROM dual
-WHERE EXISTS (SELECT 1 FROM {self._q(self.table_name)} WHERE migration_name = {self.placeholder})
-"""
-        result = self.execute_for_one(query, (migration.name,))
-        return result is not None and result[0] == 1
-
-    @override
     def is_migrations_table_created(self) -> bool:
         query = """
 SELECT COUNT(*)

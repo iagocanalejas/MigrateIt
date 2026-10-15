@@ -83,12 +83,12 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
     @override
     def is_migration_applied(self, migration: Migration) -> bool:
         query = f"""
-SELECT EXISTS (
-    SELECT 1 FROM {self._q(self.table_name)} WHERE migration_name = {self.placeholder}
-);
+SELECT COUNT(*)
+FROM {self._q(self.table_name)}
+WHERE migration_name = {self.placeholder};
 """
         result = self.execute_for_one(query, (migration.name,))
-        return bool(result[0]) if result else False
+        return result[0] > 0 if result else False
 
     @override
     def retrieve_migration_statuses(self) -> dict[str, MigrationStatus]:
