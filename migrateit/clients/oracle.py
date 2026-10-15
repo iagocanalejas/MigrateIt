@@ -91,40 +91,6 @@ WHERE UPPER(table_name) = UPPER(:1)
         result = self.execute_for_one(query, (self.table_name,))
         return result is not None and result[0] == 1
 
-    @override
-    def _update_migration_changelog(self, migration: Migration, hash: str, is_rollback: bool) -> None:
-        if migration.initial and is_rollback:
-            return
-
-        if is_rollback and not migration.initial:
-            query = f"""
-DELETE FROM {self._q(self.table_name)}
-WHERE migration_name = :param
-    AND change_hash = :param
-"""
-            self.execute(query, (migration.name, hash))
-        else:
-            query = f"""
-MERGE INTO {self._q(self.table_name)} dst
-USING (SELECT :param AS migration_name, :param AS change_hash FROM DUAL) src
-ON (dst.migration_name = src.migration_name)
-WHEN NOT MATCHED THEN
-    INSERT (migration_name, change_hash) VALUES (src.migration_name, src.change_hash)
-"""
-            self.execute(query, (migration.name, hash))
-
-    @override
-    def _get_database_hash(self, migration_name: str) -> str:
-        query = f"""
-SELECT change_hash
-FROM {self._q(self.table_name)}
-WHERE migration_name = :param
-"""
-        result = self.execute_for_one(query, (migration_name,))
-        if not result or not result[0]:
-            raise ValueError(f"Migration {migration_name} not found in the database")
-        return result[0]
-
     @property
     @override
     def export_items(self) -> list[ExportItem]:
