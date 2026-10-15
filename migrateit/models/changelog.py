@@ -11,7 +11,7 @@ from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Changelog:
     version: int
     database: SupportedDatabase = SupportedDatabase.POSTGRES
@@ -20,7 +20,7 @@ class Changelog:
 
     @functools.cached_property
     def root(self) -> Migration:
-        if len(self.migrations) == 0:
+        if not self.migrations:
             raise ValueError("No migrations found. Changelog is not initialized.")
         if not self.migrations[0].initial:
             raise ValueError("Initial migration is not defined in the changelog")

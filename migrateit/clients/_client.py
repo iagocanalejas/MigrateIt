@@ -292,22 +292,20 @@ VALUES ({self.placeholder}, {self.placeholder});
 
 
 def get_client(config: MigrateItConfig, connection: Connection) -> SqlClient[Any]:
-    match (config.changelog.database, connection):
-        case (SupportedDatabase.MYSQL | SupportedDatabase.MARIADB, _ as mysql_conn):
-            from .mysql import MySqlClient
+    if config.changelog.database in [SupportedDatabase.MYSQL, SupportedDatabase.MARIADB]:
+        from .mysql import MySqlClient
 
-            return MySqlClient(mysql_conn, config)  # type: ignore[arg-type]
-        case (SupportedDatabase.ORACLE, _ as oracle_conn):
-            from .oracle import OracleClient
+        return MySqlClient(connection, config)  # type: ignore[arg-type]
+    if config.changelog.database == SupportedDatabase.ORACLE:
+        from .oracle import OracleClient
 
-            return OracleClient(oracle_conn, config)  # type: ignore[arg-type]
-        case (SupportedDatabase.POSTGRES, _ as pg_conn):
-            from .psql import PsqlClient
+        return OracleClient(connection, config)  # type: ignore[arg-type]
+    if config.changelog.database == SupportedDatabase.POSTGRES:
+        from .psql import PsqlClient
 
-            return PsqlClient(pg_conn, config)  # type: ignore[arg-type]
-        case (SupportedDatabase.SQLITE, _ as sq_conn):
-            from .sqlite import SqliteClient
+        return PsqlClient(connection, config)  # type: ignore[arg-type]
+    if config.changelog.database == SupportedDatabase.SQLITE:
+        from .sqlite import SqliteClient
 
-            return SqliteClient(sq_conn, config)  # type: ignore[arg-type]
-        case _:
-            raise NotImplementedError(f"Database {config.changelog.database} is not supported")
+        return SqliteClient(connection, config)  # type: ignore[arg-type]
+    raise NotImplementedError(f"Database {config.changelog.database} is not supported")
