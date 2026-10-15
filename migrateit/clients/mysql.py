@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 from collections import defaultdict
 from functools import partial
 from typing import TYPE_CHECKING, Any, override
@@ -214,16 +213,6 @@ WHERE trigger_schema {schemas_filter};
                 query_params=system_schemas,
             ),
         ]
-
-    @override
-    def _patch_sql_statement(self, sql: str) -> str:
-        sql = super()._patch_sql_statement(sql)
-        upper_sql = sql.upper()
-
-        if "ALTER TABLE" in upper_sql:
-            if "ADD COLUMN" in upper_sql and "IF NOT EXISTS" not in upper_sql:
-                return re.sub("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", sql, flags=re.IGNORECASE)
-        return sql
 
 
 # ---------------------------------------------------------------------------

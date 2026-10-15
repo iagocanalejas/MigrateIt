@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import os
-import re
 from abc import ABC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
@@ -16,7 +15,7 @@ from migrateit.models.changelog import Changelog
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
 from migrateit.models.migration_manager import MigrationManager
-from migrateit.models.sql import remove_sql_comments
+from migrateit.models.sql import patch_sql_statement
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
@@ -175,14 +174,14 @@ WHERE migration_name = {self.placeholder};
     def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
         migration_code, reverse_migration_code, _ = migration.get_content_and_hash(self.migrations_dir)
         # Filter specifically for syntax/parsing errors
-        dialect = self.database.value
-        if dialect == SupportedDatabase.MARIADB.value:
+        dialect = self.database
+        if dialect == SupportedDatabase.MARIADB:
             # NOTE: MariaDB uses same syntax as MySQL
-            dialect = SupportedDatabase.MYSQL.value
+            dialect = SupportedDatabase.MYSQL
 
         for code in (migration_code, reverse_migration_code):
-            patched = self._patch_sql_statement(code)
-            lint_errors = sqlfluff.lint(patched, dialect=dialect)
+            patched = patch_sql_statement(dialect, code)
+            lint_errors = sqlfluff.lint(patched, dialect=dialect.value)
             syntax_errors = [e for e in lint_errors if e["code"] == "PRS"]
 
             if syntax_errors:
@@ -290,17 +289,6 @@ INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
 VALUES ({self.placeholder}, {self.placeholder});
 """
         self.execute(query, (path.name, hash))
-
-    @override
-    def _patch_sql_statement(self, sql: str) -> str:
-        sql = remove_sql_comments(sql)
-        upper_sql = sql.upper()
-
-        if "CREATE TABLE" in upper_sql and "IF NOT EXISTS" not in upper_sql:
-            return re.sub("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", sql, flags=re.IGNORECASE)
-        if "DROP TABLE" in upper_sql and "IF EXISTS" not in upper_sql:
-            return re.sub("DROP TABLE", "DROP TABLE IF EXISTS", sql, flags=re.IGNORECASE)
-        return sql
 
 
 def get_client(config: MigrateItConfig, connection: Connection) -> SqlClient[Any]:

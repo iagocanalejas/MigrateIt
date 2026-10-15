@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 from collections import defaultdict
 from functools import partial
 from typing import TYPE_CHECKING, Any, override
@@ -256,10 +255,6 @@ ORDER BY Trigger_Name;
         for i, _ in enumerate(params, start=1):
             formatted = formatted.replace(":param", f":{i}", 1)
         return formatted, {str(i): v for i, v in enumerate(params, start=1)}
-
-    @override
-    def _patch_sql_statement(self, sql: str) -> str:
-        return re.sub("IF( NOT)? EXISTS ", "", sql, flags=re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
