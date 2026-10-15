@@ -75,7 +75,7 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
         if connection is None:
             raise ValueError("Database connection cannot be None")
 
-        self.validate_config(config)
+        MigrateItConfig.validate(config)
 
         self.connection = connection
         self.config = config
@@ -170,22 +170,6 @@ WHERE migration_name = {self.placeholder};
     # ---------------------------------------------------------------------------
     # Validation methods
     # ---------------------------------------------------------------------------
-
-    @staticmethod
-    def validate_config(config: MigrateItConfig) -> None:
-        if not config.table_name:
-            raise ValueError("Table name is required")
-        if not isinstance(config.table_name, str):
-            raise TypeError("Table name must be a string")
-        if len(config.table_name) == 0:
-            raise ValueError("Table name cannot be empty")
-        if not config.table_name.isidentifier():
-            raise ValueError("Table name must be a valid identifier")
-
-        if not config.migrations_dir:
-            raise ValueError("Migrations directory is required")
-        if not config.changelog.path:
-            raise ValueError("Migrations file is required")
 
     @override
     def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:

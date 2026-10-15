@@ -151,44 +151,6 @@ def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
         SqlClient[None](None, config)  # type: ignore
 
 
-# --- config tests ---
-
-
-@pytest.mark.unit
-def test_sql_client_valid_config(temp_dir: Path) -> None:
-    config = MigrateItConfig(
-        table_name="migrations",
-        migrations_dir=temp_dir,
-        changelog=Changelog(version=1, path=temp_dir / "changelog.json"),
-    )
-    mock_conn = MagicMock()
-    client: SqlClient[MagicMock] = SqlClient(mock_conn, config)  # type: ignore[abstract]
-    assert client.config == config
-    assert client.connection == mock_conn
-    assert client.table_name == "migrations"
-    assert client.migrations_dir == temp_dir
-    assert isinstance(client.changelog, Changelog)
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    "table_name,expected_error,expected_match",
-    [
-        pytest.param("", ValueError, "Table name is required", id="empty"),
-        pytest.param(123, TypeError, None, id="non_string"),
-        pytest.param("invalid-name", ValueError, "valid identifier", id="invalid_identifier"),
-    ],
-)
-def test_validate_config(table_name: object, expected_error: type[Exception], expected_match: str | None) -> None:
-    config = MigrateItConfig(
-        table_name=table_name,  # type: ignore[arg-type]
-        migrations_dir=Path("/tmp/migrations"),
-        changelog=Changelog(version=1, path=Path("/tmp/changelog.json")),
-    )
-    with pytest.raises(expected_error, match=expected_match):
-        SqlClient.validate_config(config)
-
-
 # --- create_migrations_table tests ---
 
 
