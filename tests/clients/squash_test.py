@@ -15,7 +15,7 @@ from tests.conftest import (
 
 def _migrations_got_squashed(client: SqlClient[Any], migrations: list[str]) -> bool:
     table_name = client._q(TEST_MIGRATIONS_TABLE)
-    match client.changelog.database:
+    match client.database:
         case SupportedDatabase.POSTGRES:
             with client.connection.cursor() as cursor:
                 query = f"""

@@ -9,7 +9,7 @@ from tests.conftest import INITIAL_MIGRATION, MIGRATION_NAME, TEST_MIGRATIONS_TA
 
 def _update_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -> None:
     table_name = client._q(TEST_MIGRATIONS_TABLE)
-    match client.changelog.database:
+    match client.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
@@ -33,7 +33,7 @@ def _update_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -
 
 
 def test_show_migrations_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.changelog.database)
+    _mock_create_migration(temp_dir, client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -42,7 +42,7 @@ def test_show_migrations_not_applied(client: SqlClient[Any], temp_dir: Path) -> 
 
 
 def test_show_migrations_applied(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.changelog.database)
+    _mock_create_migration(temp_dir, client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
     client.apply_migration(migration, is_fake=True)
@@ -52,7 +52,7 @@ def test_show_migrations_applied(client: SqlClient[Any], temp_dir: Path) -> None
 
 
 def test_show_migrations_conflict(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.changelog.database)
+    _mock_create_migration(temp_dir, client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
     client.apply_migration(migration, is_fake=True)
@@ -63,7 +63,7 @@ def test_show_migrations_conflict(client: SqlClient[Any], temp_dir: Path) -> Non
 
 
 def test_show_migrations_removed(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.changelog.database)
+    _mock_create_migration(temp_dir, client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.apply_migration(migration, is_fake=True)
 

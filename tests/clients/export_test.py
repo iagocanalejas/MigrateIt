@@ -42,10 +42,10 @@ def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
     assert "drop table " in rollback_part
     assert "drop view " in rollback_part
 
-    if client.changelog.database != SupportedDatabase.SQLITE:
+    if client.database != SupportedDatabase.SQLITE:
         assert "5,3" in forward_part
 
-    if client.changelog.database == SupportedDatabase.POSTGRES:
+    if client.database == SupportedDatabase.POSTGRES:
         # contains schemas
         assert "create schema" in forward_part
         assert "drop schema if exists" in rollback_part
@@ -82,7 +82,7 @@ def _export_and_read(client: SqlClient[Any], migration_name: str = "full_export"
 
 
 def _create_database_schema(client: SqlClient[Any]) -> None:
-    match client.changelog.database:
+    match client.database:
         case SupportedDatabase.POSTGRES:
             with client.connection.cursor() as cursor:
                 cursor.execute("CREATE SCHEMA app_schema;")
@@ -291,13 +291,13 @@ BEGIN
 END;
 """)
         case _:
-            raise NotImplementedError(f"Database {client.changelog.database} is not supported yet")
+            raise NotImplementedError(f"Database {client.database} is not supported yet")
     _add_exclusions(client)
     client.connection.commit()
 
 
 def _add_exclusions(client: SqlClient[Any]) -> None:
-    match client.changelog.database:
+    match client.database:
         case SupportedDatabase.POSTGRES:
             with client.connection.cursor() as cursor:
                 cursor.execute(f"""CREATE TABLE {C.MIGRATEIT_MIGRATIONS_TABLE} (id INT PRIMARY KEY);""")
@@ -356,4 +356,4 @@ BEGIN
 END;
 """)
         case _:
-            raise NotImplementedError(f"Database {client.changelog.database} is not supported yet")
+            raise NotImplementedError(f"Database {client.database} is not supported yet")

@@ -18,7 +18,7 @@ from tests.conftest import (
 
 def _insert_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -> None:
     table_name = client._q(TEST_MIGRATIONS_TABLE)
-    match client.changelog.database:
+    match client.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
@@ -144,7 +144,7 @@ def test_validate_drop_table_statement(client: SqlClient[Any], temp_dir: Path) -
 def test_validate_alter_table_add_column(client: SqlClient[Any], temp_dir: Path) -> None:
     migrations_dir = temp_dir / "migrations"
     sql = f"ALTER TABLE {TEST_MIGRATIONS_TABLE} ADD COLUMN new_col VARCHAR(255);"
-    if client.changelog.database == SupportedDatabase.ORACLE:
+    if client.database == SupportedDatabase.ORACLE:
         sql = f"ALTER TABLE {TEST_MIGRATIONS_TABLE} ADD new_col VARCHAR(255);"
     _create_migration_file(migrations_dir, MIGRATION_NAME, sql=sql)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))

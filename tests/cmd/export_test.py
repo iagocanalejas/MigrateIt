@@ -9,7 +9,7 @@ def test_cmd_export_no_name_creates_default(client: SqlClient[Any]) -> None:
 
     assert result == 0
     # Default name should be <database>_backup, prefixed with 0001_
-    expected_name = f"{client.changelog.database.value}_backup"
+    expected_name = f"{client.database.value}_backup"
     changelog_names = [m.name for m in client.changelog.migrations]
     assert any(expected_name in name for name in changelog_names)
 

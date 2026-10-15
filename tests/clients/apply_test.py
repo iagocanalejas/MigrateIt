@@ -19,7 +19,7 @@ from tests.conftest import (
 
 
 def test_apply_migration_success(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.changelog.database)
+    _mock_create_migration(temp_dir, client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -34,7 +34,7 @@ def test_apply_migration_success(client: SqlClient[Any], temp_dir: Path) -> None
 
 
 def test_apply_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.changelog.database)
+    _mock_create_migration(temp_dir, client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -47,7 +47,7 @@ def test_apply_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
 
 
 def test_rollback_migration_success(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.changelog.database)
+    _mock_create_migration(temp_dir, client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -84,7 +84,7 @@ def test_rollback_fake_migration(client: SqlClient[Any], temp_dir: Path) -> None
 
 
 def test_fake_rollback_migration(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.changelog.database)
+    _mock_create_migration(temp_dir, client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 

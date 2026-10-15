@@ -83,7 +83,7 @@ def _get_init_migration_sql(database: SupportedDatabase, table_name: str) -> tup
 
 def cmd_export(client: SqlClient[Any], name: str | None) -> int:
     if not name:
-        name = f"{client.changelog.database.value}_backup"
+        name = f"{client.database.value}_backup"
 
     write_line(f"Creating new migration: {name}")
     migration = client.migrations.create_new_migration(
@@ -202,7 +202,7 @@ def cmd_run(
         action = "Applying" if not is_rollback else "Rolling back"
         write_line(f"{action} {len(migration_plan)} migration(s)")
 
-    with DatabaseLock(client.connection, client.changelog.database, client.table_name):
+    with DatabaseLock(client.connection, client.database, client.table_name):
         try:
             for migration in migration_plan:
                 write_line(f"{action.lower().capitalize()} migration: {migration.name}")

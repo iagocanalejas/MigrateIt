@@ -54,12 +54,16 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
         return self.config.changelog
 
     @property
+    def database(self) -> SupportedDatabase:
+        return self.config.changelog.database
+
+    @property
     def migrations(self) -> MigrationManager:
         return MigrationManager(self.config.changelog)
 
     @functools.cached_property
     def _linter(self) -> Linter:
-        return Linter(dialect=self.changelog.database.value)
+        return Linter(dialect=self.database.value)
 
     @classmethod
     def _q(cls, name: str, QUOTE_CHAR: str = '"') -> str:
@@ -186,14 +190,14 @@ WHERE migration_name = {self.placeholder};
     @override
     def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
         migration_code, reverse_migration_code, _ = migration.get_content_and_hash(self.migrations_dir)
+        # Filter specifically for syntax/parsing errors
+        dialect = self.database.value
+        if dialect == SupportedDatabase.MARIADB.value:
+            # NOTE: MariaDB uses same syntax as MySQL
+            dialect = SupportedDatabase.MYSQL.value
 
         for code in (migration_code, reverse_migration_code):
             patched = self._patch_sql_statement(code)
-            # Filter specifically for syntax/parsing errors
-            dialect = self.changelog.database.value
-            if dialect == SupportedDatabase.MARIADB.value:
-                # NOTE: MariaDB uses same syntax as MySQL
-                dialect = SupportedDatabase.MYSQL.value
             lint_errors = sqlfluff.lint(patched, dialect=dialect)
             syntax_errors = [e for e in lint_errors if e["code"] == "PRS"]
 

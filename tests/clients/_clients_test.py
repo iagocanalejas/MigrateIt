@@ -197,11 +197,11 @@ def test_create_migrations_table(client: SqlClient[Any]) -> None:
     sql, rollback = client.create_migrations_table_str(table_name)
 
     for stmt in sql_to_statements(sql):
-        lint_errors = sqlfluff.lint(stmt, dialect=client.changelog.database.value)
+        lint_errors = sqlfluff.lint(stmt, dialect=client.database.value)
         assert not [e for e in lint_errors if e["code"] == "PRS"]
 
     for stmt in sql_to_statements(rollback):
-        lint_errors = sqlfluff.lint(stmt, dialect=client.changelog.database.value)
+        lint_errors = sqlfluff.lint(stmt, dialect=client.database.value)
         assert not [e for e in lint_errors if e["code"] == "PRS"]
 
 

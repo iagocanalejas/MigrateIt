@@ -239,7 +239,7 @@ def _create_migration_file(
 
 
 def _get_query_rows(client: SqlClient[Any], query: str) -> list[tuple[Any, ...]]:
-    match client.changelog.database:
+    match client.database:
         case (
             SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB | SupportedDatabase.ORACLE
         ):
@@ -254,7 +254,7 @@ def _get_query_rows(client: SqlClient[Any], query: str) -> list[tuple[Any, ...]]
 
 def _migration_is_applied(client: SqlClient[Any], migration_name: str) -> bool:
     table_name = client._q(TEST_MIGRATIONS_TABLE)
-    match client.changelog.database:
+    match client.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
@@ -286,7 +286,7 @@ def _migration_is_applied(client: SqlClient[Any], migration_name: str) -> bool:
 
 
 def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
-    match client.changelog.database:
+    match client.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(
@@ -328,7 +328,7 @@ def _mock_create_migration(temp_dir: Path, database: SupportedDatabase) -> None:
 
 def _drop_test_table(client: SqlClient[Any], table_name: str) -> None:
     table_name = client._q(table_name)
-    match client.changelog.database:
+    match client.database:
         case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
                 cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
