@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from migrateit.cmd import cmd_new
+from migrateit.cmd import _validate_editor, cmd_new
 from migrateit.models.repository import ChangelogRepository
 
 from .conftest import _mock_client
@@ -145,27 +145,34 @@ def test_cmd_new_interactive_cancelled(temp_dir: Path) -> None:
     assert changelog.migrations[-1].name == "0001_cancelled_migration.sql"
 
 
+@pytest.mark.unit
 def test_validate_editor_known_safe() -> None:
-    from migrateit.cmd import _validate_editor
-
     for editor in ("vim", "nano", "code", "subl", "emacs", "atom", "zed", "vi"):
         result = _validate_editor(editor)
         assert result == editor
 
 
+@pytest.mark.unit
 def test_validate_editor_absolute_path_valid() -> None:
-    from migrateit.cmd import _validate_editor
-
     # /bin/sh is a valid executable
     result = _validate_editor("/bin/sh")
     assert result == "/bin/sh"
 
 
+@pytest.mark.unit
 def test_validate_editor_unknown_raises() -> None:
-    from migrateit.cmd import _validate_editor
 
     with pytest.raises(ValueError, match="Unsafe editor"):
         _validate_editor("malicious-editor")
 
     with pytest.raises(ValueError, match="Unsafe editor"):
         _validate_editor("/tmp/nonexistent-editor")
+
+
+@pytest.mark.unit
+def test_cmd_new_no_migrations_table(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+    mock_client.is_migrations_table_created.return_value = False  # type: ignore
+
+    with pytest.raises(ValueError, match="does not exist"):
+        cmd_new(mock_client, name="test")

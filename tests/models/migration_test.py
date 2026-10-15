@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from tests.conftest import MIGRATION_NAME
@@ -311,3 +312,17 @@ def test_write_sql_strips_newlines(temp_dir: Path) -> None:
     assert "DROP TABLE test;" in content
     # Verify excessive blank lines are collapsed
     assert "\n\n\n\n" not in content
+
+
+@pytest.mark.unit
+def test_write_file_removed_while_processing(temp_dir: Path) -> None:
+    file_path = _make_migration_file(temp_dir)
+    original_content = file_path.read_text()
+    # Mock read_text to return valid content, then mock exists to return False
+    # Only one exists() call happens (at line 110), so we need [False]
+    with (
+        patch.object(Path, "read_text", return_value=original_content),
+        patch.object(Path, "exists", return_value=False),
+    ):
+        with pytest.raises(FileNotFoundError, match="does not exist. Removed while processing."):
+            write_into_migration_file(file_path, sql="SELECT 1;", rollback=None)

@@ -140,3 +140,16 @@ def test_get_migration_by_name_prefix_collision_returns_first(temp_dir: Path) ->
 
     with pytest.raises(ValueError, match="duplicated index"):
         ChangelogRepository.load(changelog_path)
+
+
+@pytest.mark.unit
+def test_load_changelog_bad_migration_name(temp_dir: Path) -> None:
+    path = temp_dir / "changelog.json"
+    migrations = [
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="bad_name.sql", parents=("0000_init.sql",)),
+    ]
+    cl = Changelog(version=1, migrations=migrations, path=path)
+    path.write_text(cl.to_json())
+    with pytest.raises(ValueError, match="does not match the pattern"):
+        ChangelogRepository.load(path)

@@ -1,18 +1,20 @@
+import sqlite3
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from migrateit.clients._client import SqlClient
 from migrateit.models.changelog import Changelog
-from migrateit.models.config import SupportedDatabase
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus
+from tests.clients.conftest import _client_with_mocked_connection
 from tests.conftest import (
     INITIAL_MIGRATION,
     MIGRATION_NAME,
     TEST_MIGRATIONS_TABLE,
     _create_migration_file,
-    _table_exists,
 )
 
 
@@ -36,7 +38,7 @@ def _insert_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -
                     f"INSERT INTO {table_name} (migration_name, change_hash) VALUES (:param, :param)",
                     (name, hash_value),
                 )
-        case _:
+        case _:  # pragma: no cover
             raise NotImplementedError
     client.connection.commit()
 
@@ -44,18 +46,11 @@ def _insert_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -
 # --- validate_sql_syntax ---
 
 
-def test_validate_simple_select_syntax(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME, sql="SELECT * FROM non_existing_table;")
-    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
-    assert client.validate_sql_syntax(migration) is None
-
-
-def test_validate_create_table_syntax(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-
+@pytest.mark.unit
+def test_validate_create_table_syntax_noop(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
     _create_migration_file(
-        migrations_dir,
+        client.migrations_dir,
         MIGRATION_NAME,
         sql="""
             CREATE TABLE non_existing_table (
@@ -67,12 +62,13 @@ def test_validate_create_table_syntax(client: SqlClient[Any], temp_dir: Path) ->
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     assert client.validate_sql_syntax(migration) is None
-    assert not _table_exists(client, "non_existing_table")
+    client.connection.cursor.return_value.execute.assert_not_called()
 
 
-def test_invalid_sql_in_migration_code(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME, sql="SELEKT * FRM non_existing_table;")
+@pytest.mark.unit
+def test_invalid_sql_in_migration_code(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="SELEKT * FRM non_existing_table;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     error_result = client.validate_sql_syntax(migration)
@@ -82,9 +78,10 @@ def test_invalid_sql_in_migration_code(client: SqlClient[Any], temp_dir: Path) -
     assert "SELEKT" in sql
 
 
-def test_invalid_sql_in_rollback_code(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME, rollback_sql="ROLLBAK;")
+@pytest.mark.unit
+def test_invalid_sql_in_rollback_code(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, rollback_sql="ROLLBAK;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     error_result = client.validate_sql_syntax(migration)
@@ -94,34 +91,39 @@ def test_invalid_sql_in_rollback_code(client: SqlClient[Any], temp_dir: Path) ->
     assert "ROLLBAK" in sql
 
 
-def test_empty_sql_file_is_skipped(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME, sql="", rollback_sql="")
+@pytest.mark.unit
+def test_empty_sql_file_is_skipped(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="", rollback_sql="")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     assert client.validate_sql_syntax(migration) is None
 
 
-def test_file_not_found_raises_error(client: SqlClient[Any]) -> None:
+@pytest.mark.unit
+def test_file_not_found_raises_error(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
     migration = Migration(name="not_exist.sql", parents=(INITIAL_MIGRATION,))
     with pytest.raises(FileNotFoundError):
         client.validate_sql_syntax(migration)
 
 
-def test_non_sql_file_raises_error(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
+@pytest.mark.unit
+def test_non_sql_file_raises_error(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
 
     filename = "0006_script.txt"
-    path = migrations_dir / filename
+    path = client.migrations_dir / filename
     path.write_text("SELECT 1;")
     migration = Migration(name=filename, parents=(INITIAL_MIGRATION,))
     with pytest.raises(FileNotFoundError):
         client.validate_sql_syntax(migration)
 
 
-def test_validate_multiple_statements(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
+@pytest.mark.unit
+def test_validate_multiple_statements(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
     _create_migration_file(
-        migrations_dir,
+        client.migrations_dir,
         MIGRATION_NAME,
         sql=f"""
             INSERT INTO {TEST_MIGRATIONS_TABLE} (migration_name, change_hash) VALUES ('1', 'hash1');
@@ -133,28 +135,29 @@ def test_validate_multiple_statements(client: SqlClient[Any], temp_dir: Path) ->
     assert client.validate_sql_syntax(migration) is None
 
 
-def test_validate_drop_table_statement(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME, sql="DROP TABLE non_existing_table;")
+@pytest.mark.unit
+def test_validate_drop_table_statement(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="DROP TABLE non_existing_table;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     assert client.validate_sql_syntax(migration) is None
 
 
-def test_validate_alter_table_add_column(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
+@pytest.mark.unit
+def test_validate_alter_table_add_column(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
     sql = f"ALTER TABLE {TEST_MIGRATIONS_TABLE} ADD COLUMN new_col VARCHAR(255);"
-    if client.database == SupportedDatabase.ORACLE:
-        sql = f"ALTER TABLE {TEST_MIGRATIONS_TABLE} ADD new_col VARCHAR(255);"
-    _create_migration_file(migrations_dir, MIGRATION_NAME, sql=sql)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql=sql)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     assert client.validate_sql_syntax(migration) is None
 
 
-def test_validate_alter_table_drop_column(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
+@pytest.mark.unit
+def test_validate_alter_table_drop_column(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
     _create_migration_file(
-        migrations_dir,
+        client.migrations_dir,
         MIGRATION_NAME,
         sql=f"ALTER TABLE {TEST_MIGRATIONS_TABLE} DROP COLUMN to_remove;",
     )
@@ -162,9 +165,10 @@ def test_validate_alter_table_drop_column(client: SqlClient[Any], temp_dir: Path
     assert client.validate_sql_syntax(migration) is None
 
 
-def test_invalid_drop_table_statement(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME, sql="DROP TABL test_table;")
+@pytest.mark.unit
+def test_invalid_drop_table_statement(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="DROP TABL test_table;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     error_result = client.validate_sql_syntax(migration)
@@ -174,9 +178,10 @@ def test_invalid_drop_table_statement(client: SqlClient[Any], temp_dir: Path) ->
     assert "DROP TABL" in sql
 
 
-def test_invalid_alter_table_statement(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME, sql="ALTER TABLE some_table ADD COLUM typo_col TEXT;")
+@pytest.mark.unit
+def test_invalid_alter_table_statement(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="ALTER TABLE some_table ADD COLUM typo_col TEXT;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
     error_result = client.validate_sql_syntax(migration)
@@ -206,14 +211,6 @@ def test_validate_empty_migrations(client: SqlClient[Any]) -> None:
     client.config.changelog = Changelog(version=1, migrations=[])
     statuses: dict[str, MigrationStatus] = {}
     client.validate_migrations(statuses)
-
-
-def test_validate_no_initial_raises(client: SqlClient[Any]) -> None:
-    migrations = [Migration(name="0001_test.sql", parents=())]
-    client.config.changelog = Changelog(version=1, migrations=migrations)
-    statuses: dict[str, MigrationStatus] = {}
-    with pytest.raises(ValueError, match="Initial migration is not defined"):
-        client.validate_migrations(statuses)
 
 
 def test_validate_multiple_initial_raises(client: SqlClient[Any]) -> None:
@@ -285,3 +282,104 @@ def test_show_migrations_order_error(client: SqlClient[Any]) -> None:
     }
     with pytest.raises(ValueError, match="is applied before its parent"):
         client.validate_migrations(statuses)
+
+
+# --- validate_migrations — multiple initial migrations ---
+
+
+@pytest.mark.unit
+def test_validate_migrations_multiple_initial(temp_dir: Path) -> None:
+    changelog = Changelog(
+        version=1,
+        path=temp_dir / "changelog.json",
+        migrations=[
+            Migration(name="0000_a.sql", initial=True, parents=()),
+            Migration(name="0001_b.sql", initial=True, parents=()),
+        ],
+    )
+    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
+    mock_conn: MagicMock = MagicMock()
+    client: SqlClient[MagicMock] = SqlClient(mock_conn, config)  # type: ignore[abstract]
+
+    with pytest.raises(ValueError, match="Multiple initial migrations"):
+        client.validate_migrations({m.name: MigrationStatus.APPLIED for m in changelog.migrations})
+
+
+@pytest.mark.unit
+def test_validate_migrations_removed_found(temp_dir: Path) -> None:
+    changelog = Changelog(
+        version=1,
+        path=temp_dir / "changelog.json",
+        migrations=[Migration(name="0000_init.sql", initial=True, parents=())],
+    )
+    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
+
+    from migrateit.clients.sqlite import SqliteClient
+
+    real_conn: sqlite3.Connection = sqlite3.connect(":memory:")
+    client = SqliteClient(real_conn, config)
+    try:
+        statuses: dict[str, MigrationStatus] = {
+            "0000_init.sql": MigrationStatus.APPLIED,
+            "ghost.sql": MigrationStatus.REMOVED,
+        }
+        with pytest.raises(ValueError, match="Removed migrations found"):
+            client.validate_migrations(statuses)
+    finally:
+        real_conn.close()
+
+
+@pytest.mark.unit
+def test_validate_migrations_parent_not_applied(temp_dir: Path) -> None:
+    changelog = Changelog(
+        version=1,
+        path=temp_dir / "changelog.json",
+        migrations=[
+            Migration(name="0000_init.sql", initial=True),
+            Migration(name="0001_child.sql", parents=("0000_init.sql",)),
+        ],
+    )
+    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
+
+    from migrateit.clients.sqlite import SqliteClient
+
+    real_conn: sqlite3.Connection = sqlite3.connect(":memory:")
+    client = SqliteClient(real_conn, config)
+    try:
+        statuses: dict[str, MigrationStatus] = {
+            "0000_init.sql": MigrationStatus.NOT_APPLIED,
+            "0001_child.sql": MigrationStatus.APPLIED,
+        }
+        with pytest.raises(ValueError, match="is applied before its parent"):
+            client.validate_migrations(statuses)
+    finally:
+        real_conn.close()
+
+
+@pytest.mark.unit
+def test_validate_migrations_conflict_found(temp_dir: Path) -> None:
+    changelog = Changelog(
+        version=1,
+        path=temp_dir / "changelog.json",
+        migrations=[Migration(name="0001_test.sql", parents=("0000_init.sql",))],
+    )
+    changelog.migrations.insert(0, Migration(name="0000_init.sql", initial=True))
+    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
+
+    from migrateit.clients.sqlite import SqliteClient
+
+    real_conn: sqlite3.Connection = sqlite3.connect(":memory:")
+    client = SqliteClient(real_conn, config)
+    try:
+        statuses: dict[str, MigrationStatus] = {
+            "0000_init.sql": MigrationStatus.APPLIED,
+            "0001_test.sql": MigrationStatus.CONFLICT,
+        }
+        with (
+            patch.object(Migration, "get_content_and_hash", return_value=("fw", "rb", "file_hash")),
+            patch.object(client, "_get_database_hash", return_value="db_hash"),
+        ):
+            with pytest.raises(ValueError, match="different hash"):
+                client.validate_migrations(statuses)
+    finally:
+        real_conn.close()

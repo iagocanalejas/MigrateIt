@@ -56,7 +56,7 @@ WHERE migration_name IN ({placeholders}) AND squashed = 1
                 result = cursor.fetchone()
                 assert result is not None
                 return result[0] == len(migrations)
-        case _:
+        case _:  # pragma: no cover
             raise NotImplementedError
 
 

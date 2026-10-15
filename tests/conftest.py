@@ -182,7 +182,7 @@ END;
                     pass
                 sqlite_conn.close()
 
-        case _:
+        case _:  # pragma: no cover
             raise ValueError(f"Unsupported database type: {database_type}")
 
 
@@ -232,7 +232,7 @@ def _create_migration_file(
     migrations_dir.mkdir(parents=True, exist_ok=True)
     path = migrations_dir / filename
     with open(path, "w") as f:
-        f.write(sql or f"-- Migration {filename}\n")
+        f.write(sql)
         f.write(f"{C.ROLLBACK_SPLIT_TAG}")
         f.write(f"\n\n{rollback_sql}")
     return path
@@ -248,7 +248,7 @@ def _get_query_rows(client: SqlClient[Any], query: str) -> list[tuple[Any, ...]]
                 return cursor.fetchall()
         case SupportedDatabase.SQLITE:
             return client.connection.execute(query).fetchall()
-        case _:
+        case _:  # pragma: no cover
             raise NotImplementedError
 
 
@@ -281,7 +281,7 @@ def _migration_is_applied(client: SqlClient[Any], migration_name: str) -> bool:
             result = cursor.fetchone()
             assert result is not None
             return bool(result[0])
-        case _:
+        case _:  # pragma: no cover
             raise NotImplementedError
 
 
@@ -312,7 +312,7 @@ def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
             )
             result = cursor.fetchone()
             return result is not None
-        case _:
+        case _:  # pragma: no cover
             raise NotImplementedError
 
 
@@ -345,6 +345,6 @@ def _drop_test_table(client: SqlClient[Any], table_name: str) -> None:
                 cursor.execute("PURGE RECYCLEBIN")
         case SupportedDatabase.SQLITE:
             client.connection.execute(f"DROP TABLE IF EXISTS {table_name}")
-        case _:
+        case _:  # pragma: no cover
             raise NotImplementedError
     client.connection.commit()

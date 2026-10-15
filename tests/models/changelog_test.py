@@ -4,6 +4,40 @@ from migrateit.models.changelog import Changelog
 from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration
 
+# --- changelog.root tests ---
+
+
+@pytest.mark.unit
+def test_root_no_migrations_raises() -> None:
+    changelog = Changelog(version=1, migrations=[])
+    with pytest.raises(ValueError, match="No migrations found"):
+        changelog.root
+
+
+@pytest.mark.unit
+def test_root_not_initial_raises() -> None:
+    changelog = Changelog(
+        version=1,
+        migrations=[Migration(name="0001_not_initial.sql", parents=())],
+    )
+    with pytest.raises(ValueError, match="Initial migration is not defined"):
+        changelog.root
+
+
+@pytest.mark.unit
+def test_root_returns_first() -> None:
+    changelog = Changelog(
+        version=1,
+        migrations=[
+            Migration(name="0000_init.sql", initial=True, parents=()),
+            Migration(name="0001_next.sql", parents=("0000_init.sql",)),
+        ],
+    )
+    root = changelog.root
+    assert root.name == "0000_init.sql"
+    assert root.initial is True
+
+
 # --- changelog.to_dict tests ---
 
 

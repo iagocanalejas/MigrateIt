@@ -1,10 +1,14 @@
+import sqlite3
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
-from migrateit.models.config import SupportedDatabase
+from migrateit.models.changelog import Changelog
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
+from migrateit.models.migration import Migration
 
 
 def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
@@ -68,6 +72,27 @@ def test_export_invalid_parents(client: SqlClient[Any]) -> None:
 
     with pytest.raises(ValueError, match="export must depend only on the initial migration"):
         client.export_database_schema(migration)
+
+
+@pytest.mark.unit
+def test_export_database_schema_wrong_parents(temp_dir: Path) -> None:
+    changelog = Changelog(
+        version=1,
+        path=temp_dir / "changelog.json",
+        migrations=[Migration(name="0000_init.sql", initial=True, parents=())],
+    )
+    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
+
+    from migrateit.clients.sqlite import SqliteClient
+
+    real_conn: sqlite3.Connection = sqlite3.connect(":memory:")
+    client = SqliteClient(real_conn, config)
+    try:
+        migration = Migration(name="0001_export.sql", parents=("0002_other.sql",))
+        with pytest.raises(ValueError, match="must depend only on the initial"):
+            client.export_database_schema(migration)
+    finally:
+        real_conn.close()
 
 
 def _export_and_read(client: SqlClient[Any], migration_name: str = "full_export") -> str:
@@ -290,7 +315,7 @@ BEGIN
     VALUES (OLD.id, OLD.name, NEW.name);
 END;
 """)
-        case _:
+        case _:  # pragma: no cover
             raise NotImplementedError(f"Database {client.database} is not supported yet")
     _add_exclusions(client)
     client.connection.commit()
@@ -355,5 +380,5 @@ BEGIN
     VALUES (NEW.id, 'insert', 'new');
 END;
 """)
-        case _:
+        case _:  # pragma: no cover
             raise NotImplementedError(f"Database {client.database} is not supported yet")

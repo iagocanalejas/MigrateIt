@@ -37,10 +37,10 @@ class Changelog:
                 d[parent].append(migration)
         return d
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:  # pragma: no cover
         return self.path.name
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # pragma: no cover
         return str(self)
 
     @staticmethod

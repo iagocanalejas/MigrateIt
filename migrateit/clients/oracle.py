@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any, override
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.clients._protocol import ExportItem
-from migrateit.models.migration import Migration
 
 if TYPE_CHECKING:
     import oracledb  # noqa: F401

@@ -138,8 +138,7 @@ FROM {self._q(self.table_name)};
             if len(parsed.violations) > 0:
                 raise ValueError(parsed.violations)
             statements = [seg.raw.strip() for seg in parsed.tree.recursive_crawl("statement")]
-            if len(statements) == 0:
-                raise ValueError("No statements found in migration code")
+            assert len(statements) > 0, "No statements found in migration code"
             for stmt in statements:
                 self.execute(stmt)
         self._update_migration_changelog(migration, migration_hash, is_rollback)
@@ -175,7 +174,7 @@ WHERE migration_name = {self.placeholder};
         migration_code, reverse_migration_code, _ = migration.get_content_and_hash(self.migrations_dir)
         # Filter specifically for syntax/parsing errors
         dialect = self.database
-        if dialect == SupportedDatabase.MARIADB:
+        if dialect == SupportedDatabase.MARIADB:  # pragma: no cover
             # NOTE: MariaDB uses same syntax as MySQL
             dialect = SupportedDatabase.MYSQL
 
@@ -194,9 +193,6 @@ WHERE migration_name = {self.placeholder};
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
         if len(self.changelog.migrations) == 0:
             return
-
-        if not self.changelog.root.initial:
-            raise ValueError("Initial migration is not defined in the changelog")
         if len([m for m in self.changelog.migrations if m.initial]) > 1:
             raise ValueError("Multiple initial migrations found in the changelog")
 

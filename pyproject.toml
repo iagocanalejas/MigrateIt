@@ -16,7 +16,7 @@ classifiers = [
 ]
 dependencies = [
   "inquirer>=3.4.0, <3.5",
-  "sqlfluff>=4.3.0, <4.5.0",
+  "sqlfluff>=4.4.0, <4.5.0",
 ]
 
 [project.scripts]
@@ -57,30 +57,11 @@ omit = [
   "**/_protocol.py",
   "**/reporters/*.py",
   "main.py",
+  "__main__.py",
 ]
 
 [tool.coverage.report]
 fail_under = 100
-exclude_also = [
-  "pragma: no cover*",
-  "import .*",
-  "def __repr__",
-  "if self.debug:",
-  "if settings.DEBUG",
-  "raise AssertionError",
-  "raise NotImplementedError",
-  "raise",
-  "if 0:",
-  "if False:",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
-  "class .*\\bProtocol\\):",
-  "@(abc\\.)?abstractmethod",
-  "logger.*",
-  "-> ['\"]?NoReturn['\"]?:",
-  "self.fail*",
-  "def __str__",
-]
 
 [tool.mypy]
 files = ["migrateit", "tests"]
