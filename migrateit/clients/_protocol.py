@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-from migrateit.models.migration import Migration, MigrationStatus
+if TYPE_CHECKING:
+    from migrateit.models.config import SupportedDatabase
+    from migrateit.models.connection import Connection
+    from migrateit.models.migration import Migration, MigrationStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,8 +142,12 @@ class SqlClientProtocol(Protocol):
 
 
 class SqlConnectionProtocol(Protocol):
+    connection: Connection
+
     @property
     def placeholder(self) -> str: ...
+    @property
+    def database(self) -> SupportedDatabase: ...
 
     def execute(self, query: str, params: tuple[Any, ...] = ()) -> None: ...
     def execute_for_one(self, query: str, params: tuple[Any, ...] = ()) -> Any: ...

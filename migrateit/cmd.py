@@ -202,7 +202,7 @@ def cmd_run(
         action = "Applying" if not is_rollback else "Rolling back"
         write_line(f"{action} {len(migration_plan)} migration(s)")
 
-    with DatabaseLock(client.connection, client.database, client.table_name):
+    with DatabaseLock(client, client.table_name):
         try:
             for migration in migration_plan:
                 write_line(f"{action.lower().capitalize()} migration: {migration.name}")
