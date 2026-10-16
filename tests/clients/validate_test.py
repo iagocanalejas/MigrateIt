@@ -1,21 +1,14 @@
-import sqlite3
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from migrateit.clients._client import SqlClient
 from migrateit.models.changelog import Changelog
-from migrateit.models.config import MigrateItConfig, SupportedDatabase
+from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus
 from tests.clients.conftest import _client_with_mocked_connection
-from tests.conftest import (
-    INITIAL_MIGRATION,
-    MIGRATION_NAME,
-    TEST_MIGRATIONS_TABLE,
-    _create_migration_file,
-)
+from tests.conftest import INITIAL_MIGRATION, MIGRATION_NAME, TEST_MIGRATIONS_TABLE, _create_migration_file
 
 
 def _insert_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -> None:
@@ -282,104 +275,3 @@ def test_show_migrations_order_error(client: SqlClient[Any]) -> None:
     }
     with pytest.raises(ValueError, match="is applied before its parent"):
         client.validate_migrations(statuses)
-
-
-# --- validate_migrations — multiple initial migrations ---
-
-
-@pytest.mark.unit
-def test_validate_migrations_multiple_initial(temp_dir: Path) -> None:
-    changelog = Changelog(
-        version=1,
-        path=temp_dir / "changelog.json",
-        migrations=[
-            Migration(name="0000_a.sql", initial=True, parents=()),
-            Migration(name="0001_b.sql", initial=True, parents=()),
-        ],
-    )
-    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
-    mock_conn: MagicMock = MagicMock()
-    client: SqlClient[MagicMock] = SqlClient(mock_conn, config)  # type: ignore[abstract]
-
-    with pytest.raises(ValueError, match="Multiple initial migrations"):
-        client.validate_migrations({m.name: MigrationStatus.APPLIED for m in changelog.migrations})
-
-
-@pytest.mark.unit
-def test_validate_migrations_removed_found(temp_dir: Path) -> None:
-    changelog = Changelog(
-        version=1,
-        path=temp_dir / "changelog.json",
-        migrations=[Migration(name="0000_init.sql", initial=True, parents=())],
-    )
-    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
-
-    from migrateit.clients.sqlite import SqliteClient
-
-    real_conn: sqlite3.Connection = sqlite3.connect(":memory:")
-    client = SqliteClient(real_conn, config)
-    try:
-        statuses: dict[str, MigrationStatus] = {
-            "0000_init.sql": MigrationStatus.APPLIED,
-            "ghost.sql": MigrationStatus.REMOVED,
-        }
-        with pytest.raises(ValueError, match="Removed migrations found"):
-            client.validate_migrations(statuses)
-    finally:
-        real_conn.close()
-
-
-@pytest.mark.unit
-def test_validate_migrations_parent_not_applied(temp_dir: Path) -> None:
-    changelog = Changelog(
-        version=1,
-        path=temp_dir / "changelog.json",
-        migrations=[
-            Migration(name="0000_init.sql", initial=True),
-            Migration(name="0001_child.sql", parents=("0000_init.sql",)),
-        ],
-    )
-    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
-
-    from migrateit.clients.sqlite import SqliteClient
-
-    real_conn: sqlite3.Connection = sqlite3.connect(":memory:")
-    client = SqliteClient(real_conn, config)
-    try:
-        statuses: dict[str, MigrationStatus] = {
-            "0000_init.sql": MigrationStatus.NOT_APPLIED,
-            "0001_child.sql": MigrationStatus.APPLIED,
-        }
-        with pytest.raises(ValueError, match="is applied before its parent"):
-            client.validate_migrations(statuses)
-    finally:
-        real_conn.close()
-
-
-@pytest.mark.unit
-def test_validate_migrations_conflict_found(temp_dir: Path) -> None:
-    changelog = Changelog(
-        version=1,
-        path=temp_dir / "changelog.json",
-        migrations=[Migration(name="0001_test.sql", parents=("0000_init.sql",))],
-    )
-    changelog.migrations.insert(0, Migration(name="0000_init.sql", initial=True))
-    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
-
-    from migrateit.clients.sqlite import SqliteClient
-
-    real_conn: sqlite3.Connection = sqlite3.connect(":memory:")
-    client = SqliteClient(real_conn, config)
-    try:
-        statuses: dict[str, MigrationStatus] = {
-            "0000_init.sql": MigrationStatus.APPLIED,
-            "0001_test.sql": MigrationStatus.CONFLICT,
-        }
-        with (
-            patch.object(Migration, "get_content_and_hash", return_value=("fw", "rb", "file_hash")),
-            patch.object(client, "_get_database_hash", return_value="db_hash"),
-        ):
-            with pytest.raises(ValueError, match="different hash"):
-                client.validate_migrations(statuses)
-    finally:
-        real_conn.close()

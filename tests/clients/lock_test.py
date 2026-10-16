@@ -1,32 +1,53 @@
 from __future__ import annotations
 
-import sqlite3
-import threading
-import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from migrateit.clients._lock import DatabaseLock, _MySqlLocker, _OracleLocker, _PsqlLocker, _SqliteLocker
-from migrateit.models.config import SupportedDatabase
-from tests.conftest import TEST_MIGRATIONS_TABLE
-
-# SQLite DDL for the migrations table (matches the actual schema)
-_MIGRATIONS_TABLE_DDL = f"""
-CREATE TABLE IF NOT EXISTS "{TEST_MIGRATIONS_TABLE}" (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    migration_name VARCHAR(255) UNIQUE NOT NULL,
-    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    change_hash VARCHAR(64) NOT NULL,
-    squashed BOOLEAN DEFAULT 0
-);
-"""
+from migrateit.clients._client import SqlClient, get_client
+from migrateit.clients._lock import DatabaseLock, _DBTableLocker, _MySqlLocker, _PsqlLocker
+from migrateit.models.changelog import Changelog
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
+from migrateit.models.migration import Migration
+from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, connection
 
 
-# ---------------------------------------------------------------------------
-# Advisory key (static utility)
-# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _patch_lock_timeouts() -> Generator[None]:
+    with (
+        patch("migrateit.clients._lock.LOCK_TIMEOUT_SECONDS", 0.1),
+        patch("migrateit.clients._lock.LOCK_RETRY_SECONDS", 0.01),
+    ):
+        yield
+
+
+@contextmanager
+def _second_client(database: SupportedDatabase, temp_dir: Path) -> Generator[SqlClient[Any]]:
+    migrations_dir = temp_dir / "migrations"
+    migrations_file = temp_dir / "changelog.json"
+
+    with connection(database) as conn:
+        config = MigrateItConfig(
+            table_name=TEST_MIGRATIONS_TABLE,
+            migrations_dir=migrations_dir,
+            changelog=Changelog(
+                version=1,
+                database=database,
+                migrations=[
+                    Migration(
+                        name=INITIAL_MIGRATION,
+                        initial=True,
+                        parents=(),
+                    )
+                ],
+                path=migrations_file,
+            ),
+        )
+        yield get_client(config, conn)
 
 
 @pytest.mark.parametrize(
@@ -46,360 +67,6 @@ def test_compute_advisory_key(name: str) -> None:
     assert _PsqlLocker._compute_advisory_key(name) == key
 
 
-# ---------------------------------------------------------------------------
-# _SqliteLocker — real SQLite, no mocks
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-def test_sqlite_lock_error_cleanup(tmp_path: Path) -> None:
-    db_path = tmp_path / "test.db"
-    with sqlite3.connect(db_path) as conn:
-        conn.executescript(_MIGRATIONS_TABLE_DDL)
-
-    conn = sqlite3.connect(db_path, timeout=5.0)
-    with pytest.raises(RuntimeError, match="simulated"):
-        with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
-            raise RuntimeError("simulated")
-    conn.close()
-
-    with sqlite3.connect(db_path) as conn:
-        count = conn.execute(f'SELECT COUNT(*) FROM "{TEST_MIGRATIONS_TABLE}_lock"').fetchone()[0]
-    assert count == 0
-
-
-@pytest.mark.unit
-def test_sqlite_lock_concurrent(tmp_path: Path) -> None:
-    db_path = tmp_path / "test.db"
-    with sqlite3.connect(db_path) as conn:
-        conn.executescript(_MIGRATIONS_TABLE_DDL)
-
-    errors: list[BaseException] = []
-    acquired = threading.Event()
-
-    def holder() -> None:
-        try:
-            conn = sqlite3.connect(db_path, timeout=5.0)
-            with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
-                acquired.set()
-                time.sleep(0.1)
-            conn.close()
-        except BaseException as exc:  # pragma: no cover
-            errors.append(exc)
-
-    def waiter() -> None:
-        try:
-            conn = sqlite3.connect(db_path, timeout=5.0)
-            with DatabaseLock(conn, SupportedDatabase.SQLITE, TEST_MIGRATIONS_TABLE):
-                pass
-            conn.close()
-        except BaseException as exc:  # pragma: no cover
-            errors.append(exc)
-
-    t1, t2 = threading.Thread(target=holder), threading.Thread(target=waiter)
-    t1.start()
-    t2.start()
-    acquired.wait(timeout=2)
-    t2.join(timeout=5)
-    t1.join(timeout=2)
-
-    assert not errors, f"Unexpected errors: {errors}"
-
-
-@pytest.mark.unit
-def test_sqlite_locker_context_manager() -> None:
-    conn: sqlite3.Connection = sqlite3.connect(":memory:", autocommit=False)
-    conn.executescript(_MIGRATIONS_TABLE_DDL)
-    conn.commit()
-
-    with _SqliteLocker(conn, TEST_MIGRATIONS_TABLE):
-        pass
-
-    count = conn.execute(f'SELECT COUNT(*) FROM "{TEST_MIGRATIONS_TABLE}_lock"').fetchone()[0]
-    assert count == 0
-
-
-@pytest.mark.unit
-def test_sqlite_locker_timeout(tmp_path: Path) -> None:
-    db_path = tmp_path / "test.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute(f'CREATE TABLE "{TEST_MIGRATIONS_TABLE}_lock" (id INTEGER PRIMARY KEY)')
-    conn.execute(f'INSERT INTO "{TEST_MIGRATIONS_TABLE}_lock" (id) VALUES (1)')
-    conn.commit()
-    conn.close()
-
-    waiter = sqlite3.connect(db_path, timeout=5.0)
-    with (
-        patch("migrateit.clients._lock.LOCK_TIMEOUT_SECONDS", 0.1),
-        patch("migrateit.clients._lock.LOCK_RETRY_SECONDS", 0.01),
-    ):
-        locker = _SqliteLocker(waiter, TEST_MIGRATIONS_TABLE)
-        with pytest.raises(RuntimeError, match="Could not acquire lock"):
-            with locker:
-                pass  # pragma: no cover
-    waiter.close()
-
-
-@pytest.mark.unit
-def test_sqlite_locker_unsafe_table_name() -> None:
-    conn: sqlite3.Connection = sqlite3.connect(":memory:")
-    with pytest.raises(ValueError, match="Unsafe table name"):
-        _SqliteLocker(conn, "invalid-name")
-    conn.close()
-
-
-# ---------------------------------------------------------------------------
-# _OracleLocker — mocked
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-def test_oracle_locker_init_success() -> None:
-    mock_conn = MagicMock()
-    cursor = mock_conn.cursor.return_value
-    cursor.__enter__ = MagicMock(return_value=cursor)
-    cursor.__exit__ = MagicMock(return_value=False)
-
-    _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-
-    mock_conn.commit.assert_called_once()
-    mock_conn.rollback.assert_not_called()
-
-
-@pytest.mark.unit
-def test_oracle_locker_init_already_exists() -> None:
-    import oracledb
-
-    mock_conn = MagicMock()
-    cursor = mock_conn.cursor.return_value
-    error = oracledb.DatabaseError()
-    error.args = (MagicMock(),)
-    error.args[0].code = 955  # ORA-00955: name already used
-    cursor.__enter__ = MagicMock(side_effect=error)
-    cursor.__exit__ = MagicMock(return_value=False)
-
-    _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-
-    mock_conn.rollback.assert_called_once()
-    mock_conn.commit.assert_not_called()
-
-
-@pytest.mark.unit
-def test_oracle_locker_init_raises_unhandled() -> None:
-    import oracledb
-
-    mock_conn = MagicMock()
-    cursor = mock_conn.cursor.return_value
-    error = oracledb.DatabaseError()
-    error.args = (MagicMock(),)
-    error.args[0].code = 942  # ORA-00942: table does not exist
-    cursor.__enter__ = MagicMock(side_effect=error)
-    cursor.__exit__ = MagicMock(return_value=False)
-
-    with pytest.raises(oracledb.DatabaseError):
-        _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-
-    mock_conn.rollback.assert_not_called()
-    mock_conn.commit.assert_not_called()
-
-
-@pytest.mark.unit
-def test_oracle_locker_acquire_and_release() -> None:
-    mock_conn = MagicMock()
-    cursor = mock_conn.cursor.return_value
-    cursor.__enter__ = MagicMock(return_value=cursor)
-    cursor.__exit__ = MagicMock(return_value=False)
-    cursor.rowcount = 1
-
-    locker = _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-    cursor.execute.reset_mock()
-    mock_conn.commit.reset_mock()
-
-    locker.acquire()
-    locker.release()
-
-    assert cursor.execute.call_count == 2
-    calls = [c[0][0] for c in cursor.execute.call_args_list]
-    assert any("INSERT" in c for c in calls)
-    assert any("DELETE" in c for c in calls)
-
-
-@pytest.mark.unit
-def test_oracle_locker_timeout() -> None:
-    mock_conn = MagicMock()
-    cursor = mock_conn.cursor.return_value
-    cursor.__enter__ = MagicMock(return_value=cursor)
-    cursor.__exit__ = MagicMock(return_value=False)
-    cursor.rowcount = 0
-
-    with (
-        patch("migrateit.clients._lock.LOCK_TIMEOUT_SECONDS", 0.1),
-        patch("migrateit.clients._lock.LOCK_RETRY_SECONDS", 0.01),
-    ):
-        locker = _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-        cursor.execute.reset_mock()
-
-        with pytest.raises(RuntimeError, match="Could not acquire lock"):
-            locker.acquire()
-
-
-@pytest.mark.unit
-def test_oracle_locker_release_on_error() -> None:
-    mock_conn = MagicMock()
-    cursor = mock_conn.cursor.return_value
-    cursor.__enter__ = MagicMock(return_value=cursor)
-    cursor.__exit__ = MagicMock(return_value=False)
-    cursor.rowcount = 1
-
-    locker = _OracleLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-    cursor.execute.reset_mock()
-
-    with pytest.raises(RuntimeError, match="simulated"):
-        with locker:
-            raise RuntimeError("simulated")
-
-    calls = [c[0][0] for c in cursor.execute.call_args_list]
-    assert any("DELETE" in c for c in calls)
-
-
-@pytest.mark.unit
-def test_oracle_locker_unsafe_table_name() -> None:
-    mock_conn = MagicMock()
-    with pytest.raises(ValueError, match="Unsafe table name"):
-        _OracleLocker(mock_conn, "invalid-name")
-
-
-# ---------------------------------------------------------------------------
-# _PsqlLocker — mocked
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-def test_psql_locker_acquire_and_release() -> None:
-    mock_cursor = MagicMock()
-    mock_conn = MagicMock()
-    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
-    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-
-    locker = _PsqlLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-    locker.acquire()
-    locker.release()
-
-    calls = [c[0][0] for c in mock_cursor.execute.call_args_list]
-    assert len(calls) == 2
-    assert "pg_advisory_lock" in str(calls[0])
-    assert "pg_advisory_unlock" in str(calls[1])
-
-
-@pytest.mark.unit
-def test_psql_locker_context_manager() -> None:
-    mock_cursor = MagicMock()
-    mock_conn = MagicMock()
-    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
-    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-
-    with _PsqlLocker(mock_conn, TEST_MIGRATIONS_TABLE):
-        pass
-
-    assert mock_cursor.execute.call_count == 2
-
-
-@pytest.mark.unit
-def test_psql_locker_timeout() -> None:
-    mock_cursor = MagicMock()
-    mock_conn = MagicMock()
-    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
-    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-
-    with (
-        patch("migrateit.clients._lock.LOCK_TIMEOUT_SECONDS", 0.1),
-        patch("migrateit.clients._lock.LOCK_RETRY_SECONDS", 0.01),
-    ):
-        # The PsqlLocker doesn't retry in acquire — it just runs the query once
-        # So we test that it executes the query
-        locker = _PsqlLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-        locker.acquire()
-
-    assert mock_cursor.execute.call_count == 1
-    assert "pg_advisory_lock" in str(mock_cursor.execute.call_args)
-
-
-@pytest.mark.unit
-def test_psql_locker_context_manager_timeout() -> None:
-    mock_cursor = MagicMock()
-    mock_conn = MagicMock()
-    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
-    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-
-    with _PsqlLocker(mock_conn, TEST_MIGRATIONS_TABLE) as locker:
-        assert locker is not None
-
-    assert mock_cursor.execute.call_count == 2
-
-
-# ---------------------------------------------------------------------------
-# _MySqlLocker — mocked
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    ("fetchone_result", "expect_acquire"),
-    [
-        ((1,), True),
-        ((0,), False),
-    ],
-)
-def test_mysql_locker_acquire(fetchone_result: tuple[int], expect_acquire: bool) -> None:
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
-    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-    mock_cursor.fetchone.return_value = fetchone_result
-
-    locker = _MySqlLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-    if expect_acquire:
-        locker.acquire()
-        mock_cursor.fetchall.assert_called()
-    else:
-        with pytest.raises(RuntimeError, match="Could not acquire lock"):
-            locker.acquire()
-
-
-@pytest.mark.unit
-def test_mysql_locker_context_manager() -> None:
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
-    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-    mock_cursor.fetchone.return_value = (1,)
-    mock_cursor.fetchall.return_value = [(1,)]
-
-    with _MySqlLocker(mock_conn, TEST_MIGRATIONS_TABLE):
-        pass
-
-    assert mock_cursor.execute.call_count == 2
-
-
-@pytest.mark.unit
-def test_mysql_locker_release() -> None:
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
-    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-    mock_cursor.fetchone.return_value = (1,)
-    mock_cursor.fetchall.return_value = [(1,)]
-
-    locker = _MySqlLocker(mock_conn, TEST_MIGRATIONS_TABLE)
-    locker.release()
-    mock_cursor.fetchall.assert_called()
-
-
-# ---------------------------------------------------------------------------
-# DatabaseLock — factory dispatch
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("database", "expected_locker_cls"),
@@ -407,11 +74,66 @@ def test_mysql_locker_release() -> None:
         (SupportedDatabase.POSTGRES, _PsqlLocker),
         (SupportedDatabase.MYSQL, _MySqlLocker),
         (SupportedDatabase.MARIADB, _MySqlLocker),
-        (SupportedDatabase.ORACLE, _OracleLocker),
-        (SupportedDatabase.SQLITE, _SqliteLocker),
+        (SupportedDatabase.ORACLE, _DBTableLocker),
+        (SupportedDatabase.SQLITE, _DBTableLocker),
     ],
 )
 def test_database_lock_dispatches(database: SupportedDatabase, expected_locker_cls: type) -> None:
-    mock_conn = MagicMock()
-    lock = DatabaseLock(mock_conn, database, TEST_MIGRATIONS_TABLE)
+    mock_client = MagicMock()
+    mock_client.database = database
+    lock = DatabaseLock(mock_client, TEST_MIGRATIONS_TABLE)
     assert isinstance(lock._locker, expected_locker_cls)  # noqa: SLF001
+
+
+def test_lock_acquire_and_release(client: SqlClient[Any]) -> None:
+    with DatabaseLock(client, TEST_MIGRATIONS_TABLE) as lock:
+        assert lock.is_locked
+    assert not lock.is_locked
+
+
+def test_lock_cannot_be_acquired_twice(client: SqlClient[Any], temp_dir: Path) -> None:
+    if client.database in {SupportedDatabase.SQLITE}:
+        pytest.skip("Skipped because of in-memory database usage")
+
+    with _second_client(client.database, temp_dir) as second_client:
+        lock = DatabaseLock(client, TEST_MIGRATIONS_TABLE)
+        lock2 = DatabaseLock(second_client, TEST_MIGRATIONS_TABLE)
+
+        lock._locker.acquire()
+        assert lock.is_locked
+
+        with pytest.raises(RuntimeError, match="Could not acquire lock"):
+            lock2._locker.acquire()
+
+
+def test_table_lock_cleanup_on_error(client: SqlClient[Any]) -> None:
+    if client.database not in {SupportedDatabase.ORACLE, SupportedDatabase.SQLITE}:
+        pytest.skip("This test is only for databases that lock using a database table")
+
+    with pytest.raises(RuntimeError, match="simulated"):
+        with DatabaseLock(client, TEST_MIGRATIONS_TABLE):
+            raise RuntimeError("simulated")
+
+    result = client.execute_for_one(f'SELECT COUNT(*) FROM "{TEST_MIGRATIONS_TABLE}_lock"')
+    assert result is not None and result[0] == 0
+
+
+def test_table_lock_unsafe_table_name(client: SqlClient[Any]) -> None:
+    if client.database not in {SupportedDatabase.ORACLE, SupportedDatabase.SQLITE}:
+        pytest.skip("This test is only for databases that lock using a database table")
+
+    with pytest.raises(ValueError, match="Unsafe table name"):
+        _DBTableLocker(client, "invalid-name")
+
+
+@pytest.mark.unit
+def test_table_lock_timeout() -> None:
+    client = Mock()
+    client.execute.side_effect = Exception("DB error")
+
+    time_sequence = [0.0, 0.0, 0.2]
+    with patch("time.monotonic", side_effect=time_sequence):
+        lock = _DBTableLocker(client=client, table_name=TEST_MIGRATIONS_TABLE)
+
+        with pytest.raises(RuntimeError, match="Could not acquire lock"):
+            lock.acquire()
