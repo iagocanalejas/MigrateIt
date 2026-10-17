@@ -1,7 +1,8 @@
+import functools
 import os
 import sqlite3
 import tempfile
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,26 @@ def _get_mysql_port(database: SupportedDatabase) -> int:
     return int(os.getenv("DB_PORT_MYSQL", "3317"))
 
 
-@pytest.fixture(autouse=True)
+@pytest.hookimpl(tryfirst=True)
+def pytest_sessionstart(session: pytest.Session) -> None:
+    print("\n\033[1;33m⚠️  WARNING: @functools.cached_property is globally DISABLED for tests.\n\033[0m")
+
+    # Globally patch cached_property.__get__ for the whole session
+    original_get = functools.cached_property.__get__
+
+    def bypass_cache_get[T](self: Any, instance: Callable[[Any], T] | None, owner: Any = None) -> T:
+        if instance is None:
+            return self
+        return self.func(instance)
+
+    functools.cached_property.__get__ = bypass_cache_get  # type: ignore
+
+    # Store original_get on the session so we can restore it if needed
+    # (though pytest teardown isn't strictly necessary for session-end globals)
+    session._original_cached_property_get = original_get  # type: ignore
+
+
+@pytest.fixture(autouse=True, scope="session")
 def suppress_write() -> Generator[None]:
     with (
         patch("migrateit.reporters.output.write_line_b", lambda *_: None),

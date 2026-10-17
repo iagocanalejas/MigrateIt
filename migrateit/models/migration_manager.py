@@ -108,6 +108,9 @@ class MigrationManager:
 
             has_unvisited_parents = any(p not in visited for p in current.parents)
             if is_normal_order and has_unvisited_parents:
+                if not all(self.exist_migration_by_name(p) for p in current.parents):  # pragma: no cover[safety]
+                    # NOTE: This will never happen because migrations are validated in ChangelogRepository.load().
+                    raise ValueError("Migration has a non-existent parent")
                 queue.append(current)
                 continue
 

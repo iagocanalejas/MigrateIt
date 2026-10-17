@@ -26,7 +26,7 @@ class Changelog:
             raise ValueError("Initial migration is not defined in the changelog")
         return self.migrations[0]
 
-    @property
+    @functools.cached_property
     def migrations_tree(self) -> dict[str, list[Migration]]:
         d: dict[str, list[Migration]] = OrderedDict[str, list[Migration]]()
         for migration in self.migrations:
