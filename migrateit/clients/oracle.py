@@ -309,6 +309,8 @@ def _process_constraints(client: OracleClient, rows: list[tuple[str, ...]]) -> t
                 "SELECT DBMS_METADATA.GET_DDL('CONSTRAINT', :param) FROM DUAL",
                 (conname_str,),
             )
+            if show_row is None or show_row[0] is None:  # pragma: no cover[safety]
+                continue
             con_ddl = str(show_row[0]).strip()
             fwd.append(con_ddl)
     return fwd, rb

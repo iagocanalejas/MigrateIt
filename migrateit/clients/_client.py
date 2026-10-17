@@ -280,6 +280,7 @@ WHERE migration_name = {self.placeholder}
     AND change_hash = {self.placeholder};
 """
         else:
+            # NOTE: this will raise an expected error if the migration was already applied.
             query = f"""
 INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
 VALUES ({self.placeholder}, {self.placeholder});

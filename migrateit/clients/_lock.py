@@ -103,17 +103,21 @@ class _DBTableLocker(Locker):
     @override
     def acquire(self) -> None:
         end_time = time.monotonic() + LOCK_TIMEOUT_SECONDS
+        attempt = 0
         while time.monotonic() < end_time:
+            attempt += 1
             try:
                 self._client.execute(f"INSERT INTO {self.lock_table} (id) VALUES (1)")
                 self._client.connection.commit()
                 self.is_locked = True
                 logger.debug("Acquired lock for table %s", self._table_name)
                 return
-            except Exception:
+            except Exception as e:
                 if time.monotonic() >= end_time:
-                    raise RuntimeError(f"Could not acquire lock for {self._table_name} within {LOCK_TIMEOUT_SECONDS}s")
-            time.sleep(LOCK_RETRY_SECONDS)
+                    msg = f"Could not acquire lock for {self._table_name} within {LOCK_TIMEOUT_SECONDS}s"
+                    raise RuntimeError(msg) from e
+            retry_delay = min(LOCK_RETRY_SECONDS * (2**attempt), 5.0)
+            time.sleep(retry_delay)
         raise RuntimeError(f"Could not acquire lock for {self._table_name} within {LOCK_TIMEOUT_SECONDS}s")
 
     @override
