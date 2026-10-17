@@ -15,6 +15,7 @@ VALID_EDITORS: frozenset[str] = frozenset(
         "vim",
         "vi",
         "nano",
+        "nvim",
         "emacs",
         "subl",
         "code",

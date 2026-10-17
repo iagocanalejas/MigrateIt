@@ -13,7 +13,10 @@ def force_bytes(exc: Any) -> bytes:
     with contextlib.suppress(TypeError):
         return bytes(exc)
     with contextlib.suppress(BaseException):
-        return str(exc).encode()
+        try:
+            return str(exc).encode()
+        except (TypeError, ValueError):
+            return f"<unprintable {type(exc).__name__} object>".encode()
     return f"<unprintable {type(exc).__name__} object>".encode()
 
 

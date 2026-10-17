@@ -142,7 +142,7 @@ def cmd_new(
     editor = _validate_editor(editor)
     cmd = shlex.split(editor) + [str(client.migrations_dir / migration.name)]
     try:
-        rc = subprocess.run(cmd).returncode
+        rc = subprocess.run(cmd, timeout=30).returncode
     except FileNotFoundError:  # pragma: no cover
         editor_name = shlex.split(editor)[0] if editor else "unknown"
         write_line(f"Error: Could not find editor executable '{editor_name}'.")
