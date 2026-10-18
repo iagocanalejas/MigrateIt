@@ -109,7 +109,7 @@ def cmd_new(
     if not client.is_migrations_table_created():
         raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
     if interactive and dependencies is not None and len(dependencies) > 0:
-        raise ValueError("Cannot specify both `--interactive` and `--dependencies`")
+        raise ValueError("Cannot specify both `--interactive` and `--dependencies`.")
 
     # NOTE: required in case-sensitive OSs
     name = name.lower()
@@ -148,7 +148,7 @@ def cmd_new(
         write_line(f"Error: Could not find editor executable '{editor_name}'.")
         return 1
     if rc != 0:  # pragma: no cover
-        write_line(f"Editor exited with code {rc}")
+        write_line(f"Editor exited with code {rc}.")
     return rc
 
 
@@ -159,18 +159,22 @@ def cmd_run(
     is_rollback: bool = False,
     is_hash_update: bool = False,
     is_plan_only: bool = False,
+    is_full_rollback: bool = False,
 ) -> int:
     if (is_fake or is_rollback) and is_hash_update:
         action = "faking" if is_fake else "rolling back"
-        raise ValueError(f"Cannot update hash while {action} or rolling back")
+        raise ValueError(f"Cannot update hash while {action}.")
 
     if is_hash_update:
         if name is None:
-            raise ValueError("Hash update requires a target migration name")
+            raise ValueError("Hash update requires a target migration name.")
         return _cmd_run_hash_update(client, client.migrations.get_migration_by_name(name))
 
-    if is_rollback and not name:
-        raise ValueError("Rollback requires a target migration name")
+    if is_rollback and not (name or is_full_rollback):
+        raise ValueError("Rollback requires a target migration name.")
+
+    if is_full_rollback and name:
+        raise ValueError("Cannot specify a target migration name when using `--zero`.")
 
     statuses = client.retrieve_migration_statuses()
     client.validate_migrations(statuses)
@@ -190,17 +194,17 @@ def cmd_run(
 
     if not migration_plan:
         if is_rollback:
-            write_line("Rollback: no migrations to roll back")
+            write_line("Rollback: no migrations to roll back.")
         else:
-            write_line("All migrations already applied")
+            write_line("All migrations already applied.")
         return 0
 
     if is_fake:
         action = "Faking" if not is_rollback else "Faking rollback for"
-        write_line(f"{action} {len(migration_plan)} migration(s)")
+        write_line(f"{action} {len(migration_plan)} migration(s).")
     else:
         action = "Applying" if not is_rollback else "Rolling back"
-        write_line(f"{action} {len(migration_plan)} migration(s)")
+        write_line(f"{action} {len(migration_plan)} migration(s).")
 
     with DatabaseLock(client, client.table_name):
         try:
@@ -215,7 +219,9 @@ def cmd_run(
                 pass
             raise
     direction = "Migration" if not is_rollback else "Rollback"
-    write_line(f"{direction} complete: {len(migration_plan)} migration(s) applied")
+    write_line(f"{direction} complete: {len(migration_plan)} migration(s) applied.")
+    if is_full_rollback:
+        write_line("Full rollback complete: all migrations rolled back.")
     return 0
 
 

@@ -86,10 +86,12 @@ class MigrationManager:
         queue: deque[Migration] = deque([self._changelog.root])
         in_queue = {self._changelog.root.name}
         if is_rollback:
-            if not target_migration:
-                raise ValueError("Target migration is required for rollback plan")
-            queue = deque([target_migration])
-            in_queue = {target_migration.name}
+            if target_migration:
+                queue = deque([target_migration])
+                in_queue = {target_migration.name}
+            else:
+                queue = deque([self._changelog.migrations[0]])
+                in_queue = {self._changelog.migrations[0].name}
 
         if is_bottom_up:
             assert target_migration is not None, "Target migration is required for bottom-up plan"

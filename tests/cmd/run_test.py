@@ -56,6 +56,11 @@ def test_cmd_run_rollback(client: SqlClient[Any]) -> None:
     assert len(rows) == 1
 
 
+def test_cmd_run_full_rollback_no_name(client: SqlClient[Any]) -> None:
+    cmd_run(client, is_rollback=True, is_full_rollback=True)
+    assert not _table_exists(client, TEST_MIGRATIONS_TABLE)
+
+
 def test_cmd_run_plan_only(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
     _create_migration_file(client.migrations_dir, "0001_new.sql", sql="CREATE TABLE test (id INTEGER PRIMARY KEY);")
@@ -86,6 +91,13 @@ def test_cmd_run_rollback_no_name(temp_dir: Path) -> None:
         cmd_run(mock_client, is_rollback=True)
 
 
+@pytest.mark.unit
+def test_cmd_run_full_rollback_with_name(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+    with pytest.raises(ValueError, match="Cannot specify a target migration"):
+        cmd_run(mock_client, name="0001", is_rollback=True, is_full_rollback=True)
+
+
 def test_cmd_run_by_name_not_found(client: SqlClient[Any]) -> None:
     with pytest.raises(ValueError, match="not found"):
         cmd_run(client=client, name="0010")
@@ -99,14 +111,14 @@ def test_cmd_run_no_migrations_to_rollback(client: SqlClient[Any]) -> None:
 
     with patch("migrateit.cmd.write_line") as mock_write_line:
         cmd_run(client=client, name="0001", is_rollback=True)
-    mock_write_line.assert_called_with("Rollback: no migrations to roll back")
+    mock_write_line.assert_called_with("Rollback: no migrations to roll back.")
 
 
 def test_cmd_run_all_applied(client: SqlClient[Any]) -> None:
     cmd_run(client=client)
     with patch("migrateit.cmd.write_line") as mock_write_line:
         cmd_run(client=client)
-    mock_write_line.assert_called_once_with("All migrations already applied")
+    mock_write_line.assert_called_once_with("All migrations already applied.")
 
 
 def test_cmd_run_hash_update_no_target(client: SqlClient[Any]) -> None:

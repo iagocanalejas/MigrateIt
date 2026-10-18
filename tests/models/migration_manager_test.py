@@ -287,8 +287,9 @@ def test_build_plan_rollback_no_target() -> None:
     changelog = Changelog(version=1, migrations=[m])
     manager = MigrationManager(changelog)
     statuses: dict[str, MigrationStatus] = {"0000_init.sql": MigrationStatus.APPLIED}
-    with pytest.raises(ValueError, match="Target migration is required for rollback"):
-        manager.build_migration_plan(statuses, is_rollback=True)
+    plan = manager.build_migration_plan(statuses, is_rollback=True)
+    assert len(plan) == 1
+    assert plan[0].name == "0000_init.sql"
 
 
 # --- manager.find_path tests ---
