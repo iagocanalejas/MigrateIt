@@ -27,6 +27,7 @@ where = ["."]
 include = ["migrateit*"]
 
 [tool.pytest.ini_options]
+addopts = "-m 'not integration'"
 testpaths = ["tests"]
 markers = [
     "postgres: tests requiring a PostgreSQL connection",
@@ -35,6 +36,7 @@ markers = [
     "mariadb: tests requiring a MariaDB connection",
     "oracle: tests requiring an Oracle connection",
     "unit: fast unit tests with no database",
+    "integration: integration tests with real migrations",
 ]
 
 [tool.pyright]
@@ -58,6 +60,7 @@ omit = [
   "**/reporters/*.py",
   "main.py",
   "__main__.py",
+  "**/tests/integration/*",
 ]
 
 [tool.coverage.report]
