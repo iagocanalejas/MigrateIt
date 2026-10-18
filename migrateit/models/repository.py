@@ -24,7 +24,7 @@ class ChangelogRepository:
             raise ValueError("Changelog must have exactly one initial migration")
 
         seen_names: set[str] = set()
-        seen_indexes: set[int] = set()
+        seen_indexes: set[str] = set()
         for m in changelog.migrations:
             seen_names.add(m.name)
             if m.initial and len(m.parents) > 0:
@@ -34,10 +34,9 @@ class ChangelogRepository:
             if not re.match(C.MIGRATION_PATTERN, m.name):
                 raise ValueError(f"Migration name {m.name} does not match the pattern")
 
-            index = int(m.name.split("_")[0])
-            if index in seen_indexes:
+            if m.index in seen_indexes:
                 raise ValueError(f"Migration name {m.name} has a duplicated index")
-            seen_indexes.add(index)
+            seen_indexes.add(m.index)
 
             # NOTE: Works because migrations should be ordered topologically
             if not all(p in seen_names for p in m.parents):

@@ -19,7 +19,7 @@ def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:
 
     cmd_run(client)  # apply both
 
-    result = cmd_squash(client, start_migration="0001", end_migration="0002", name="squashed_0001_0002")
+    result = cmd_squash(client, start_migration_name="0001", end_migration_name="0002", name="squashed_0001_0002")
     assert result == 0
 
     changelog_names = [m.name for m in client.changelog.migrations]
@@ -43,7 +43,7 @@ def test_cmd_squash_not_all_applied(client: SqlClient[Any]) -> None:
     cmd_new(client, name="second", no_edit=True)
     _create_migration_file(client.migrations_dir, "0002_second.sql")
 
-    result = cmd_squash(client, start_migration="0001", end_migration="0002", name="squashed_0001_0002")
+    result = cmd_squash(client, start_migration_name="0001", end_migration_name="0002", name="squashed_0001_0002")
     assert result == 0
 
     changelog_names = [m.name for m in client.changelog.migrations]
@@ -54,7 +54,7 @@ def test_cmd_squash_not_all_applied(client: SqlClient[Any]) -> None:
 
 def test_cmd_squash_no_end_too_few_migrations(client: SqlClient[Any]) -> None:
     with pytest.raises(ValueError, match="squash less than 3"):
-        cmd_squash(client, start_migration="0000_migrateit.sql")
+        cmd_squash(client, start_migration_name="0000_migrateit.sql")
 
 
 def test_cmd_squash_no_end_uses_last_migration(client: SqlClient[Any]) -> None:
@@ -64,7 +64,7 @@ def test_cmd_squash_no_end_uses_last_migration(client: SqlClient[Any]) -> None:
     cmd_new(client, name="second", no_edit=True)
     _create_migration_file(client.migrations_dir, "0002_second.sql")
 
-    result = cmd_squash(client, start_migration="0001", name="squashed_0001_0002")
+    result = cmd_squash(client, start_migration_name="0001", name="squashed_0001_0002")
     assert result == 0
 
     changelog_names = [m.name for m in client.changelog.migrations]
@@ -79,7 +79,7 @@ def test_cmd_squash_no_migrations_table(temp_dir: Path) -> None:
     mock_client.is_migrations_table_created.return_value = False  # type: ignore
 
     with pytest.raises(ValueError, match="does not exist"):
-        cmd_squash(mock_client, start_migration="0001")
+        cmd_squash(mock_client, start_migration_name="0001")
 
 
 @pytest.mark.unit
@@ -94,7 +94,7 @@ def test_cmd_squash_no_path_found(temp_dir: Path) -> None:
     # Patch find_path on the real MigrationManager to return no path
     with patch.object(mock_client.migrations, "find_path", return_value=[]):
         with pytest.raises(ValueError, match="No path found"):
-            cmd_squash(mock_client, start_migration="0001_a", end_migration="0001_a")
+            cmd_squash(mock_client, start_migration_name="0001_a", end_migration_name="0001_a")
 
 
 @pytest.mark.unit
@@ -109,7 +109,7 @@ def test_cmd_squash_initial_migration(temp_dir: Path) -> None:
         Migration(name="0002_third.sql", parents=("0001_second.sql",)),
     )
     with pytest.raises(ValueError, match="Cannot squash initial"):
-        cmd_squash(mock_client, start_migration="0000_migrateit.sql")
+        cmd_squash(mock_client, start_migration_name="0000_migrateit.sql")
 
 
 @pytest.mark.unit
@@ -129,4 +129,4 @@ def test_cmd_squash_different_states(temp_dir: Path) -> None:
     }
 
     with pytest.raises(ValueError, match="not in the same state"):
-        cmd_squash(mock_client, start_migration="0001_a", end_migration="0002_b")
+        cmd_squash(mock_client, start_migration_name="0001_a", end_migration_name="0002_b")

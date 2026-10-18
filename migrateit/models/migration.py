@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import hashlib
 import re
 from dataclasses import dataclass
@@ -24,6 +25,10 @@ class Migration:
     name: str
     initial: bool = False
     parents: tuple[str, ...] = ()
+
+    @functools.cached_property
+    def index(self) -> str:
+        return self.name.split("_")[0]
 
     def __str__(self) -> str:  # pragma: no cover
         return self.name

@@ -102,8 +102,8 @@ def main() -> int:
                 elif args.command == "squash":
                     return commands.cmd_squash(
                         client,
-                        start_migration=args.start_migration,
-                        end_migration=args.end_migration,
+                        start_migration_name=args.start_migration,
+                        end_migration_name=args.end_migration,
                         name=args.name,
                     )
                 elif args.command == "drop":

@@ -227,26 +227,29 @@ def cmd_run(
 
 def cmd_squash(
     client: SqlClient[Any],
-    start_migration: str,
-    end_migration: str | None = None,
+    start_migration_name: str,
+    end_migration_name: str | None = None,
     name: str | None = None,
 ) -> int:
     if not client.is_migrations_table_created():
         raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
 
-    if not end_migration:
+    if not end_migration_name:
         if len(client.changelog.migrations) < 3:
             raise ValueError("Cannot squash less than 3 migrations.")
-        end_migration = client.changelog.migrations[-1].name
+        end_migration_name = client.changelog.migrations[-1].name
 
-    start_migration = client.migrations.get_migration_by_name(start_migration).name
-    end_migration = client.migrations.get_migration_by_name(end_migration).name
-    write_line(f"Squashing migrations from {start_migration} to {end_migration}.")
+    start_migration = client.migrations.get_migration_by_name(start_migration_name)
+    end_migration = client.migrations.get_migration_by_name(end_migration_name)
+    write_line(f"Squashing migrations from {start_migration.name} to {end_migration.name}.")
 
-    to_squash = client.migrations.find_path(start_migration, end_migration)
+    if not name or not name.strip():
+        name = f"squashed_{start_migration.index}_{end_migration.index}"
+
+    to_squash = client.migrations.find_path(start_migration.name, end_migration.name)
     write_line(f"Following migrations will be squashed: {', '.join(to_squash)}")
     if not to_squash:
-        raise ValueError(f"No path found from {start_migration} to {end_migration}.")
+        raise ValueError(f"No path found from {start_migration.name} to {end_migration.name}.")
     if any(m.initial for m in (client.migrations.get_migration_by_name(m) for m in to_squash)):
         raise ValueError("Cannot squash initial migrations.")
 
@@ -256,8 +259,8 @@ def cmd_squash(
 
     squashed_migration = client.migrations.create_new_migration(
         migrations_dir=client.migrations_dir,
-        name=name if name else f"squashed_{start_migration}_{end_migration}",
-        dependencies=client.migrations.get_migration_by_name(start_migration).parents,
+        name=name,
+        dependencies=start_migration.parents,
     )
 
     for migration_name in to_squash:
