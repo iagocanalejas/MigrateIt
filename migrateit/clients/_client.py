@@ -186,7 +186,7 @@ WHERE migration_name = {self.placeholder};
 
             if syntax_errors:
                 err_msg = syntax_errors[0]["description"]
-                return SyntaxError(f"SQL Syntax Error: {err_msg}"), code
+                return SyntaxError(f"SQL Syntax Error ({migration}): {err_msg}"), code
 
         return None
 

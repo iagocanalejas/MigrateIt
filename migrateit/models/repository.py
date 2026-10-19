@@ -50,7 +50,7 @@ class ChangelogRepository:
             raise FileNotFoundError(f"File {changelog.path.name} does not exist")
         changelog.path.write_text(changelog.to_json())
         logger.debug("Saved changelog: %s (%d migration(s))", changelog.path, len(changelog.migrations))
-        write_line(f"\tMigrations file updated: {changelog.path}")
+        write_line(f"Changelog file updated: {changelog.path}")
 
     @staticmethod
     def create(path: Path, database: SupportedDatabase) -> Changelog:

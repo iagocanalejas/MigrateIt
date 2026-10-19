@@ -267,6 +267,23 @@ def test_build_plan_rollback_applied() -> None:
 
 
 @pytest.mark.unit
+def test_build_plan_rollback_root() -> None:
+    m1 = Migration(name="0000_init.sql", initial=True, parents=())
+    m2 = Migration(name="0001_add.sql", parents=("0000_init.sql",))
+    m3 = Migration(name="0002_more.sql", parents=("0001_add.sql",))
+    changelog = Changelog(version=1, migrations=[m1, m2, m3])
+    manager = MigrationManager(changelog)
+    statuses: dict[str, MigrationStatus] = {
+        "0000_init.sql": MigrationStatus.APPLIED,
+        "0001_add.sql": MigrationStatus.APPLIED,
+        "0002_more.sql": MigrationStatus.NOT_APPLIED,
+    }
+    plan = manager.build_migration_plan(statuses, m1, is_rollback=True)
+    assert len(plan) == 2
+    assert plan[0].name == "0001_add.sql"
+
+
+@pytest.mark.unit
 def test_build_plan_bottom_up() -> None:
     m1 = Migration(name="0000_init.sql", initial=True, parents=())
     m2 = Migration(name="0001_add.sql", parents=("0000_init.sql",))

@@ -219,7 +219,8 @@ def cmd_run(
                 pass
             raise
     direction = "Migration" if not is_rollback else "Rollback"
-    write_line(f"{direction} complete: {len(migration_plan)} migration(s) applied.")
+    action = "applied" if not is_rollback else "rolled back"
+    write_line(f"{direction} complete: {len(migration_plan)} migration(s) {action}.")
     if is_full_rollback:
         write_line("Full rollback complete: all migrations rolled back.")
     return 0
