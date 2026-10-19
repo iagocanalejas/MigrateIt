@@ -20,7 +20,7 @@ class MigrationStatus(Enum):
     NOT_APPLIED = "not_applied"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Migration:
     name: str
     initial: bool = False

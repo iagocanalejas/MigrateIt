@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from migrateit.models.migration import Migration, MigrationStatus
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ExportItem:
     name: str
     metadata_query: str
