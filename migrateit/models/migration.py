@@ -93,7 +93,8 @@ def write_into_migration_file(migration_file: Path, sql: str | None, rollback: s
         rollback: The rollback SQL to write into the migration file.
     """
     if (sql is None or not sql.strip()) and (rollback is None or not rollback.strip()):
-        raise ValueError("At least one of sql or rollback must be provided")
+        # NOTE: empty migrations can be skipped
+        return
 
     migration_content = migration_file.read_text(encoding="utf-8")
     if C.ROLLBACK_SPLIT_TAG not in migration_content:

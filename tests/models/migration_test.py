@@ -14,6 +14,7 @@ from migrateit.models.migration import (
     retrieve_migration_sqls,
     write_into_migration_file,
 )
+from migrateit.models.sql import remove_sql_comments
 
 # --- migration.is_valid_name tests ---
 
@@ -285,10 +286,14 @@ def test_write_rollback_only(temp_dir: Path) -> None:
 
 
 @pytest.mark.unit
-def test_write_both_none_raises(temp_dir: Path) -> None:
+def test_write_both_none_does_nothing(temp_dir: Path) -> None:
     file_path = _make_migration_file(temp_dir)
-    with pytest.raises(ValueError, match="At least one of sql or rollback must be provided"):
-        write_into_migration_file(file_path, sql=None, rollback=None)
+    write_into_migration_file(file_path, sql=None, rollback=None)
+    content = file_path.read_text()
+
+    migration, rollback = content.split(ROLLBACK_SPLIT_TAG)
+    assert remove_sql_comments(migration.strip()) == ""
+    assert rollback.strip() == ""
 
 
 @pytest.mark.unit
