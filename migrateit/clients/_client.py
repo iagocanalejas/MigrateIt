@@ -15,7 +15,7 @@ from migrateit.models.changelog import Changelog
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
 from migrateit.models.migration_manager import MigrationManager
-from migrateit.models.sql import patch_sql_statement
+from migrateit.models.sql import patch_sql_statement, recombine_compound_statements
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
@@ -137,7 +137,8 @@ FROM {self._q(self.table_name)};
             parsed = self._linter.parse_string(code)
             if len(parsed.violations) > 0:
                 raise ValueError(parsed.violations)
-            statements = [seg.raw.strip() for seg in parsed.tree.recursive_crawl("statement")]
+            statements = [seg.raw.strip() for seg in parsed.tree.recursive_crawl("statement", recurse_into=False)]
+            statements = recombine_compound_statements(statements)
             assert len(statements) > 0, "No statements found in migration code"
             for stmt in statements:
                 self.execute(stmt)

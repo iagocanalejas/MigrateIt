@@ -21,6 +21,36 @@ def sql_to_statements(sql: str) -> Generator[str]:
             yield stmt
 
 
+def recombine_compound_statements(raw_statements: list[str]) -> list[str]:
+    """
+    Re-combines SQL statements that were split by sqlfluff by semicolons inside
+    compound blocks (like BEGIN ... END in triggers, procedures, or functions).
+    """
+    statements = []
+    buffer = []
+
+    for stmt in raw_statements:
+        buffer.append(stmt)
+        combined = " ".join(buffer)
+
+        begin_count = len(re.findall(r"\bBEGIN\b", combined, re.IGNORECASE))
+        end_count = len(re.findall(r"\bEND\b", combined, re.IGNORECASE))
+
+        if begin_count == 0:
+            # Normal single-line or non-block statement
+            statements.append(stmt)
+            buffer = []
+        elif begin_count == end_count:
+            # Compound block is fully closed
+            statements.append("; ".join(buffer))
+            buffer = []
+
+    if buffer:
+        statements.append("; ".join(buffer))
+
+    return [s.strip() for s in statements if s.strip()]
+
+
 def patch_sql_statement(database: SupportedDatabase, sql: str) -> str:
     sql = remove_sql_comments(sql)
     upper_sql = sql.upper()
