@@ -8,7 +8,7 @@ from migrateit.clients._client import SqlClient
 from migrateit.cmd import cmd_new, cmd_run, cmd_squash
 from migrateit.models.migration import Migration, MigrationStatus
 from tests.cmd.conftest import _mock_client
-from tests.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file, _get_query_rows
+from tests.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file, _get_query_rows
 
 
 def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:
@@ -16,22 +16,23 @@ def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:
     _create_migration_file(client.migrations_dir, "0001_first.sql")
     cmd_new(client, name="second", no_edit=True)
     _create_migration_file(client.migrations_dir, "0002_second.sql")
+    cmd_new(client, name="third", no_edit=True)
+    _create_migration_file(client.migrations_dir, "0003_third.sql")
 
-    cmd_run(client)  # apply both
+    cmd_run(client)  # apply all
 
     result = cmd_squash(client, start_migration_name="0001", end_migration_name="0002", name="squashed_0001_0002")
     assert result == 0
 
     changelog_names = [m.name for m in client.changelog.migrations]
-    assert "0003_squashed_0001_0002.sql" in changelog_names
-    assert "0001_first" not in changelog_names
-    assert "0002_second" not in changelog_names
+    assert changelog_names == [INITIAL_MIGRATION, "0004_squashed_0001_0002.sql", "0003_third.sql"]
+    assert client.changelog.migrations[2].parents == ("0004_squashed_0001_0002.sql",)
 
     # Verify squashed state in database
     rows = _get_query_rows(client, f"SELECT migration_name, squashed FROM {client._q(TEST_MIGRATIONS_TABLE)}")
     applied = {row[0]: row[1] for row in rows}
 
-    assert "0003_squashed_0001_0002.sql" in applied
+    assert "0004_squashed_0001_0002.sql" in applied
     assert applied["0001_first.sql"] == 1
     assert applied["0002_second.sql"] == 1
 

@@ -261,6 +261,7 @@ def cmd_squash(
         migrations_dir=client.migrations_dir,
         name=name,
         dependencies=start_migration.parents,
+        is_squash_migration=True,
     )
 
     for migration_name in to_squash:
@@ -280,7 +281,13 @@ def cmd_squash(
         write_line("Migrations marked as squashed in the database.")
         write_line(f"Squashed migration {squashed_migration.name} applied in the database.")
 
-    client.changelog.migrations = [m for m in client.changelog.migrations if m.name not in to_squash]
+    write_line("Updating migration dependencies in the changelog.")
+    client.migrations.squash_migrations(
+        squashed_migration,
+        to_squash,
+        into=client.changelog.migrations.index(start_migration),
+    )
+
     ChangelogRepository.save(client.changelog)
     write_line(f"Changelog updated: removed {len(to_squash)} migration(s), added {squashed_migration.name}")
 

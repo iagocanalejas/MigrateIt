@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import os
 from collections import deque
 from pathlib import Path
@@ -27,6 +28,7 @@ class MigrationManager:
         migrations_dir: Path,
         name: str,
         dependencies: tuple[str, ...] | None = None,
+        is_squash_migration: bool = False,
     ) -> Migration:
         if not name.isidentifier():
             raise ValueError(f"Migration name '{name}' is not a valid identifier")
@@ -50,7 +52,8 @@ class MigrationManager:
             initial=is_initial,
             parents=() if is_initial else (dependencies or (self.migrations[-1].name,)),
         )
-        self.migrations.append(new_migration)
+        if not is_squash_migration:
+            self.migrations.append(new_migration)
         write_line(f"\tMigration {new_migration.name} created successfully")
         if dependencies:
             write_line(f"\tAdded dependencies to: {', '.join(dependencies)}")
@@ -71,6 +74,17 @@ class MigrationManager:
         name = os.path.basename(name) if os.path.isabs(name) else name
         prefix = name.split("_", 1)[0]
         return any(m.name.startswith(prefix) for m in self.migrations)
+
+    def squash_migrations(self, squashed_migration: Migration, to_squash: list[str], into: int) -> None:
+        updated_migrations = []
+        self._changelog.migrations.insert(into, squashed_migration)
+        for migration in self._changelog.migrations:
+            matches = [m for m in to_squash if m in migration.parents]
+            if len(matches):
+                new_parents = tuple(m for m in migration.parents if m not in matches) + (squashed_migration.name,)
+                migration = dataclasses.replace(migration, parents=new_parents)
+            updated_migrations.append(migration)
+        self._changelog.migrations = [m for m in updated_migrations if m.name not in to_squash]
 
     def build_migration_plan(
         self,
