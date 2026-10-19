@@ -139,6 +139,7 @@ WHERE tc.Owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
         SELECT Table_Name FROM all_tab_columns
         WHERE Column_Name = 'MIGRATION_NAME' AND Owner = tc.Owner
     )
+    AND tc.Constraint_Name NOT LIKE 'BIN$%'
 GROUP BY tc.Constraint_Name, tc.Constraint_Type, tc.Table_Name
 ORDER BY tc.Table_Name, tc.Constraint_Name;
                 """,
@@ -168,6 +169,7 @@ FROM all_constraints tc
     ) rr ON tc.Constraint_Name = rr.Constraint_Name AND tc.Owner = rr.Owner
 WHERE tc.Constraint_Type = 'R'
     AND tc.Owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
+    AND tc.Constraint_Name NOT LIKE 'BIN$%'
 GROUP BY tc.Constraint_Name, tc.Table_Name, tc.Status,
     rr.Ref_Owner, rr.Ref_Table, rr.Ref_Columns
 ORDER BY tc.Table_Name, tc.Constraint_Name;
