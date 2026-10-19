@@ -12,6 +12,8 @@ from migrateit.clients._protocol import ExportItem
 if TYPE_CHECKING:
     import oracledb  # noqa: F401
 
+_PLSQL_KEYWORDS = {"CREATE TRIGGER", "CREATE PROCEDURE", "CREATE FUNCTION", "BEGIN", "DECLARE"}
+
 
 class OracleClient(SqlClient["oracledb.Connection"]):
     VARNAME_DB_SID = os.getenv("VARNAME_DB_SID", "DB_SID")
@@ -62,6 +64,11 @@ DROP SEQUENCE {seq_name};
 
     @override
     def execute(self, query: str, params: tuple[Any, ...] = ()) -> None:
+        upper_query = query.strip().upper()
+        is_plsql_or_trigger = any(k in upper_query for k in _PLSQL_KEYWORDS)
+        if is_plsql_or_trigger:  # pragma: no cover
+            raise NotImplementedError("PL/SQL or trigger execution is not supported yet.")
+
         formatted_query, bound_params = self._format_params(query, params)
         with self.connection.cursor() as cursor:
             cursor.execute(formatted_query, bound_params)
