@@ -1,0 +1,14 @@
+-- Migration 0000_migrateit.sql
+-- Created on 2026-10-06T12:54:56.475769
+
+CREATE TABLE IF NOT EXISTS "MIGRATEIT_CHANGELOG" (
+    id SERIAL PRIMARY KEY,
+    migration_name VARCHAR(255) UNIQUE NOT NULL,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    change_hash VARCHAR(64) NOT NULL,
+    squashed BOOLEAN DEFAULT FALSE
+);
+
+-- Rollback migration
+
+DROP TABLE IF EXISTS "MIGRATEIT_CHANGELOG";

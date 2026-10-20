@@ -1,0 +1,53 @@
+{
+    "version": 1,
+    "database": "mariadb",
+    "migrations": [
+        {
+            "name": "0000_migrateit.sql",
+            "initial": true,
+            "parents": []
+        },
+        {
+            "name": "0001_base_table.sql",
+            "initial": false,
+            "parents": [
+                "0000_migrateit.sql"
+            ]
+        },
+        {
+            "name": "0002_custom_types.sql",
+            "initial": false,
+            "parents": [
+                "0001_base_table.sql"
+            ]
+        },
+        {
+            "name": "0003_indexes.sql",
+            "initial": false,
+            "parents": [
+                "0002_custom_types.sql"
+            ]
+        },
+        {
+            "name": "0004_sequences.sql",
+            "initial": false,
+            "parents": [
+                "0003_indexes.sql"
+            ]
+        },
+        {
+            "name": "0005_views.sql",
+            "initial": false,
+            "parents": [
+                "0004_sequences.sql"
+            ]
+        },
+        {
+            "name": "0006_functions_and_triggers.sql",
+            "initial": false,
+            "parents": [
+                "0005_views.sql"
+            ]
+        }
+    ]
+}
