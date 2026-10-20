@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import functools
 import os
+import re
 from abc import ABC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
 
-import sqlfluff
-from sqlfluff.core import Linter
+from sqlfluff.core import Linter, SQLBaseError
 
 from migrateit import constants as C
 from migrateit.clients._protocol import SqlClientProtocol, SqlConnectionProtocol
@@ -15,7 +15,7 @@ from migrateit.models.changelog import Changelog
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
 from migrateit.models.migration_manager import MigrationManager
-from migrateit.models.sql import patch_sql_statement, recombine_compound_statements
+from migrateit.models.sql import patch_sql_statement, sql_to_statements
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
@@ -134,14 +134,15 @@ FROM {self._q(self.table_name)};
 
         code = migration_code if not is_rollback else reverse_migration_code
         if not is_fake and code.strip():
-            parsed = self._linter.parse_string(code)
-            if len(parsed.violations) > 0:
-                raise ValueError(parsed.violations)
-            statements = [seg.raw.strip() for seg in parsed.tree.recursive_crawl("statement", recurse_into=False)]
-            statements = recombine_compound_statements(statements)
+            statements, errors = sql_to_statements(self._linter, code)
+            if errors:
+                raise ExceptionGroup(
+                    "Multiple SQL linter errors detected in query",
+                    self._build_error_message(migration, errors),
+                )
             assert len(statements) > 0, "No statements found in migration code"
             for stmt in statements:
-                self.execute(stmt)
+                self.execute(patch_sql_statement(self.database, stmt))
         self._update_migration_changelog(migration, migration_hash, is_rollback)
 
     @override
@@ -171,24 +172,14 @@ WHERE migration_name = {self.placeholder};
     # ---------------------------------------------------------------------------
 
     @override
-    def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
-        migration_code, reverse_migration_code, _ = migration.get_content_and_hash(self.migrations_dir)
-        # Filter specifically for syntax/parsing errors
-        dialect = self.database
-        if dialect == SupportedDatabase.MARIADB:  # pragma: no cover
-            # NOTE: MariaDB uses same syntax as MySQL
-            dialect = SupportedDatabase.MYSQL
+    def validate_sql_syntax(self, migration: Migration) -> list[tuple[SyntaxError, str]]:
+        migration_code, rb_migration_code, _ = migration.get_content_and_hash(self.migrations_dir)
+        _, migration_errors = sql_to_statements(self._linter, migration_code)
+        _, rb_migration_errors = sql_to_statements(self._linter, rb_migration_code)
 
-        for code in (migration_code, reverse_migration_code):
-            patched = patch_sql_statement(dialect, code)
-            lint_errors = sqlfluff.lint(patched, dialect=dialect.value)
-            syntax_errors = [e for e in lint_errors if e["code"] == "PRS"]
-
-            if syntax_errors:
-                err_msg = syntax_errors[0]["description"]
-                return SyntaxError(f"SQL Syntax Error ({migration}): {err_msg}"), code
-
-        return None
+        errors = [(e, migration_code) for e in self._build_error_message(migration, migration_errors)]
+        rb_errors = [(e, rb_migration_code) for e in self._build_error_message(migration, rb_migration_errors)]
+        return errors + rb_errors
 
     @override
     def validate_migrations(self, status_map: dict[str, MigrationStatus]) -> None:
@@ -287,6 +278,29 @@ INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
 VALUES ({self.placeholder}, {self.placeholder});
 """
         self.execute(query, (path.name, hash))
+
+    def _build_error_message(self, migration: Migration, errors: list[SQLBaseError]) -> list[SyntaxError]:
+        lines = migration.get_full_path(self.migrations_dir).read_text(encoding="utf-8").splitlines(keepends=True)
+        lines = [line.strip() for line in lines]
+
+        processed = []
+        for error in errors:
+            if not error.description:
+                processed.append(SyntaxError(f"{migration}: SQL Syntax Error (unknown location)"))
+                continue
+            assert error.description is not None
+            matches = re.findall(r"'(.*?)'", error.description)
+            if not matches:
+                processed.append(SyntaxError(f"{migration}: SQL Syntax Error: {error.description}"))
+                continue
+            src = matches[0]
+            try:
+                idx = next(i + 1 for i, line in enumerate(lines) if src in line)
+            except StopIteration:
+                idx = 1
+            err = SyntaxError(f"{migration}: Line {idx}, Position {error.line_pos}: SQL Syntax Error: '{src}'")
+            processed.append(err)
+        return processed
 
 
 def get_client(config: MigrateItConfig, connection: Connection) -> SqlClient[Any]:

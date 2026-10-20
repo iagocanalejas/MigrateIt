@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -12,7 +13,6 @@ from migrateit.models.changelog import Changelog
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.connection import get_connection
 from migrateit.models.migration import Migration, MigrationStatus
-from migrateit.models.sql import sql_to_statements
 from tests.unit.clients.conftest import _client_with_mocked_connection
 from tests.unit.conftest import (
     INITIAL_MIGRATION,
@@ -178,13 +178,19 @@ def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
 
 
 def test_create_migrations_table(client: SqlClient[Any]) -> None:
+    def _sql_to_statements(sql: str) -> Generator[str]:
+        for statement in sql.split(";"):
+            stmt = statement.strip()
+            if stmt:
+                yield stmt
+
     sql, rollback = client.create_migrations_table_str("create_migration_table")
 
-    for stmt in sql_to_statements(sql):
+    for stmt in _sql_to_statements(sql):
         lint_errors = sqlfluff.lint(stmt, dialect=client.database.value)
         assert not [e for e in lint_errors if e["code"] == "PRS"]
 
-    for stmt in sql_to_statements(rollback):
+    for stmt in _sql_to_statements(rollback):
         lint_errors = sqlfluff.lint(stmt, dialect=client.database.value)
         assert not [e for e in lint_errors if e["code"] == "PRS"]
 

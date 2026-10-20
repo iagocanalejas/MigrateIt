@@ -1,7 +1,6 @@
 import re
-from collections.abc import Generator
 
-from sqlfluff.core import Linter
+from sqlfluff.core import Linter, SQLBaseError
 
 from migrateit.models.config import SupportedDatabase
 
@@ -14,22 +13,12 @@ def remove_sql_comments(sql: str) -> str:
     return "".join(segment.raw for segment in parsed.tree.raw_segments if not segment.is_type("comment")).strip()
 
 
-def sql_to_statements(sql: str) -> Generator[str]:
-    for statement in sql.split(";"):
-        stmt = statement.strip()
-        if stmt:
-            yield stmt
+def sql_to_statements(linter: Linter, sql: str) -> tuple[list[str], list[SQLBaseError]]:
+    parsed = linter.parse_string(sql)
 
-
-def recombine_compound_statements(raw_statements: list[str]) -> list[str]:
-    """
-    Re-combines SQL statements that were split by sqlfluff by semicolons inside
-    compound blocks (like BEGIN ... END in triggers, procedures, or functions).
-    """
     statements = []
     buffer = []
-
-    for stmt in raw_statements:
+    for stmt in [seg.raw.strip() for seg in parsed.tree.recursive_crawl("statement", recurse_into=False)]:
         buffer.append(stmt)
         combined = " ".join(buffer)
 
@@ -48,7 +37,7 @@ def recombine_compound_statements(raw_statements: list[str]) -> list[str]:
     if buffer:
         statements.append("; ".join(buffer))
 
-    return [s.strip() for s in statements if s.strip()]
+    return [s.strip() for s in statements if s.strip()], parsed.violations
 
 
 def patch_sql_statement(database: SupportedDatabase, sql: str) -> str:
