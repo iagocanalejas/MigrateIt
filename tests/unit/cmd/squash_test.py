@@ -26,7 +26,13 @@ def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:
 
     changelog_names = [m.name for m in client.changelog.migrations]
     assert changelog_names == [INITIAL_MIGRATION, "0004_squashed_0001_0002.sql", "0003_third.sql"]
+
+    # Verify parents got updated
     assert client.changelog.migrations[2].parents == ("0004_squashed_0001_0002.sql",)
+
+    # Verify migrations got renamed
+    assert client.migrations_dir / "0001_first.sql" not in client.migrations_dir.iterdir()
+    assert client.migrations_dir / "squashed_0001_first.sql" in client.migrations_dir.iterdir()
 
     # Verify squashed state in database
     rows = _get_query_rows(client, f"SELECT migration_name, squashed FROM {client._q(TEST_MIGRATIONS_TABLE)}")

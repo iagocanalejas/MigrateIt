@@ -63,6 +63,15 @@ class Migration:
             content_hash,
         )
 
+    def rename_squashed(self, migrations_dir: Path) -> Migration:
+        new_name = f"squashed_{self.name}"
+        (migrations_dir / self.name).rename(migrations_dir / new_name)
+        return Migration(
+            name=new_name,
+            initial=self.initial,
+            parents=self.parents,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,

@@ -273,6 +273,9 @@ def cmd_squash(
         sql, rollback = retrieve_migration_sqls(client.migrations_dir / migration.name)
         write_into_migration_file(client.migrations_dir / squashed_migration.name, sql=sql, rollback=rollback)
 
+        new_migration = migration.rename_squashed(migrations_dir=client.migrations_dir)
+        write_line(f"Renaming migration {migration.name} to {new_migration.name}")
+
     write_line(f"Squashed migration created: {squashed_migration.name}")
 
     are_migrations_applied = statuses[to_squash[0]] == MigrationStatus.APPLIED
