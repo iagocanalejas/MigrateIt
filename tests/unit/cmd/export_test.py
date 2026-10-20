@@ -10,7 +10,7 @@ def test_cmd_export_no_name_creates_default(client: SqlClient[Any]) -> None:
     assert result == 0
     # Default name should be <database>_backup, prefixed with 0001_
     expected_name = f"{client.database.value}_backup"
-    changelog_names = [m.name for m in client.changelog.migrations]
+    changelog_names = [f.name for f in (client.changelog.path.parent / "migrations").iterdir()]
     assert any(expected_name in name for name in changelog_names)
 
 
@@ -19,12 +19,8 @@ def test_cmd_export_with_name(client: SqlClient[Any]) -> None:
 
     assert result == 0
 
-    # Verify migration depends on root
-    export_migration = next(m for m in client.changelog.migrations if "my_full_export" in m.name)
-    assert export_migration.parents == (client.changelog.root.name,)
-
     # Verify migration file exists
-    changelog_names = [m.name for m in client.changelog.migrations]
+    changelog_names = [f.name for f in (client.changelog.path.parent / "migrations").iterdir()]
     files = list(client.migrations_dir.glob("*my_full_export*.sql"))
     assert any("my_full_export" in name for name in changelog_names)
     assert len(files) == 1

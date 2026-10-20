@@ -90,6 +90,7 @@ def cmd_export(client: SqlClient[Any], name: str | None) -> int:
         migrations_dir=client.migrations_dir,
         name=name,
         dependencies=(client.changelog.root.name,),
+        skip_changelog=True,
     )
     write_line(f"Migration file created: {migration.name}")
 
@@ -262,7 +263,7 @@ def cmd_squash(
         migrations_dir=client.migrations_dir,
         name=name,
         dependencies=start_migration.parents,
-        is_squash_migration=True,
+        skip_changelog=True,
     )
 
     for migration_name in to_squash:

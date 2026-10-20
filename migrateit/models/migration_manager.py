@@ -28,7 +28,7 @@ class MigrationManager:
         migrations_dir: Path,
         name: str,
         dependencies: tuple[str, ...] | None = None,
-        is_squash_migration: bool = False,
+        skip_changelog: bool = False,
     ) -> Migration:
         if not name.isidentifier():
             raise ValueError(f"Migration name '{name}' is not a valid identifier")
@@ -52,7 +52,7 @@ class MigrationManager:
             initial=is_initial,
             parents=() if is_initial else (dependencies or (self.migrations[-1].name,)),
         )
-        if not is_squash_migration:
+        if not skip_changelog:
             self.migrations.append(new_migration)
         write_line(f"\tMigration {new_migration.name} created successfully")
         if dependencies:
