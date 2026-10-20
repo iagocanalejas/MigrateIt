@@ -13,9 +13,10 @@ from migrateit.reporters.output import write_line
 class ChangelogRepository:
     @staticmethod
     def load(path: Path) -> Changelog:
-        if not path.exists():
-            raise FileNotFoundError(f"File {path.name} does not exist")
-        changelog = Changelog.from_json(path.read_text(), path)
+        resolved_path = path.resolve()
+        if not resolved_path.exists():
+            raise FileNotFoundError(f"File {resolved_path.name} does not exist")
+        changelog = Changelog.from_json(resolved_path.read_text(), resolved_path)
         if not changelog.migrations:
             return changelog
 
@@ -46,11 +47,12 @@ class ChangelogRepository:
 
     @staticmethod
     def save(changelog: Changelog) -> None:
-        if not changelog.path.exists():
-            raise FileNotFoundError(f"File {changelog.path.name} does not exist")
-        changelog.path.write_text(changelog.to_json())
-        logger.debug("Saved changelog: %s (%d migration(s))", changelog.path, len(changelog.migrations))
-        write_line(f"Changelog file updated: {changelog.path}")
+        path = changelog.path.resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"File {path.name} does not exist")
+        path.write_text(changelog.to_json())
+        logger.debug("Saved changelog: %s (%d migration(s))", path, len(changelog.migrations))
+        write_line(f"Changelog file updated: {path}")
 
     @staticmethod
     def create(path: Path, database: SupportedDatabase) -> Changelog:

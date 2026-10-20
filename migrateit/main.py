@@ -45,7 +45,7 @@ def main() -> int:
     with error_handler(), logging_handler(True):
         if hasattr(args, "func"):
             logger.debug("Running command: %s", args.command)
-            root = Path(C.MIGRATEIT_ROOT_DIR)
+            root = Path(C.MIGRATEIT_ROOT_DIR).resolve()
             if args.command == "init":
                 if args.database not in [db.value for db in SupportedDatabase]:
                     raise FatalError(f"Unsupported database type: {args.database}.")
