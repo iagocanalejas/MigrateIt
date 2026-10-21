@@ -26,19 +26,15 @@ class Migration:
     initial: bool = False
     parents: tuple[str, ...] = ()
 
-    @functools.cached_property
-    def index(self) -> str:
-        return self.name.split("_")[0]
-
     def __str__(self) -> str:  # pragma: no cover
         return self.name
 
     def __repr__(self) -> str:  # pragma: no cover
         return str(self)
 
-    @staticmethod
-    def is_valid_name(path: Path) -> bool:
-        return path.is_file() and re.match(C.MIGRATION_PATTERN, path.name) is not None
+    @functools.cached_property
+    def index(self) -> str:
+        return self.name.split("_")[0]
 
     def get_full_path(self, migrations_dir: Path) -> Path:
         path = migrations_dir / self.name

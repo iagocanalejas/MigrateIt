@@ -16,36 +16,6 @@ from migrateit.models.migration import (
 )
 from migrateit.models.sql import remove_sql_comments
 
-# --- migration.is_valid_name tests ---
-
-
-@pytest.mark.unit
-def test_valid_sql_file(temp_dir: Path) -> None:
-    path = temp_dir / "0001_test.sql"
-    path.write_bytes(b"SELECT 1;")
-    assert Migration.is_valid_name(path) is True
-
-
-@pytest.mark.unit
-def test_valid_file_no_sql_extension(temp_dir: Path) -> None:
-    path = temp_dir / "0001_test.py"
-    path.write_bytes(b"SELECT 1;")
-    assert Migration.is_valid_name(path) is False
-
-
-@pytest.mark.unit
-def test_valid_file_no_prefix(temp_dir: Path) -> None:
-    path = temp_dir / "test.sql"
-    path.write_bytes(b"SELECT 1;")
-    assert Migration.is_valid_name(path) is False
-
-
-@pytest.mark.unit
-def test_valid_nonexistent_file() -> None:
-    path = Path("/nonexistent/file/0001_test.sql")
-    assert Migration.is_valid_name(path) is False
-
-
 # --- get_content_and_hash tests ---
 
 
