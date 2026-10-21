@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import functools
 import os
-import re
 from abc import ABC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
-
-from sqlfluff.core import Linter, SQLBaseError
 
 from migrateit import constants as C
 from migrateit.clients._protocol import SqlClientProtocol, SqlConnectionProtocol
@@ -60,10 +56,6 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
     def migrations(self) -> MigrationManager:
         return MigrationManager(self.config.changelog)
 
-    @functools.cached_property
-    def _linter(self) -> Linter:
-        return Linter(dialect=self.database.value)
-
     @classmethod
     def _q(cls, name: str, QUOTE_CHAR: str = '"') -> str:
         if QUOTE_CHAR in name or "\x00" in name:
@@ -111,7 +103,7 @@ FROM {self._q(self.table_name)};
                 migrations[migration_name] = MigrationStatus.REMOVED
                 continue
 
-            _, _, migration_hash = migration.get_content_and_hash(self.migrations_dir)
+            _, _, migration_hash = migration.get_content_and_hash(self.database, self.migrations_dir)
             status = MigrationStatus.APPLIED
             if migration_hash != db_hash:
                 status = MigrationStatus.CONFLICT
@@ -130,11 +122,11 @@ FROM {self._q(self.table_name)};
                 raise ValueError(f"Migration {migration.name} is not applied, cannot undo it")
             raise ValueError(f"Migration {migration.name} is already applied, cannot apply it again")
 
-        migration_code, reverse_migration_code, migration_hash = migration.get_content_and_hash(self.migrations_dir)
+        migration_code, rb_migration_code, hash = migration.get_content_and_hash(self.database, self.migrations_dir)
 
-        code = migration_code if not is_rollback else reverse_migration_code
+        code = migration_code if not is_rollback else rb_migration_code
         if not is_fake and code.strip():
-            statements, errors = sql_to_statements(self._linter, code)
+            statements, errors = sql_to_statements(self.database, code)
             if errors:
                 raise ExceptionGroup(
                     "Multiple SQL linter errors detected in query",
@@ -143,7 +135,7 @@ FROM {self._q(self.table_name)};
             assert len(statements) > 0, "No statements found in migration code"
             for stmt in statements:
                 self.execute(patch_sql_statement(self.database, stmt))
-        self._update_migration_changelog(migration, migration_hash, is_rollback)
+        self._update_migration_changelog(migration, hash, is_rollback)
 
     @override
     def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
@@ -158,7 +150,7 @@ WHERE migration_name IN ({placeholders});
 
     @override
     def update_migration_hash(self, migration: Migration) -> None:
-        _, _, migration_hash = migration.get_content_and_hash(self.migrations_dir)
+        _, _, migration_hash = migration.get_content_and_hash(self.database, self.migrations_dir)
 
         query = f"""
 UPDATE {self._q(self.table_name)}
@@ -173,9 +165,9 @@ WHERE migration_name = {self.placeholder};
 
     @override
     def validate_sql_syntax(self, migration: Migration) -> list[tuple[SyntaxError, str]]:
-        migration_code, rb_migration_code, _ = migration.get_content_and_hash(self.migrations_dir)
-        _, migration_errors = sql_to_statements(self._linter, migration_code)
-        _, rb_migration_errors = sql_to_statements(self._linter, rb_migration_code)
+        migration_code, rb_migration_code, _ = migration.get_content_and_hash(self.database, self.migrations_dir)
+        _, migration_errors = sql_to_statements(self.database, migration_code)
+        _, rb_migration_errors = sql_to_statements(self.database, rb_migration_code)
 
         errors = [(e, migration_code) for e in self._build_error_message(migration, migration_errors)]
         rb_errors = [(e, rb_migration_code) for e in self._build_error_message(migration, rb_migration_errors)]
@@ -199,7 +191,7 @@ WHERE migration_name = {self.placeholder};
             errors: list[str] = []
             for conflict_migration in conflict_migrations:
                 migration = self.migrations.get_migration_by_name(conflict_migration)
-                _, _, migration_hash = migration.get_content_and_hash(self.migrations_dir)
+                _, _, migration_hash = migration.get_content_and_hash(self.database, self.migrations_dir)
                 errors.append(
                     f"Migration {conflict_migration} has a different hash in the database: "
                     f"found={migration_hash} existing={self._get_database_hash(conflict_migration)}"
@@ -279,26 +271,19 @@ VALUES ({self.placeholder}, {self.placeholder});
 """
         self.execute(query, (path.name, hash))
 
-    def _build_error_message(self, migration: Migration, errors: list[SQLBaseError]) -> list[SyntaxError]:
-        lines = migration.get_full_path(self.migrations_dir).read_text(encoding="utf-8").splitlines(keepends=True)
-        lines = [line.strip() for line in lines]
-
+    def _build_error_message(self, migration: Migration, errors: list[dict[str, Any]]) -> list[SyntaxError]:
+        """Builds structured SyntaxErrors using native sqlglot error details."""
         processed = []
         for error in errors:
-            if not error.description:
+            message = error.get("message") if isinstance(error, dict) else getattr(error, "message", str(error))
+            line = error.get("line") if isinstance(error, dict) else getattr(error, "line", 1)
+            col = error.get("col") if isinstance(error, dict) else getattr(error, "col", 1)
+
+            if not message:
                 processed.append(SyntaxError(f"{migration}: SQL Syntax Error (unknown location)"))
                 continue
-            assert error.description is not None
-            matches = re.findall(r"'(.*?)'", error.description)
-            if not matches:
-                processed.append(SyntaxError(f"{migration}: SQL Syntax Error: {error.description}"))
-                continue
-            src = matches[0]
-            try:
-                idx = next(i + 1 for i, line in enumerate(lines) if src in line)
-            except StopIteration:
-                idx = 1
-            err = SyntaxError(f"{migration}: Line {idx}, Position {error.line_pos}: SQL Syntax Error: '{src}'")
+
+            err = SyntaxError(f"{migration}: Line {line}, Position {col}: SQL Syntax Error: {message}")
             processed.append(err)
         return processed
 

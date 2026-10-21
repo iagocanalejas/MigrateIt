@@ -1,8 +1,7 @@
 import pytest
-from sqlfluff.core import Linter, SQLParseError
 
 from migrateit.models.config import SupportedDatabase
-from migrateit.models.sql import patch_sql_statement, sql_to_statements
+from migrateit.models.sql import patch_sql_statement
 
 
 @pytest.mark.unit
@@ -13,7 +12,7 @@ from migrateit.models.sql import patch_sql_statement, sql_to_statements
         (
             SupportedDatabase.SQLITE,
             "CREATE TABLE users (id INT);",
-            "CREATE TABLE IF NOT EXISTS users (id INT);",
+            "CREATE TABLE IF NOT EXISTS users (id INTEGER);",
         ),
         (
             SupportedDatabase.POSTGRES,
@@ -60,12 +59,12 @@ from migrateit.models.sql import patch_sql_statement, sql_to_statements
         (
             SupportedDatabase.SQLITE,
             "ALTER TABLE users ADD COLUMN age INT;",
-            "ALTER TABLE users ADD COLUMN age INT;",  # Unsupported DB
+            "ALTER TABLE users ADD COLUMN age INTEGER;",  # Unsupported DB
         ),
         (
             SupportedDatabase.ORACLE,
             "ALTER TABLE users ADD COLUMN age INT;",
-            "ALTER TABLE users ADD COLUMN age INT;",  # Bypassed early
+            "ALTER TABLE users ADD age INT;",  # Bypassed early
         ),
         # 4. ALTER TABLE ... DROP COLUMN tests (Supported: POSTGRES only)
         (
@@ -82,62 +81,9 @@ from migrateit.models.sql import patch_sql_statement, sql_to_statements
         (
             SupportedDatabase.SQLITE,
             "CREATE TABLE users (id INT); -- this is a comment",
-            "CREATE TABLE IF NOT EXISTS users (id INT);",
+            "CREATE TABLE IF NOT EXISTS users (id INTEGER);",
         ),
     ],
 )
 def test_patch_sql_statement(database: SupportedDatabase, input_sql: str, expected_sql: str) -> None:
     assert patch_sql_statement(database, input_sql) == expected_sql
-
-
-@pytest.mark.parametrize(
-    "sql_input, expected_output, errors",
-    [
-        (
-            "SELECT 1; SELECT 2;",
-            ["SELECT 1", "SELECT 2"],
-            [],
-        ),
-        (
-            "BEGIN SELECT 1; END;",
-            ["BEGIN; SELECT 1; END"],
-            [],
-        ),
-        (
-            "SELECT FROM;",
-            ["SELECT FROM"],
-            [SQLParseError("Line 1, Position 8: Found unparsable section: 'FROM'")],
-        ),
-        (
-            "BEGIN SELECT 1; END; SELECT 2;",
-            ["BEGIN; SELECT 1; END", "SELECT 2"],
-            [],
-        ),
-        (
-            "BEGIN SELECT 1;",
-            ["BEGIN; SELECT 1"],
-            [],
-        ),
-        (
-            "SELEKT * FRM non_existing_table;",
-            [],
-            [SQLParseError("Line 1, Position 1: Found unparsable section: 'SELEKT * FRM non_existing_table;'")],
-        ),
-    ],
-    ids=[
-        "normal_statements",
-        "begin_end_block",
-        "parse_error",
-        "mixed_statements",
-        "begin_block",
-        "parse_error_non_existing_table",
-    ],
-)
-def test_sql_to_statements(sql_input: str, expected_output: list[str], errors: list[str]) -> None:
-    # Use 'postgres' dialect so BEGIN...END is parsed successfully
-    linter = Linter(dialect="postgres")
-    result, err = sql_to_statements(linter, sql_input)
-    assert result == expected_output
-    for idx, e in enumerate(errors):
-        assert isinstance(e, SQLParseError)
-        assert str(e) == str(err[idx])

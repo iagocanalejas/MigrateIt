@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from migrateit import constants as C
+from migrateit.models.config import SupportedDatabase
 from migrateit.models.sql import WHITESPACE_RE, remove_sql_comments
 
 
@@ -46,7 +47,7 @@ class Migration:
             raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
         return path
 
-    def get_content_and_hash(self, migrations_dir: Path) -> tuple[str, str, str]:
+    def get_content_and_hash(self, database: SupportedDatabase, migrations_dir: Path) -> tuple[str, str, str]:
         content = self.get_full_path(migrations_dir).read_text()
         content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
         parts = content.split(C.ROLLBACK_SPLIT_TAG)
@@ -55,8 +56,8 @@ class Migration:
         if len(parts) > 2:
             raise ValueError("Too many rollback tags in migration file")
         return (
-            WHITESPACE_RE.sub(" ", remove_sql_comments(parts[0])).strip(),
-            WHITESPACE_RE.sub(" ", remove_sql_comments(parts[1])).strip(),
+            WHITESPACE_RE.sub(" ", remove_sql_comments(database, parts[0])).strip(),
+            WHITESPACE_RE.sub(" ", remove_sql_comments(database, parts[1])).strip(),
             content_hash,
         )
 

@@ -59,7 +59,7 @@ def test_get_migration_content_and_hash_no_rollback(temp_dir: Path) -> None:
         f.write("SELECT 1;")
 
     with pytest.raises(ValueError, match="No rollback"):
-        m.get_content_and_hash(migrations_dir)
+        m.get_content_and_hash(SupportedDatabase.POSTGRES, migrations_dir)
 
 
 @pytest.mark.unit
@@ -72,7 +72,7 @@ def test_get_migration_content_and_hash_more_than_one_rollback(temp_dir: Path) -
         f.write("SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;" + ROLLBACK_SPLIT_TAG + "SELECT 3;")
 
     with pytest.raises(ValueError, match="Too many rollback"):
-        m.get_content_and_hash(migrations_dir)
+        m.get_content_and_hash(SupportedDatabase.POSTGRES, migrations_dir)
 
 
 @pytest.mark.unit
@@ -84,7 +84,7 @@ def test_get_migration_content_clean_comments(temp_dir: Path) -> None:
     with open(migrations_dir / MIGRATION_NAME, "w") as f:
         f.write("-- Comment\n" + "SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;")
 
-    code, _, _ = m.get_content_and_hash(migrations_dir)
+    code, _, _ = m.get_content_and_hash(SupportedDatabase.POSTGRES, migrations_dir)
     assert "--" not in code
 
 
@@ -292,7 +292,7 @@ def test_write_both_none_does_nothing(temp_dir: Path) -> None:
     content = file_path.read_text()
 
     migration, rollback = content.split(ROLLBACK_SPLIT_TAG)
-    assert remove_sql_comments(migration.strip()) == ""
+    assert remove_sql_comments(SupportedDatabase.POSTGRES, migration.strip()) == ""
     assert rollback.strip() == ""
 
 

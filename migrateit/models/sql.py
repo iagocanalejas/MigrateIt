@@ -1,47 +1,38 @@
 import re
+from typing import Any
 
-from sqlfluff.core import Linter, SQLBaseError
+import sqlglot
 
 from migrateit.models.config import SupportedDatabase
 
-linter = Linter(dialect="ansi")
 WHITESPACE_RE = re.compile(r"\s+")
 
 
-def remove_sql_comments(sql: str) -> str:
-    parsed = linter.parse_string(sql)
-    return "".join(segment.raw for segment in parsed.tree.raw_segments if not segment.is_type("comment")).strip()
+def remove_sql_comments(dialect: SupportedDatabase, sql: str) -> str:
+    """Removes comments from an SQL string using sqlglot."""
+    if dialect == SupportedDatabase.MARIADB:
+        dialect = SupportedDatabase.MYSQL
+    expressions = sqlglot.parse(sql, dialect=dialect.value)
+    sql = "; ".join(expr.sql(dialect=dialect.value, comments=False) for expr in expressions if expr).strip()
+    return sql if sql.endswith(";") else f"{sql};"
 
 
-def sql_to_statements(linter: Linter, sql: str) -> tuple[list[str], list[SQLBaseError]]:
-    parsed = linter.parse_string(sql)
-
-    statements = []
-    buffer = []
-    for stmt in [seg.raw.strip() for seg in parsed.tree.recursive_crawl("statement", recurse_into=False)]:
-        buffer.append(stmt)
-        combined = " ".join(buffer)
-
-        begin_count = len(re.findall(r"\bBEGIN\b", combined, re.IGNORECASE))
-        end_count = len(re.findall(r"\bEND\b", combined, re.IGNORECASE))
-
-        if begin_count == 0:
-            # Normal single-line or non-block statement
-            statements.append(stmt)
-            buffer = []
-        elif begin_count == end_count:
-            # Compound block is fully closed
-            statements.append("; ".join(buffer))
-            buffer = []
-
-    if buffer:
-        statements.append("; ".join(buffer))
-
-    return [s.strip() for s in statements if s.strip()], parsed.violations
+def sql_to_statements(dialect: SupportedDatabase, sql: str) -> tuple[list[str], list[dict[str, Any]]]:
+    """Splits an SQL string into individual statements and collects any parse errors/violations."""
+    if dialect == SupportedDatabase.MARIADB:
+        dialect = SupportedDatabase.MYSQL
+    errors = []
+    try:
+        expressions = sqlglot.parse(sql, dialect=dialect.value, error_level=sqlglot.ErrorLevel.RAISE)
+    except sqlglot.ParseError as e:
+        expressions = getattr(e, "expressions", [])
+        errors = e.errors
+    statements = [expr.sql(dialect=dialect.value).strip() for expr in expressions if expr]
+    return [s for s in statements if s], errors
 
 
 def patch_sql_statement(database: SupportedDatabase, sql: str) -> str:
-    sql = remove_sql_comments(sql)
+    sql = remove_sql_comments(database, sql)
     upper_sql = sql.upper()
 
     if database == SupportedDatabase.ORACLE:
