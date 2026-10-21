@@ -4,9 +4,9 @@ import functools
 import json
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
+from migrateit import constants as C
 from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration
 
@@ -16,7 +16,14 @@ class Changelog:
     version: int
     database: SupportedDatabase = SupportedDatabase.POSTGRES
     migrations: list[Migration] = field(default_factory=list)
-    path: Path = field(default_factory=Path)
+
+    path = C.MIGRATEIT_CHANGELOG_FILE
+
+    def __str__(self) -> str:  # pragma: no cover
+        return self.path.name
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return str(self)
 
     @functools.cached_property
     def root(self) -> Migration:
@@ -37,22 +44,17 @@ class Changelog:
                 d[parent].append(migration)
         return d
 
-    def __str__(self) -> str:  # pragma: no cover
-        return self.path.name
-
-    def __repr__(self) -> str:  # pragma: no cover
-        return str(self)
-
     @staticmethod
-    def from_json(json_str: str, file_path: Path) -> Changelog:
-        data = json.loads(json_str)
+    def from_json() -> Changelog:
+        if not Changelog.path.exists():
+            raise FileNotFoundError(f"File {Changelog.path.name} does not exist")
+        data = json.loads(Changelog.path.read_text())
         try:
             migrations = [Migration(**m) for m in data.get("migrations", [])]
             return Changelog(
                 version=data["version"],
                 database=SupportedDatabase(data.get("database", SupportedDatabase.POSTGRES.value)),
                 migrations=migrations,
-                path=file_path,
             )
         except (KeyError, TypeError, ValueError) as e:
             raise ValueError(f"Invalid JSON for MigrationsFile: {e}")

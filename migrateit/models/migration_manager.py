@@ -25,7 +25,6 @@ class MigrationManager:
 
     def create_new_migration(
         self,
-        migrations_dir: Path,
         name: str,
         dependencies: tuple[str, ...] | None = None,
         skip_changelog: bool = False,
@@ -41,7 +40,7 @@ class MigrationManager:
         if is_initial and dependencies:
             raise ValueError("Initial migration cannot have dependencies")
 
-        new_filepath = self._get_next_migration_path(migrations_dir, name)
+        new_filepath = self._get_next_migration_path(name)
 
         # create the new migration file with a header and rollback tag
         new_filepath.write_text(get_migration_header(new_filepath) + C.ROLLBACK_SPLIT_TAG + "\n\n")
@@ -191,17 +190,17 @@ class MigrationManager:
         for child in children.get(name, []):
             MigrationManager._print_dag_rec(child.name, children, status_map, level + 1, seen)
 
-    def _get_next_migration_path(self, migrations_dir: Path, name: str) -> Path:
+    def _get_next_migration_path(self, name: str) -> Path:
         migration_index = f"{len(self.migrations):04d}"
-        new_filepath = migrations_dir / f"{migration_index}_{name}.sql"
+        new_filepath = Migration.migrations_dir / f"{migration_index}_{name}.sql"
         if new_filepath.exists():
             if not inquirer.confirm(f"Migration file {new_filepath.name} already exists. Overwrite?"):
                 raise FileExistsError(f"Migration file {new_filepath.name} already exists")
             new_filepath.unlink()
-        if len(list(migrations_dir.glob(f"{migration_index}_*.sql"))) > 0:
+        if len(list(Migration.migrations_dir.glob(f"{migration_index}_*.sql"))) > 0:
             if not inquirer.confirm(f"Migration index {migration_index} already exists. Overwrite?"):
                 raise FileExistsError(f"Migration index {migration_index} already exists")
-            for f in migrations_dir.glob(f"{migration_index}_*.sql"):
+            for f in Migration.migrations_dir.glob(f"{migration_index}_*.sql"):
                 write_line(f"Deleting {f.name}")
                 f.unlink()
         return new_filepath

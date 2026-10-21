@@ -11,7 +11,7 @@ from tests.unit.conftest import INITIAL_MIGRATION
 
 
 def _mock_client(temp_dir: Path) -> SqlClient[Any]:
-    changelog = ChangelogRepository.create(temp_dir / "changelog.json", database=SupportedDatabase.POSTGRES)
+    changelog = ChangelogRepository.create(database=SupportedDatabase.POSTGRES)
     changelog.migrations.append(Migration(name=INITIAL_MIGRATION, initial=True, parents=()))
     ChangelogRepository.save(changelog)
 

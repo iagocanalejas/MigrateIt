@@ -13,11 +13,11 @@ from tests.unit.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _creat
 
 def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:
     cmd_new(client, name="first", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_first.sql")
+    _create_migration_file("0001_first.sql")
     cmd_new(client, name="second", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0002_second.sql")
+    _create_migration_file("0002_second.sql")
     cmd_new(client, name="third", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0003_third.sql")
+    _create_migration_file("0003_third.sql")
 
     cmd_run(client)  # apply all
 
@@ -31,8 +31,8 @@ def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:
     assert client.changelog.migrations[2].parents == ("0004_squashed_0001_0002.sql",)
 
     # Verify migrations got renamed
-    assert client.migrations_dir / "0001_first.sql" not in client.migrations_dir.iterdir()
-    assert client.migrations_dir / "squashed_0001_first.sql" in client.migrations_dir.iterdir()
+    assert Migration.migrations_dir / "0001_first.sql" not in Migration.migrations_dir.iterdir()
+    assert Migration.migrations_dir / "squashed_0001_first.sql" in Migration.migrations_dir.iterdir()
 
     # Verify squashed state in database
     rows = _get_query_rows(client, f"SELECT migration_name, squashed FROM {client._q(TEST_MIGRATIONS_TABLE)}")
@@ -45,10 +45,10 @@ def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:
 
 def test_cmd_squash_not_all_applied(client: SqlClient[Any]) -> None:
     cmd_new(client, name="first", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_first.sql")
+    _create_migration_file("0001_first.sql")
 
     cmd_new(client, name="second", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0002_second.sql")
+    _create_migration_file("0002_second.sql")
 
     result = cmd_squash(client, start_migration_name="0001", end_migration_name="0002", name="squashed_0001_0002")
     assert result == 0
@@ -66,10 +66,10 @@ def test_cmd_squash_no_end_too_few_migrations(client: SqlClient[Any]) -> None:
 
 def test_cmd_squash_no_end_uses_last_migration(client: SqlClient[Any]) -> None:
     cmd_new(client, name="first", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_first.sql")
+    _create_migration_file("0001_first.sql")
 
     cmd_new(client, name="second", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0002_second.sql")
+    _create_migration_file("0002_second.sql")
 
     result = cmd_squash(client, start_migration_name="0001", name="squashed_0001_0002")
     assert result == 0

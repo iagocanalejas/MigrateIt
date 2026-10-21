@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Any
 
 from migrateit.clients._client import SqlClient
@@ -60,14 +59,12 @@ WHERE migration_name IN ({placeholders}) AND squashed = 1
             raise NotImplementedError
 
 
-def test_squash_migrations_marks_old_as_squashed_and_applies_new(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-
+def test_squash_migrations_marks_old_as_squashed_and_applies_new(client: SqlClient[Any]) -> None:
     old_migrations = (MIGRATION_NAME, "0002_migration.sql")
     new_migration_name = "0012_squashed.sql"
 
     for fname in old_migrations:
-        _create_migration_file(migrations_dir, fname)
+        _create_migration_file(fname)
 
     for fname in old_migrations:
         m = Migration(name=fname, parents=(INITIAL_MIGRATION,) if fname == old_migrations[0] else (old_migrations[0],))
@@ -76,7 +73,7 @@ def test_squash_migrations_marks_old_as_squashed_and_applies_new(client: SqlClie
     for migration in client.changelog.migrations[1:]:  # skip initial
         client.apply_migration(migration, is_fake=False)
 
-    _create_migration_file(migrations_dir, new_migration_name, sql="-- squashed content")
+    _create_migration_file(new_migration_name, sql="-- squashed content")
     new_migration = Migration(name=new_migration_name, parents=old_migrations)
 
     client.squash_migrations(migrations=list(old_migrations), new_migration=new_migration)

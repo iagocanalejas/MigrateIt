@@ -165,11 +165,7 @@ def test_get_environment_params_from_env_vars_oracle() -> None:
 
 @pytest.mark.unit
 def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
-    config = MigrateItConfig(
-        table_name="migrations",
-        migrations_dir=temp_dir,
-        changelog=Changelog(version=1, path=temp_dir / "changelog.json"),
-    )
+    config = MigrateItConfig(changelog=Changelog(version=1))
     with pytest.raises(ValueError, match="connection cannot be None"):
         SqlClient[None](None, config)  # type: ignore
 
@@ -217,10 +213,8 @@ def test_table_missing_returns_false(client: SqlClient[Any]) -> None:
 # --- is_migration_applied tests ---
 
 
-def test_applied_migration_returns_true(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(migrations_dir, MIGRATION_NAME)
+def test_applied_migration_returns_true(client: SqlClient[Any]) -> None:
+    _create_migration_file(MIGRATION_NAME)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -228,10 +222,8 @@ def test_applied_migration_returns_true(client: SqlClient[Any], temp_dir: Path) 
     assert client.is_migration_applied(migration)
 
 
-def test_applied_migration_returns_true_for_fake(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(migrations_dir, MIGRATION_NAME)
+def test_applied_migration_returns_true_for_fake(client: SqlClient[Any]) -> None:
+    _create_migration_file(MIGRATION_NAME)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -239,10 +231,8 @@ def test_applied_migration_returns_true_for_fake(client: SqlClient[Any], temp_di
     assert client.is_migration_applied(migration)
 
 
-def test_not_applied_migration_returns_false(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(migrations_dir, MIGRATION_NAME)
+def test_not_applied_migration_returns_false(client: SqlClient[Any]) -> None:
+    _create_migration_file(MIGRATION_NAME)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -267,11 +257,11 @@ def test_retrieve_migration_statuses_hash_mismatch(temp_dir: Path) -> None:
     client.connection.execute.return_value.fetchone.return_value = [True]  # is_migrations_table_created
     client.connection.execute.return_value.fetchall.return_value = [("0001_test.sql", "db_hash")]
 
-    _create_migration_file(client.migrations_dir, "0001_test.sql")
+    _create_migration_file("0001_test.sql")
     client.config.changelog.migrations.append(Migration(name="0001_test.sql", parents=(INITIAL_MIGRATION,)))
 
     # return a different hash than the DB
-    with patch.object(Migration, "get_content_and_hash", return_value=("fw", "rb", "file_hash")):
+    with patch.object(Migration, "hash", return_value="file_hash"):
         statuses = client.retrieve_migration_statuses()
     assert statuses["0001_test.sql"] == MigrationStatus.CONFLICT
 
@@ -290,10 +280,8 @@ def test_retrieve_migration_statuses_removed(temp_dir: Path) -> None:
 # --- update_migration_hash tests ---
 
 
-def test_update_migration_hash(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-
-    _create_migration_file(migrations_dir, MIGRATION_NAME)
+def test_update_migration_hash(client: SqlClient[Any]) -> None:
+    _create_migration_file(MIGRATION_NAME)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.config.changelog = Changelog(version=1, migrations=[Migration(name=INITIAL_MIGRATION), migration])
 
@@ -315,7 +303,7 @@ def test_update_initial_rollback_is_nop(temp_dir: Path) -> None:
     client = _client_with_mocked_connection(temp_dir)
     migration = Migration(name="0000_init.sql", initial=True)
 
-    client._update_migration_changelog(migration, "hash", is_rollback=True)
+    client._update_migration_changelog(migration, is_rollback=True)
 
     client.connection.cursor.return_value.execute.assert_not_called()
 
@@ -334,11 +322,8 @@ def test_get_database_hash_not_found(client: SqlClient[Any]) -> None:
 @pytest.mark.unit
 def test_get_client_no_supported_database() -> None:
     config = MigrateItConfig(
-        table_name="table",
-        migrations_dir=Path("/tmp"),
         changelog=Changelog(
             version=1,
-            path=Path("/tmp/changelog.json"),
             migrations=[],
             database="unsupported",  # type: ignore[arg-type]
         ),

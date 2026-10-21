@@ -26,6 +26,8 @@ class Migration:
     initial: bool = False
     parents: tuple[str, ...] = ()
 
+    migrations_dir = C.MIGRATEIT_MIGRATIONS_DIR
+
     def __str__(self) -> str:  # pragma: no cover
         return self.name
 
@@ -36,29 +38,38 @@ class Migration:
     def index(self) -> str:
         return self.name.split("_")[0]
 
-    def get_full_path(self, migrations_dir: Path) -> Path:
-        path = migrations_dir / self.name
-        if not path.is_file() or not path.name.endswith(".sql"):
-            raise FileNotFoundError(f"Migration file {path.name} does not exist or is not a valid SQL file")
+    @functools.cached_property
+    def path(self) -> Path:
+        path = self.migrations_dir / self.name
+        if not path.is_file():
+            raise FileNotFoundError(f"Migration file {path.name} does not exist.")
+        if not path.name.endswith(".sql"):
+            raise FileNotFoundError(f"Migration file {path.name} is not a valid SQL file.")
         return path
 
-    def get_content_and_hash(self, migrations_dir: Path) -> tuple[str, str, str]:
-        content = self.get_full_path(migrations_dir).read_text()
-        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        parts = content.split(C.ROLLBACK_SPLIT_TAG)
-        if len(parts) == 1:
+    @functools.cached_property
+    def hash(self) -> str:
+        return hashlib.sha256(self.path.read_text().encode("utf-8")).hexdigest()
+
+    @functools.cached_property
+    def content(self) -> tuple[str, str]:
+        content = self.path.read_text()
+        migration, sep, rb_migration = content.partition(C.ROLLBACK_SPLIT_TAG)
+        if not sep:
             raise ValueError("No rollback tag in migration file")
-        if len(parts) > 2:
+        if C.ROLLBACK_SPLIT_TAG in rb_migration:
             raise ValueError("Too many rollback tags in migration file")
         return (
-            WHITESPACE_RE.sub(" ", remove_sql_comments(parts[0])).strip(),
-            WHITESPACE_RE.sub(" ", remove_sql_comments(parts[1])).strip(),
-            content_hash,
+            WHITESPACE_RE.sub(" ", remove_sql_comments(migration)).strip(),
+            WHITESPACE_RE.sub(" ", remove_sql_comments(rb_migration)).strip(),
         )
 
-    def rename_squashed(self, migrations_dir: Path) -> Migration:
+    def rename_squashed(self) -> Migration:
         new_name = f"squashed_{self.name}"
-        (migrations_dir / self.name).rename(migrations_dir / new_name)
+        new_path = self.path.parent / new_name
+        if new_path.exists():
+            raise ValueError(f"Migration file {new_path.name} already exists.")
+        self.path.rename(new_path)
         return Migration(
             name=new_name,
             initial=self.initial,
@@ -73,13 +84,13 @@ class Migration:
         }
 
 
-def create_migration_directory(migrations_dir: Path) -> None:
+def create_migration_directory() -> None:
     """
     Create the migrations directory if it doesn't exist.
     Args:
         migrations_dir: The path to the migrations directory.
     """
-    migrations_dir.mkdir(parents=True, exist_ok=True)
+    Migration.migrations_dir.mkdir(parents=True, exist_ok=True)
 
 
 def get_migration_header(full_path: Path) -> str:

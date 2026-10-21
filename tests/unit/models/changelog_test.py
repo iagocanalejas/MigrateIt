@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from migrateit.models.changelog import Changelog
@@ -106,3 +109,49 @@ def test_build_tree_with_multiple_parents() -> None:
     assert tree["0003_merge.sql"] == []
     assert m4 in tree["0001_branch_a.sql"]
     assert m4 in tree["0002_branch_b.sql"]
+
+
+# --- migration.from_json tests ---
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_changelog_file_from_json_valid(database: SupportedDatabase, temp_dir: Path) -> None:
+    json_str = json.dumps(
+        {
+            "version": 1,
+            "database": database.value,
+            "migrations": [{"name": "0000_init.sql", "initial": True, "parents": []}],
+        }
+    )
+    (temp_dir / "changelog.json").write_text(json_str)
+    changelog = Changelog.from_json()
+    assert changelog.version == 1
+    assert changelog.database == database
+    assert len(changelog.migrations) == 1
+    assert changelog.migrations[0].name == "0000_init.sql"
+    assert changelog.migrations[0].initial is True
+
+
+@pytest.mark.unit
+def test_changelog_file_from_json_no_migrations(temp_dir: Path) -> None:
+    json_str = '{"version": 1}'
+    (temp_dir / "changelog.json").write_text(json_str)
+    changelog = Changelog.from_json()
+    assert changelog.version == 1
+    assert changelog.migrations == []
+
+
+@pytest.mark.unit
+def test_changelog_file_from_valid_json_without_required_data(temp_dir: Path) -> None:
+    json_str = "{}"
+    (temp_dir / "changelog.json").write_text(json_str)
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        Changelog.from_json()
+
+
+@pytest.mark.unit
+def test_changelog_file_from_json_invalid_json(temp_dir: Path) -> None:
+    (temp_dir / "changelog.json").write_text("{invalid json")
+    with pytest.raises(ValueError, match="Expecting property name"):
+        Changelog.from_json()

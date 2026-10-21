@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Any
 
 from migrateit.clients._client import SqlClient
@@ -32,8 +31,8 @@ def _update_migration_hash(client: SqlClient[Any], name: str, hash_value: str) -
     client.connection.commit()
 
 
-def test_show_migrations_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.database)
+def test_show_migrations_not_applied(client: SqlClient[Any]) -> None:
+    _mock_create_migration(client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -41,8 +40,8 @@ def test_show_migrations_not_applied(client: SqlClient[Any], temp_dir: Path) -> 
     assert result[migration.name] == MigrationStatus.NOT_APPLIED
 
 
-def test_show_migrations_applied(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.database)
+def test_show_migrations_applied(client: SqlClient[Any]) -> None:
+    _mock_create_migration(client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
     client.apply_migration(migration, is_fake=True)
@@ -51,8 +50,8 @@ def test_show_migrations_applied(client: SqlClient[Any], temp_dir: Path) -> None
     assert result[migration.name] == MigrationStatus.APPLIED
 
 
-def test_show_migrations_conflict(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.database)
+def test_show_migrations_conflict(client: SqlClient[Any]) -> None:
+    _mock_create_migration(client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
     client.apply_migration(migration, is_fake=True)
@@ -62,8 +61,8 @@ def test_show_migrations_conflict(client: SqlClient[Any], temp_dir: Path) -> Non
     assert result[migration.name] == MigrationStatus.CONFLICT
 
 
-def test_show_migrations_removed(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.database)
+def test_show_migrations_removed(client: SqlClient[Any]) -> None:
+    _mock_create_migration(client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.apply_migration(migration, is_fake=True)
 

@@ -15,7 +15,7 @@ def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
     _create_database_schema(client)
     content = _export_and_read(client)
 
-    migration_path = client.migrations_dir / client.changelog.migrations[1].name
+    migration_path = client.changelog.migrations[1].path
     assert migration_path.is_file()
 
     forward_part, rollback_part = content.split(C.ROLLBACK_SPLIT_TAG)
@@ -59,16 +59,8 @@ def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
 
 
 def test_export_invalid_parents(client: SqlClient[Any]) -> None:
-    client.migrations.create_new_migration(
-        migrations_dir=client.migrations_dir,
-        name="migration_1",
-        dependencies=("0000_migrateit.sql",),
-    )
-    migration = client.migrations.create_new_migration(
-        migrations_dir=client.migrations_dir,
-        name="full_export",
-        dependencies=("0001",),
-    )
+    client.migrations.create_new_migration(name="migration_1", dependencies=("0000_migrateit.sql",))
+    migration = client.migrations.create_new_migration(name="full_export", dependencies=("0001",))
 
     with pytest.raises(ValueError, match="export must depend only on the initial migration"):
         client.export_database_schema(migration)
@@ -78,10 +70,9 @@ def test_export_invalid_parents(client: SqlClient[Any]) -> None:
 def test_export_database_schema_wrong_parents(temp_dir: Path) -> None:
     changelog = Changelog(
         version=1,
-        path=temp_dir / "changelog.json",
         migrations=[Migration(name="0000_init.sql", initial=True, parents=())],
     )
-    config = MigrateItConfig(table_name="t", migrations_dir=temp_dir, changelog=changelog)
+    config = MigrateItConfig(changelog=changelog)
 
     from migrateit.clients.sqlite import SqliteClient
 
@@ -97,13 +88,9 @@ def test_export_database_schema_wrong_parents(temp_dir: Path) -> None:
 
 def _export_and_read(client: SqlClient[Any], migration_name: str = "full_export") -> str:
     root = client.changelog.root
-    migration = client.migrations.create_new_migration(
-        migrations_dir=client.migrations_dir,
-        name=migration_name,
-        dependencies=(root.name,),
-    )
+    migration = client.migrations.create_new_migration(name=migration_name, dependencies=(root.name,))
     client.export_database_schema(migration)
-    return (client.migrations_dir / migration.name).read_text()
+    return migration.path.read_text()
 
 
 def _create_database_schema(client: SqlClient[Any]) -> None:
@@ -325,9 +312,8 @@ def _add_exclusions(client: SqlClient[Any]) -> None:
     match client.database:
         case SupportedDatabase.POSTGRES:
             with client.connection.cursor() as cursor:
-                cursor.execute(f"""CREATE TABLE {C.MIGRATEIT_MIGRATIONS_TABLE} (id INT PRIMARY KEY);""")
                 cursor.execute(f"""CREATE SEQUENCE {C.MIGRATEIT_MIGRATIONS_TABLE}_sequence;""")
-                cursor.execute(f"CREATE INDEX idx_mig_changelog ON {C.MIGRATEIT_MIGRATIONS_TABLE}(id);")
+                cursor.execute(f"CREATE INDEX idx_mig_changelog ON {client._q(C.MIGRATEIT_MIGRATIONS_TABLE)}(id);")
                 cursor.execute("""
 CREATE OR REPLACE FUNCTION mig_changelog_audit_fn()
 RETURNS TRIGGER AS $$
@@ -340,17 +326,16 @@ $$ LANGUAGE plpgsql;
 """)
                 cursor.execute(f"""
 CREATE TRIGGER mig_changelog_audit
-AFTER INSERT ON {C.MIGRATEIT_MIGRATIONS_TABLE}
+AFTER INSERT ON {client._q(C.MIGRATEIT_MIGRATIONS_TABLE)}
 FOR EACH ROW
 EXECUTE FUNCTION mig_changelog_audit_fn();
 """)
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             with client.connection.cursor() as cursor:
-                cursor.execute(f"CREATE TABLE {C.MIGRATEIT_MIGRATIONS_TABLE} (id INT PRIMARY KEY);")
-                cursor.execute(f"CREATE INDEX idx_mig_changelog ON {C.MIGRATEIT_MIGRATIONS_TABLE}(id);")
+                cursor.execute(f"CREATE INDEX idx_mig_changelog ON {client._q(C.MIGRATEIT_MIGRATIONS_TABLE)}(id);")
                 cursor.execute(f"""
 CREATE TRIGGER mig_changelog_audit
-AFTER INSERT ON {C.MIGRATEIT_MIGRATIONS_TABLE}
+AFTER INSERT ON {client._q(C.MIGRATEIT_MIGRATIONS_TABLE)}
 FOR EACH ROW
 BEGIN
     INSERT INTO audit_log(user_id, old_name, new_name)
@@ -359,10 +344,9 @@ END;
 """)
         case SupportedDatabase.ORACLE:
             with client.connection.cursor() as cursor:
-                cursor.execute(f"CREATE TABLE {C.MIGRATEIT_MIGRATIONS_TABLE} (id NUMBER PRIMARY KEY)")
                 cursor.execute(f"""
 CREATE OR REPLACE TRIGGER mig_changelog_audit
-AFTER INSERT ON {C.MIGRATEIT_MIGRATIONS_TABLE}
+AFTER INSERT ON {client._q(C.MIGRATEIT_MIGRATIONS_TABLE)}
 FOR EACH ROW
 BEGIN
     INSERT INTO audit_log(user_id, old_name, new_name)
@@ -371,10 +355,9 @@ END;
 """)
         case SupportedDatabase.SQLITE:
             client.connection.executescript(f"""
-CREATE TABLE {C.MIGRATEIT_MIGRATIONS_TABLE} (id INTEGER PRIMARY KEY);
-CREATE INDEX idx_mig_changelog ON {C.MIGRATEIT_MIGRATIONS_TABLE}(id);
+CREATE INDEX idx_mig_changelog ON {client._q(C.MIGRATEIT_MIGRATIONS_TABLE)}(id);
 CREATE TRIGGER mig_changelog_audit
-AFTER INSERT ON {C.MIGRATEIT_MIGRATIONS_TABLE}
+AFTER INSERT ON {client._q(C.MIGRATEIT_MIGRATIONS_TABLE)}
 FOR EACH ROW
 BEGIN
     INSERT INTO audit_log(user_id, old_name, new_name)

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from migrateit.cmd import _validate_editor, cmd_new
+from migrateit.models.migration import Migration
 from migrateit.models.repository import ChangelogRepository
 
 from .conftest import _mock_client
@@ -44,7 +45,7 @@ def test_cmd_new_with_existing_migration(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
 
     # Pre-create the migration file
-    path = mock_client.migrations_dir / "0001_test_migration.sql"
+    path = Migration.migrations_dir / "0001_test_migration.sql"
     path.write_text("Hello, world!\n")
 
     with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=False):
@@ -57,14 +58,14 @@ def test_cmd_new_overwrite_migration(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
 
     # Pre-create the migration file
-    path = mock_client.migrations_dir / "0001_test_migration.sql"
+    path = Migration.migrations_dir / "0001_test_migration.sql"
     path.write_text("Hello, world!\n")
 
     with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=True):
         cmd_new(client=mock_client, name="test_migration", no_edit=True)
 
-    assert (mock_client.migrations_dir / "0001_test_migration.sql").exists()
-    assert "Hello, world!" not in (mock_client.migrations_dir / "0001_test_migration.sql").read_text()
+    assert (Migration.migrations_dir / "0001_test_migration.sql").exists()
+    assert "Hello, world!" not in (Migration.migrations_dir / "0001_test_migration.sql").read_text()
 
 
 @pytest.mark.unit
@@ -72,14 +73,14 @@ def test_cmd_new_with_existing_migration_overwrite(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
 
     # Pre-create the migration file
-    path = mock_client.migrations_dir / "0001_test.sql"
+    path = Migration.migrations_dir / "0001_test.sql"
     path.write_text("Hello, world!\n")
 
     with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=True):
         cmd_new(client=mock_client, name="test_migration", no_edit=True)
 
-    assert not (mock_client.migrations_dir / "0001_test.sql").exists()
-    assert (mock_client.migrations_dir / "0001_test_migration.sql").exists()
+    assert not (Migration.migrations_dir / "0001_test.sql").exists()
+    assert (Migration.migrations_dir / "0001_test_migration.sql").exists()
 
 
 @pytest.mark.unit
@@ -89,9 +90,9 @@ def test_cmd_new_with_dependencies(temp_dir: Path) -> None:
     cmd_new(client=mock_client, name="test_table", no_edit=True)
     cmd_new(client=mock_client, name="test_table2", dependencies=("0000", "0001"), no_edit=True)
 
-    assert (mock_client.migrations_dir / "0001_test_table.sql").exists()
+    assert (Migration.migrations_dir / "0001_test_table.sql").exists()
 
-    changelog = ChangelogRepository.load(mock_client.changelog.path)
+    changelog = ChangelogRepository.load()
     assert len(changelog.migrations) == 3
     assert changelog.migrations[2].name == "0002_test_table2.sql"
     assert changelog.migrations[2].parents == ["0000_migrateit.sql", "0001_test_table.sql"]
@@ -125,7 +126,7 @@ def test_cmd_new_interactive_selection(temp_dir: Path) -> None:
         checkbox = mock_prompt.call_args[0][0][0]
         assert checkbox.choices == ["0000_migrateit.sql"]
 
-    changelog = ChangelogRepository.load(mock_client.changelog.path)
+    changelog = ChangelogRepository.load()
     new_migration = changelog.migrations[-1]
     assert new_migration.name == "0001_interactive_migration.sql"
     assert "0000_migrateit.sql" in new_migration.parents
@@ -141,7 +142,7 @@ def test_cmd_new_interactive_cancelled(temp_dir: Path) -> None:
         assert result == 0
         mock_prompt.assert_called_once()
 
-    changelog = ChangelogRepository.load(mock_client.changelog.path)
+    changelog = ChangelogRepository.load()
     assert changelog.migrations[-1].name == "0001_cancelled_migration.sql"
 
 
