@@ -69,7 +69,7 @@ def test_cmd_show_validate_sql_failure(temp_dir: Path) -> None:
     client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=())]
 
     with (
-        patch.object(client, "validate_sql_syntax", return_value=(Exception("syntax error"), "SELECT *;")),
+        patch.object(client, "validate_sql_syntax", return_value=[(Exception("syntax error"), "SELECT *;")]),
         patch("migrateit.cmd.write_line") as mock_write,
     ):
         cmd_show(client, validate_sql=True)

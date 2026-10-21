@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -54,7 +55,7 @@ def test_validate_create_table_syntax_noop(temp_dir: Path) -> None:
     )
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
-    assert client.validate_sql_syntax(migration) is None
+    assert not client.validate_sql_syntax(migration)
     client.connection.cursor.return_value.execute.assert_not_called()
 
 
@@ -64,11 +65,11 @@ def test_invalid_sql_in_migration_code(temp_dir: Path) -> None:
     _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="SELEKT * FRM non_existing_table;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
-    error_result = client.validate_sql_syntax(migration)
-    assert isinstance(error_result, tuple)
-    error, sql = error_result
-    assert isinstance(error, SyntaxError)
-    assert "SELEKT" in sql
+    errors = client.validate_sql_syntax(migration)
+    assert len(errors) == 1
+    for error, sql in errors:
+        assert isinstance(error, SyntaxError)
+        assert "SELEKT" in sql
 
 
 @pytest.mark.unit
@@ -77,11 +78,11 @@ def test_invalid_sql_in_rollback_code(temp_dir: Path) -> None:
     _create_migration_file(client.migrations_dir, MIGRATION_NAME, rollback_sql="ROLLBAK;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
-    error_result = client.validate_sql_syntax(migration)
-    assert isinstance(error_result, tuple)
-    error, sql = error_result
-    assert isinstance(error, SyntaxError)
-    assert "ROLLBAK" in sql
+    errors = client.validate_sql_syntax(migration)
+    assert len(errors) == 1
+    for error, sql in errors:
+        assert isinstance(error, SyntaxError)
+        assert "ROLLBAK" in sql
 
 
 @pytest.mark.unit
@@ -89,7 +90,7 @@ def test_empty_sql_file_is_skipped(temp_dir: Path) -> None:
     client = _client_with_mocked_connection(temp_dir)
     _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="", rollback_sql="")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
-    assert client.validate_sql_syntax(migration) is None
+    assert not client.validate_sql_syntax(migration)
 
 
 @pytest.mark.unit
@@ -125,7 +126,7 @@ def test_validate_multiple_statements(temp_dir: Path) -> None:
     )
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
-    assert client.validate_sql_syntax(migration) is None
+    assert not client.validate_sql_syntax(migration)
 
 
 @pytest.mark.unit
@@ -134,7 +135,7 @@ def test_validate_drop_table_statement(temp_dir: Path) -> None:
     _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="DROP TABLE non_existing_table;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
-    assert client.validate_sql_syntax(migration) is None
+    assert not client.validate_sql_syntax(migration)
 
 
 @pytest.mark.unit
@@ -143,7 +144,7 @@ def test_validate_alter_table_add_column(temp_dir: Path) -> None:
     sql = f"ALTER TABLE {TEST_MIGRATIONS_TABLE} ADD COLUMN new_col VARCHAR(255);"
     _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql=sql)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
-    assert client.validate_sql_syntax(migration) is None
+    assert not client.validate_sql_syntax(migration)
 
 
 @pytest.mark.unit
@@ -155,7 +156,7 @@ def test_validate_alter_table_drop_column(temp_dir: Path) -> None:
         sql=f"ALTER TABLE {TEST_MIGRATIONS_TABLE} DROP COLUMN to_remove;",
     )
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
-    assert client.validate_sql_syntax(migration) is None
+    assert not client.validate_sql_syntax(migration)
 
 
 @pytest.mark.unit
@@ -164,11 +165,11 @@ def test_invalid_drop_table_statement(temp_dir: Path) -> None:
     _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="DROP TABL test_table;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
-    error_result = client.validate_sql_syntax(migration)
-    assert isinstance(error_result, tuple)
-    error, sql = error_result
-    assert isinstance(error, SyntaxError)
-    assert "DROP TABL" in sql
+    errors = client.validate_sql_syntax(migration)
+    assert len(errors) == 1
+    for error, sql in errors:
+        assert isinstance(error, SyntaxError)
+        assert "DROP TABL" in sql
 
 
 @pytest.mark.unit
@@ -177,11 +178,11 @@ def test_invalid_alter_table_statement(temp_dir: Path) -> None:
     _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="ALTER TABLE some_table ADD COLUM typo_col TEXT;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
 
-    error_result = client.validate_sql_syntax(migration)
-    assert isinstance(error_result, tuple)
-    error, sql = error_result
-    assert isinstance(error, SyntaxError)
-    assert "ADD COLUM" in sql
+    errors = client.validate_sql_syntax(migration)
+    assert len(errors) == 1
+    for error, sql in errors:
+        assert isinstance(error, SyntaxError)
+        assert "ADD COLUM" in sql
 
 
 # --- validate_migrations ---
@@ -255,6 +256,55 @@ def test_validate_conflict_raises(client: SqlClient[Any], temp_dir: Path) -> Non
     assert statuses[MIGRATION_NAME] == MigrationStatus.CONFLICT
     with pytest.raises(ValueError, match="has a different hash"):
         client.validate_migrations(statuses)
+
+
+# --- _build_error_message ---
+
+
+@pytest.mark.unit
+def test_build_error_message_empty_description(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="SELECT 1;")
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
+
+    error = MagicMock()
+    error.description = ""
+
+    result = client._build_error_message(migration, [error])
+    assert len(result) == 1
+    assert "SQL Syntax Error (unknown location)" in str(result[0])
+
+
+@pytest.mark.unit
+def test_build_error_message_no_quoted_source(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="SELECT 1;")
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
+
+    error = MagicMock()
+    error.description = "unqualified statement"
+    error.line_pos = 1
+
+    result = client._build_error_message(migration, [error])
+    assert len(result) == 1
+    assert "SQL Syntax Error: unqualified statement" in str(result[0])
+
+
+@pytest.mark.unit
+def test_build_error_message_source_not_in_lines(temp_dir: Path) -> None:
+    client = _client_with_mocked_connection(temp_dir)
+    _create_migration_file(client.migrations_dir, MIGRATION_NAME, sql="SELECT 1;")
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
+
+    error = MagicMock()
+    error.description = "Unknown column 'nonexistent_col'"
+    error.line_pos = 5
+
+    result = client._build_error_message(migration, [error])
+    assert len(result) == 1
+    assert "Line 1" in str(result[0])
+    assert "Position 5" in str(result[0])
+    assert "'nonexistent_col'" in str(result[0])
 
 
 def test_show_migrations_order_error(client: SqlClient[Any]) -> None:

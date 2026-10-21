@@ -1,7 +1,8 @@
 import pytest
+from sqlfluff.core import Linter, SQLParseError
 
 from migrateit.models.config import SupportedDatabase
-from migrateit.models.sql import patch_sql_statement, recombine_compound_statements
+from migrateit.models.sql import patch_sql_statement, sql_to_statements
 
 
 @pytest.mark.unit
@@ -90,61 +91,53 @@ def test_patch_sql_statement(database: SupportedDatabase, input_sql: str, expect
 
 
 @pytest.mark.parametrize(
-    "raw_statements, expected",
+    "sql_input, expected_output, errors",
     [
         (
-            ["SELECT * FROM users", "UPDATE accounts SET balance = 100", "DELETE FROM logs WHERE id = 1"],
-            ["SELECT * FROM users", "UPDATE accounts SET balance = 100", "DELETE FROM logs WHERE id = 1"],
-        ),
-        (
-            ["CREATE PROCEDURE foo() BEGIN", "UPDATE t1 SET a = 1", "UPDATE t2 SET b = 2", "END"],
-            ["CREATE PROCEDURE foo() BEGIN; UPDATE t1 SET a = 1; UPDATE t2 SET b = 2; END"],
-        ),
-        (
-            [
-                "SELECT 1",
-                "CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW BEGIN",
-                "SET NEW.col = 1",
-                "END",
-                "SELECT 2",
-            ],
-            [
-                "SELECT 1",
-                "CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW BEGIN; SET NEW.col = 1; END",
-                "SELECT 2",
-            ],
-        ),
-        (
-            ["create procedure test() begin", "select 1", "end"],
-            ["create procedure test() begin; select 1; end"],
-        ),
-        (
-            ["CREATE PROCEDURE nested() BEGIN", "BEGIN", "SELECT 1", "END", "END"],
-            ["CREATE PROCEDURE nested() BEGIN; BEGIN; SELECT 1; END; END"],
-        ),
-        (
-            ["BEGIN", "SELECT 1", "UPDATE t SET a = 2"],
-            ["BEGIN; SELECT 1; UPDATE t SET a = 2"],
-        ),
-        (
-            ["   ", "", "SELECT 1", "", "   "],
-            ["SELECT 1"],
-        ),
-        (
+            "SELECT 1; SELECT 2;",
+            ["SELECT 1", "SELECT 2"],
             [],
+        ),
+        (
+            "BEGIN SELECT 1; END;",
+            ["BEGIN; SELECT 1; END"],
             [],
+        ),
+        (
+            "SELECT FROM;",
+            ["SELECT FROM"],
+            [SQLParseError("Line 1, Position 8: Found unparsable section: 'FROM'")],
+        ),
+        (
+            "BEGIN SELECT 1; END; SELECT 2;",
+            ["BEGIN; SELECT 1; END", "SELECT 2"],
+            [],
+        ),
+        (
+            "BEGIN SELECT 1;",
+            ["BEGIN; SELECT 1"],
+            [],
+        ),
+        (
+            "SELEKT * FRM non_existing_table;",
+            [],
+            [SQLParseError("Line 1, Position 1: Found unparsable section: 'SELEKT * FRM non_existing_table;'")],
         ),
     ],
     ids=[
         "normal_statements",
-        "compound_block",
+        "begin_end_block",
+        "parse_error",
         "mixed_statements",
-        "case_insensitive",
-        "nested_blocks",
-        "unclosed_compound_block",
-        "whitespace_and_empty",
-        "empty_list",
+        "begin_block",
+        "parse_error_non_existing_table",
     ],
 )
-def test_recombine_compound_statements(raw_statements: list[str], expected: list[str]) -> None:
-    assert recombine_compound_statements(raw_statements) == expected
+def test_sql_to_statements(sql_input: str, expected_output: list[str], errors: list[str]) -> None:
+    # Use 'postgres' dialect so BEGIN...END is parsed successfully
+    linter = Linter(dialect="postgres")
+    result, err = sql_to_statements(linter, sql_input)
+    assert result == expected_output
+    for idx, e in enumerate(errors):
+        assert isinstance(e, SQLParseError)
+        assert str(e) == str(err[idx])

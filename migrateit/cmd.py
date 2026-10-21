@@ -336,9 +336,10 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
         write_line("\nValidating SQL migrations...")
         has_err = False
         for migration in client.changelog.migrations:
-            if err := client.validate_sql_syntax(migration):
+            if errors := client.validate_sql_syntax(migration):
                 has_err = True
-                pretty_print_sql_error(err[0], err[1])
+                for err in errors:
+                    pretty_print_sql_error(err[0], err[1])
         msg = "failed. Please fix the errors above." if has_err else "passed. No errors found."
         write_line("SQL validation " + msg)
     return 0

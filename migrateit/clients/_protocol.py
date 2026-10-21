@@ -125,7 +125,7 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def validate_sql_syntax(self, migration: Migration) -> tuple[BaseException, str] | None:
+    def validate_sql_syntax(self, migration: Migration) -> list[tuple[SyntaxError, str]]:
         """
         Validate the SQL syntax of a migration.
 
@@ -133,7 +133,7 @@ class SqlClientProtocol(Protocol):
             migration: The migration object to validate.
 
         Returns:
-            A tuple containing the error and the SQL query if there is a syntax error, None otherwise.
+            A list of tuples containing the error and the SQL query if there is a syntax error, None otherwise.
         """
         ...
 

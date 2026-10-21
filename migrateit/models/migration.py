@@ -54,12 +54,9 @@ class Migration:
             raise ValueError("No rollback tag in migration file")
         if len(parts) > 2:
             raise ValueError("Too many rollback tags in migration file")
-
-        migration = remove_sql_comments(parts[0])
-        reverse_migration = remove_sql_comments(parts[1])
         return (
-            WHITESPACE_RE.sub(" ", migration).strip(),
-            WHITESPACE_RE.sub(" ", reverse_migration).strip(),
+            WHITESPACE_RE.sub(" ", remove_sql_comments(parts[0])).strip(),
+            WHITESPACE_RE.sub(" ", remove_sql_comments(parts[1])).strip(),
             content_hash,
         )
 

@@ -215,7 +215,7 @@ def _create_migration_file(
     migrations_dir.mkdir(parents=True, exist_ok=True)
     path = migrations_dir / filename
     with open(path, "w") as f:
-        f.write(sql)
+        f.write(sql + "\n")
         f.write(f"{C.ROLLBACK_SPLIT_TAG}")
         f.write(f"\n\n{rollback_sql}")
     return path
