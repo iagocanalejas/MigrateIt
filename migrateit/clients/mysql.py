@@ -241,7 +241,7 @@ def _process_tables(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[l
         default = row[5]
         extra = _to_str(row[6])
 
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
 
         col_def = f"    {client._q(col)} {col_type}"
@@ -301,7 +301,7 @@ def _process_pk_unique(client: MySqlClient, rows: list[tuple[str, ...]]) -> tupl
         contype = _to_str(row[3])
         con_cols = _to_str(row[4])
 
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
 
         if contype == "PRIMARY KEY":
@@ -361,7 +361,7 @@ def _process_indexes(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[
         non_unique = row[3]
         idx_cols = _to_str(row[4])
 
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
 
         unique_kw = "" if non_unique else "UNIQUE "
@@ -378,7 +378,7 @@ def _process_triggers(client: MySqlClient, rows: list[tuple[str, str, str]]) -> 
         tgname = _to_str(row[1])
         table = _to_str(row[2])
 
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
 
         show_row = client.execute_for_one(f"SHOW CREATE TRIGGER {client._q(schema)}.{client._q(tgname)}")

@@ -208,6 +208,8 @@ def _process_enums(client: PsqlClient, rows: list[tuple[str, str, list[str]]]) -
 def _process_sequences(client: PsqlClient, rows: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
     fwd, rb = [], []
     for schema, seq_name in rows:
+        if f"{C.MIGRATEIT_MIGRATIONS_TABLE.lower()}_" in seq_name.lower():
+            continue
         fwd.append(f"CREATE SEQUENCE IF NOT EXISTS {client._q(schema)}.{client._q(seq_name)};")
         rb.append(f"DROP SEQUENCE IF EXISTS {client._q(schema)}.{client._q(seq_name)} CASCADE;")
     return fwd, rb
@@ -217,7 +219,7 @@ def _process_tables(client: PsqlClient, rows: list[tuple[Any, ...]]) -> tuple[li
     fwd, rb = [], []
     table_columns = defaultdict(list)
     for schema, table, col, dtype, udt_name, char_len, num_prec, num_scale, nullable, default in rows:
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
 
         if char_len and dtype in ("character varying", "character"):
@@ -267,7 +269,7 @@ def _process_views(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[lis
 def _process_constraints(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
     fwd = []
     for schema, table, conname, condef in rows:
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
         fwd.append(
             f"ALTER TABLE ONLY {client._q(schema)}.{client._q(table)} ADD CONSTRAINT {client._q(conname)} {condef};"
@@ -278,7 +280,7 @@ def _process_constraints(client: PsqlClient, rows: list[tuple[str, ...]]) -> tup
 def _process_indexes(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
     fwd = []
     for schema, table, indexname, indexdef in rows:
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
         fwd.append(f"{indexdef};")
     return fwd, []
@@ -287,7 +289,7 @@ def _process_indexes(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[l
 def _process_triggers(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
     fwd = []
     for schema, table, tgname, tgdef in rows:
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
         fwd.append(f"{tgdef};")
     return fwd, []

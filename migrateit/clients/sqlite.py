@@ -135,7 +135,7 @@ def _ensure_if_not_exists(sql: str, prefix: str) -> str:
 def _process_tables(client: SqliteClient, rows: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
     fwd, rb = [], []
     for name, sql in rows:
-        if name.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in name.lower():
             continue
 
         sql_str = sql.strip()
@@ -160,7 +160,7 @@ def _process_views(client: SqliteClient, rows: list[tuple[str, str]]) -> tuple[l
 def _process_indexes(client: SqliteClient, rows: list[tuple[str, str, str]]) -> tuple[list[str], list[str]]:
     fwd = []
     for _name, tbl_name, sql in rows:
-        if tbl_name.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in tbl_name.lower():
             continue
 
         sql_str = sql.strip()
@@ -177,7 +177,7 @@ def _process_indexes(client: SqliteClient, rows: list[tuple[str, str, str]]) -> 
 def _process_triggers(client: SqliteClient, rows: list[tuple[str, str, str]]) -> tuple[list[str], list[str]]:
     fwd = []
     for _name, tbl_name, sql in rows:
-        if tbl_name.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in tbl_name.lower():
             continue
 
         sql_str = sql.strip()

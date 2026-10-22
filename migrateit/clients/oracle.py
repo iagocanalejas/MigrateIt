@@ -241,7 +241,7 @@ def _process_tables(client: OracleClient, rows: list[tuple[Any, ...]]) -> tuple[
     table_columns: dict[str, list[str]] = defaultdict(list)
 
     for row in rows:
-        table = _to_str(row[1])
+        table_str = _to_str(row[1])
         col = _to_str(row[2])
         col_type = _to_str(row[3])
         char_len = row[4]
@@ -250,7 +250,7 @@ def _process_tables(client: OracleClient, rows: list[tuple[Any, ...]]) -> tuple[
         nullable = _to_str(row[7])
         default = row[8]
 
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table_str.lower():
             continue
 
         # Build column type
@@ -271,19 +271,20 @@ def _process_tables(client: OracleClient, rows: list[tuple[Any, ...]]) -> tuple[
             if default_str and default_str.upper() != "NULL":
                 col_def += f" DEFAULT {default_str}"
 
-        table_columns[table].append(col_def)
+        table_columns[table_str].append(col_def)
 
-    for table, cols in table_columns.items():
+    for table_str, cols in table_columns.items():
         cols_str = ",\n".join(cols)
-        fwd.append(f"CREATE TABLE {client._q(table)} (\n{cols_str}\n);")
-        rb.append(f"DROP TABLE {client._q(table)};")
+        fwd.append(f"CREATE TABLE {client._q(table_str)} (\n{cols_str}\n);")
+        rb.append(f"DROP TABLE {client._q(table_str)};")
     return fwd, list(reversed(rb))
 
 
 def _process_indexes(client: OracleClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
     fwd, rb = [], []
     for index_name, table, uniqueness, index_type, column_list, inverse in rows:
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        table_str = _to_str(table)
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table_str.lower():
             continue
 
         unique_kw = "UNIQUE " if uniqueness == "UNIQUE" else ""
@@ -297,13 +298,13 @@ def _process_constraints(client: OracleClient, rows: list[tuple[str, ...]]) -> t
     fwd: list[str] = []
     rb: list[str] = []
     for conname, contype, table, cols in rows:
-        if table.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
-            continue
-
         conname_str = _to_str(conname)
         contype_str = _to_str(contype)
         table_str = _to_str(table)
         cols_str = _to_str(cols)
+
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table_str.lower():
+            continue
 
         if contype_str == "P":
             fwd.append(
@@ -398,7 +399,7 @@ def _process_triggers(client: OracleClient, rows: list[tuple[str, str, str]]) ->
         trigger_name_str = _to_str(trigger_name)
         table_str = _to_str(table)
 
-        if table_str.lower() == C.MIGRATEIT_MIGRATIONS_TABLE.lower():
+        if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table_str.lower():
             continue
 
         show_row = client.execute_for_one(

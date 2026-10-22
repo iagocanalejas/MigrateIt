@@ -37,7 +37,7 @@ def test_export_creates_migration_file(client: SqlClient[Any]) -> None:
     assert "check" in forward_part and "> 0" in forward_part
 
     # excludes migration table
-    assert C.MIGRATEIT_MIGRATIONS_TABLE not in content
+    assert C.MIGRATEIT_MIGRATIONS_TABLE.lower() not in content
     # has header
     assert "-- Migration" in content
     assert "Created on" in content
@@ -326,6 +326,7 @@ def _add_exclusions(client: SqlClient[Any]) -> None:
         case SupportedDatabase.POSTGRES:
             with client.connection.cursor() as cursor:
                 cursor.execute(f"""CREATE TABLE {C.MIGRATEIT_MIGRATIONS_TABLE} (id INT PRIMARY KEY);""")
+                cursor.execute(f"""CREATE SEQUENCE {C.MIGRATEIT_MIGRATIONS_TABLE}_sequence;""")
                 cursor.execute(f"CREATE INDEX idx_mig_changelog ON {C.MIGRATEIT_MIGRATIONS_TABLE}(id);")
                 cursor.execute("""
 CREATE OR REPLACE FUNCTION mig_changelog_audit_fn()
