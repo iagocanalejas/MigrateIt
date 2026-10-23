@@ -166,7 +166,6 @@ def cmd_run(
     is_rollback: bool = False,
     is_hash_update: bool = False,
     is_plan_only: bool = False,
-    is_full_rollback: bool = False,
 ) -> int:
     if (is_fake or is_rollback) and is_hash_update:
         action = "faking" if is_fake else "rolling back"
@@ -179,12 +178,8 @@ def cmd_run(
             return 1
         return _cmd_run_hash_update(client, client.migrations.get_migration_by_name(name))
 
-    if is_rollback and not (name or is_full_rollback):
+    if is_rollback and not name:
         write_line_error("Rollback requires a target migration name.")
-        return 1
-
-    if is_full_rollback and name:
-        write_line_error("Cannot specify a target migration name when using `--zero`.")
         return 1
 
     statuses = client.retrieve_migration_statuses()
@@ -233,7 +228,7 @@ def cmd_run(
     direction = "Migration" if not is_rollback else "Rollback"
     action = "applied" if not is_rollback else "rolled back"
     write_line(f"{direction} complete: {len(migration_plan)} migration(s) {action}.")
-    if is_full_rollback:
+    if is_rollback and target_migration and target_migration.initial:
         write_line("Full rollback complete: all migrations rolled back.")
     return 0
 

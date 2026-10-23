@@ -55,8 +55,8 @@ def test_cmd_run_rollback(client: SqlClient[Any]) -> None:
     assert len(rows) == 1
 
 
-def test_cmd_run_full_rollback_no_name(client: SqlClient[Any]) -> None:
-    cmd_run(client, is_rollback=True, is_full_rollback=True)
+def test_cmd_run_full_rollback(client: SqlClient[Any]) -> None:
+    cmd_run(client, name="0000", is_rollback=True)
     assert not _table_exists(client, TEST_MIGRATIONS_TABLE)
 
 
@@ -87,12 +87,6 @@ def test_cmd_run_rollbacks_on_error(client: SqlClient[Any]) -> None:
 def test_cmd_run_rollback_no_name(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
     assert cmd_run(mock_client, is_rollback=True) != 0
-
-
-@pytest.mark.unit
-def test_cmd_run_full_rollback_with_name(temp_dir: Path) -> None:
-    mock_client = _mock_client(temp_dir)
-    assert cmd_run(mock_client, name="0001", is_rollback=True, is_full_rollback=True) != 0
 
 
 def test_cmd_run_by_name_not_found(client: SqlClient[Any]) -> None:

@@ -82,11 +82,10 @@ def main() -> int:
                 elif args.command == "rollback":
                     return commands.cmd_run(
                         client,
-                        args.name,
+                        "0000" if args.zero else args.name,
                         is_fake=args.fake,
                         is_rollback=True,
                         is_plan_only=args.plan_only,
-                        is_full_rollback=args.zero,
                     )
                 elif args.command == "squash":
                     return commands.cmd_squash(
@@ -179,6 +178,7 @@ def _cmd_migrate(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 def _cmd_rollback(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
     parser.add_argument(
+        "-0",
         "--zero",
         action="store_true",
         default=False,
