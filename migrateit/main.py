@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
-from pathlib import Path
 
 import migrateit.constants as C
 from migrateit import cmd as commands
@@ -45,23 +44,13 @@ def main() -> int:
     with error_handler(), logging_handler(True):
         if hasattr(args, "func"):
             logger.debug("Running command: %s", args.command)
-            root = Path(C.MIGRATEIT_ROOT_DIR).resolve()
             if args.command == "init":
                 if args.database not in [db.value for db in SupportedDatabase]:
                     raise FatalError(f"Unsupported database type: {args.database}.")
-                return commands.cmd_init(
-                    table_name=C.MIGRATEIT_MIGRATIONS_TABLE,
-                    migrations_dir=root / "migrations",
-                    migrations_file=root / "changelog.json",
-                    database=SupportedDatabase(args.database),
-                )
+                return commands.cmd_init(database=SupportedDatabase(args.database))
 
-            changelog = ChangelogRepository.load(root / "changelog.json")
-            config = MigrateItConfig(
-                table_name=C.MIGRATEIT_MIGRATIONS_TABLE,
-                migrations_dir=root / "migrations",
-                changelog=changelog,
-            )
+            changelog = ChangelogRepository.load()
+            config = MigrateItConfig(changelog=changelog)
             with get_connection(changelog.database) as conn:
                 logger.debug("Connected to database: %s", changelog.database.value)
                 client = get_client(config, connection=conn)

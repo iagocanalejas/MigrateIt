@@ -12,15 +12,15 @@ from tests.unit.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file, _
 
 def test_cmd_drop(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_new.sql")
+    _create_migration_file("0001_new.sql")
 
     cmd_drop(client, name="0001")
-    assert not (client.migrations_dir / "0001_new.sql").exists()
+    assert not (Migration.migrations_dir / "0001_new.sql").exists()
 
 
 def test_cmd_drop_applied(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", dependencies=("0000",), no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_new.sql")
+    _create_migration_file("0001_new.sql")
 
     cmd_run(client=client)
     rows = _get_query_rows(client, f"SELECT migration_name FROM {client._q(TEST_MIGRATIONS_TABLE)}")
@@ -33,7 +33,7 @@ def test_cmd_drop_applied(client: SqlClient[Any]) -> None:
 
 def test_cmd_drop_no_exists(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
-    (client.migrations_dir / "0001_new.sql").unlink()
+    (Migration.migrations_dir / "0001_new.sql").unlink()
 
     with pytest.raises(FileNotFoundError, match="does not exist"):
         cmd_drop(client, name="0001")
@@ -71,5 +71,18 @@ def test_cmd_drop_file_not_exists(temp_dir: Path) -> None:
         Migration(name="0001_test.sql", parents=("0000_init.sql",)),
     ]
     # The file doesn't exist (we didn't create it) — get_full_path raises
-    with pytest.raises(FileNotFoundError, match="does not exist or is not a valid SQL file"):
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        cmd_drop(mock_client, name="0001_test.sql")
+
+
+@pytest.mark.unit
+def test_cmd_drop_file_no_sql(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+    # Create a migration that's not a parent and not initial
+    mock_client.changelog.migrations = [
+        Migration(name="0000_init.sql", initial=True, parents=()),
+        Migration(name="0001_test.jpg", parents=("0000_init.sql",)),
+    ]
+    (temp_dir / "migrations" / "0001_test.jpg").touch()
+    with pytest.raises(FileNotFoundError, match="not a valid SQL file"):
         cmd_drop(mock_client, name="0001_test.sql")

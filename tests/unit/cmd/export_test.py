@@ -2,6 +2,7 @@ from typing import Any
 
 from migrateit.clients._client import SqlClient
 from migrateit.cmd import cmd_export
+from migrateit.models.migration import Migration
 
 
 def test_cmd_export_no_name_creates_default(client: SqlClient[Any]) -> None:
@@ -21,7 +22,7 @@ def test_cmd_export_with_name(client: SqlClient[Any]) -> None:
 
     # Verify migration file exists
     changelog_names = [f.name for f in (client.changelog.path.parent / "migrations").iterdir()]
-    files = list(client.migrations_dir.glob("*my_full_export*.sql"))
+    files = list(Migration.migrations_dir.glob("*my_full_export*.sql"))
     assert any("my_full_export" in name for name in changelog_names)
     assert len(files) == 1
 

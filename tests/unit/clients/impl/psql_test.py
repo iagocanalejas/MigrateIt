@@ -11,8 +11,8 @@ from migrateit.models.config import MigrateItConfig
 
 def _make_mock_client() -> PsqlClient:
     mock_conn: MagicMock = MagicMock()
-    changelog = Changelog(version=1, path=MagicMock(), migrations=[])
-    config = MigrateItConfig(table_name="t", migrations_dir=MagicMock(), changelog=changelog)
+    changelog = Changelog(version=1, migrations=[])
+    config = MigrateItConfig(changelog=changelog)
     return PsqlClient(mock_conn, config)
 
 

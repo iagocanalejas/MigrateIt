@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from migrateit import constants as C
 from migrateit.models.changelog import Changelog
@@ -12,11 +11,8 @@ from migrateit.reporters.output import write_line
 
 class ChangelogRepository:
     @staticmethod
-    def load(path: Path) -> Changelog:
-        resolved_path = path.resolve()
-        if not resolved_path.exists():
-            raise FileNotFoundError(f"File {resolved_path.name} does not exist")
-        changelog = Changelog.from_json(resolved_path.read_text(), resolved_path)
+    def load() -> Changelog:
+        changelog = Changelog.from_json()
         if not changelog.migrations:
             return changelog
 
@@ -55,12 +51,10 @@ class ChangelogRepository:
         write_line(f"Changelog file updated: {path}")
 
     @staticmethod
-    def create(path: Path, database: SupportedDatabase) -> Changelog:
-        if path.exists():
-            raise FileExistsError(f"File {path.name} already exists")
-        if not path.name.endswith(".json"):
-            raise ValueError(f"File {path.name} must be a JSON file")
-        changelog = Changelog(version=1, database=database, path=path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(changelog.to_json())
-        return ChangelogRepository.load(path)
+    def create(database: SupportedDatabase) -> Changelog:
+        changelog = Changelog(version=1, database=database)
+        changelog.path.parent.mkdir(parents=True, exist_ok=True)
+        if changelog.path.exists():
+            raise FileExistsError(f"File {changelog.path.name} already exists")
+        changelog.path.write_text(changelog.to_json())
+        return ChangelogRepository.load()

@@ -18,8 +18,8 @@ from tests.unit.conftest import (
 )
 
 
-def test_apply_migration_success(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.database)
+def test_apply_migration_success(client: SqlClient[Any]) -> None:
+    _mock_create_migration(client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -33,8 +33,8 @@ def test_apply_migration_success(client: SqlClient[Any], temp_dir: Path) -> None
     _drop_test_table(client, TEST_TABLE)
 
 
-def test_apply_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.database)
+def test_apply_migration_fake(client: SqlClient[Any]) -> None:
+    _mock_create_migration(client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -46,8 +46,8 @@ def test_apply_migration_fake(client: SqlClient[Any], temp_dir: Path) -> None:
     assert not _table_exists(client, TEST_TABLE)
 
 
-def test_rollback_migration_success(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.database)
+def test_rollback_migration_success(client: SqlClient[Any]) -> None:
+    _mock_create_migration(client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -68,9 +68,8 @@ def test_rollback_migration_initial(client: SqlClient[Any], temp_dir: Path) -> N
     assert not _table_exists(client, TEST_MIGRATIONS_TABLE)
 
 
-def test_rollback_fake_migration(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME)
+def test_rollback_fake_migration(client: SqlClient[Any]) -> None:
+    _create_migration_file(MIGRATION_NAME)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -83,8 +82,8 @@ def test_rollback_fake_migration(client: SqlClient[Any], temp_dir: Path) -> None
     assert not _table_exists(client, TEST_TABLE)
 
 
-def test_fake_rollback_migration(client: SqlClient[Any], temp_dir: Path) -> None:
-    _mock_create_migration(temp_dir, client.database)
+def test_fake_rollback_migration(client: SqlClient[Any]) -> None:
+    _mock_create_migration(client.database)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -95,9 +94,8 @@ def test_fake_rollback_migration(client: SqlClient[Any], temp_dir: Path) -> None
     assert _table_exists(client, TEST_TABLE)
 
 
-def test_apply_migration_already_applied(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME)
+def test_apply_migration_already_applied(client: SqlClient[Any]) -> None:
+    _create_migration_file(MIGRATION_NAME)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 
@@ -114,9 +112,8 @@ def test_apply_migration_file_missing(client: SqlClient[Any]) -> None:
         client.apply_migration(migration, is_fake=False)
 
 
-def test_rollback_migration_not_applied(client: SqlClient[Any], temp_dir: Path) -> None:
-    migrations_dir = temp_dir / "migrations"
-    _create_migration_file(migrations_dir, MIGRATION_NAME)
+def test_rollback_migration_not_applied(client: SqlClient[Any]) -> None:
+    _create_migration_file(MIGRATION_NAME)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
 

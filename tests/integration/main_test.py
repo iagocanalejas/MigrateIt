@@ -15,12 +15,12 @@ def _get_fixtures_path(database: SupportedDatabase) -> Path:
     return FIXTURES_DIR / value
 
 
-def _prepare_migrations_dir(database: SupportedDatabase, migrations_dir: Path) -> None:
-    shutil.copytree(_get_fixtures_path(database), migrations_dir.absolute(), dirs_exist_ok=True)
-    assert (migrations_dir / "migrations" / "0000_migrateit.sql").exists()
-    assert (migrations_dir / "changelog.json").exists()
+def _prepare_migrations_dir(database: SupportedDatabase, temp_dir: Path) -> None:
+    shutil.copytree(_get_fixtures_path(database), temp_dir.absolute(), dirs_exist_ok=True)
+    assert (temp_dir / "migrations" / "0000_migrateit.sql").exists()
+    assert (temp_dir / "changelog.json").exists()
 
-    result = subprocess.run(["migrateit", "migrate", "0000"], cwd=migrations_dir, text=True, capture_output=True)
+    result = subprocess.run(["migrateit", "migrate", "0000"], cwd=temp_dir, text=True, capture_output=True)
     if result.returncode != 0:
         raise AssertionError(
             f"Command 'migrateit migrate 0000' failed with exit code {result.returncode}\n"
@@ -39,20 +39,24 @@ def _prepare_migrations_dir(database: SupportedDatabase, migrations_dir: Path) -
 
 
 @pytest.mark.integration
-def test_init(database: SupportedDatabase, migrations_dir: Path) -> None:
-    subprocess.run(
+def test_init(database: SupportedDatabase, temp_dir: Path) -> None:
+    result = subprocess.run(
         ["migrateit", "init", database.value],
-        cwd=migrations_dir,
-        stdout=subprocess.DEVNULL,
+        cwd=temp_dir,
+        capture_output=True,
+        text=True,
+        check=True,
     )
 
-    changelog_file = migrations_dir / "changelog.json"
+    migrations_dir = temp_dir / "migrations"
+    changelog_file = temp_dir / "changelog.json"
 
+    assert result.returncode == 0
     assert migrations_dir.exists()
     assert changelog_file.exists()
-    assert (migrations_dir / "migrations" / "0000_migrateit.sql").exists()
+    assert (migrations_dir / "0000_migrateit.sql").exists()
 
-    changelog = ChangelogRepository.load(changelog_file)
+    changelog = ChangelogRepository.load()
     assert changelog is not None
     assert len(changelog.migrations) == 1
     assert changelog.migrations[0].name == "0000_migrateit.sql"
@@ -62,33 +66,32 @@ def test_init(database: SupportedDatabase, migrations_dir: Path) -> None:
 
 
 @pytest.mark.integration
-def test_new(database: SupportedDatabase, migrations_dir: Path) -> None:
-    _prepare_migrations_dir(database, migrations_dir)
-    changelog_file = migrations_dir / "changelog.json"
+def test_new(database: SupportedDatabase, temp_dir: Path) -> None:
+    _prepare_migrations_dir(database, temp_dir)
 
-    old_changelog = ChangelogRepository.load(changelog_file)
+    old_changelog = ChangelogRepository.load()
     subprocess.run(
         ["migrateit", "new", "test_migration", "--no-edit"],
-        cwd=migrations_dir,
+        cwd=temp_dir,
         stdout=subprocess.DEVNULL,
     )
-    new_changelog = ChangelogRepository.load(changelog_file)
+    new_changelog = ChangelogRepository.load()
     new_migratrion = new_changelog.migrations[-1]
 
     assert len(new_changelog.migrations) == len(old_changelog.migrations) + 1
     assert not new_migratrion.initial
     assert new_migratrion.parents == [old_changelog.migrations[-1].name]
-    assert (migrations_dir / "migrations" / new_migratrion.name).exists()
+    assert (temp_dir / "migrations" / new_migratrion.name).exists()
 
 
 @pytest.mark.integration
-def test_full_migrate_export_and_rollback(database: SupportedDatabase, migrations_dir: Path) -> None:
-    _prepare_migrations_dir(database, migrations_dir)
-    changelog = ChangelogRepository.load(migrations_dir / "changelog.json")
+def test_full_migrate_export_and_rollback(database: SupportedDatabase, temp_dir: Path) -> None:
+    _prepare_migrations_dir(database, temp_dir)
+    changelog = ChangelogRepository.load()
 
     migrate_result = subprocess.run(
         ["migrateit", "migrate"],
-        cwd=migrations_dir,
+        cwd=temp_dir,
         capture_output=True,
         text=True,
         check=True,
@@ -100,7 +103,7 @@ def test_full_migrate_export_and_rollback(database: SupportedDatabase, migration
 
     export_result = subprocess.run(
         ["migrateit", "export"],
-        cwd=migrations_dir,
+        cwd=temp_dir,
         capture_output=True,
         text=True,
         check=True,
@@ -110,12 +113,13 @@ def test_full_migrate_export_and_rollback(database: SupportedDatabase, migration
     assert "Full database exported" in export_result.stdout
     # NOTE: we reuse MARIADB for MYSQL
     db = database.value if database != SupportedDatabase.MYSQL else SupportedDatabase.MARIADB.value
-    assert f"{len(changelog.migrations):04d}_{db}" in export_result.stdout
-    assert (migrations_dir / "migrations" / f"{len(changelog.migrations):04d}_{db}_backup.sql").exists()
+    name = f"{len(changelog.migrations):04d}_{db}"
+    assert name in export_result.stdout
+    assert (temp_dir / "migrations" / f"{name}_backup.sql").exists()
 
     rollback_result = subprocess.run(
         ["migrateit", "rollback", "--zero"],
-        cwd=migrations_dir,
+        cwd=temp_dir,
         capture_output=True,
         text=True,
         check=True,
@@ -128,12 +132,12 @@ def test_full_migrate_export_and_rollback(database: SupportedDatabase, migration
 
 
 @pytest.mark.integration
-def test_targeted_migration_and_rollback(database: SupportedDatabase, migrations_dir: Path) -> None:
-    _prepare_migrations_dir(database, migrations_dir)
+def test_targeted_migration_and_rollback(database: SupportedDatabase, temp_dir: Path) -> None:
+    _prepare_migrations_dir(database, temp_dir)
 
     migrate_result = subprocess.run(
         ["migrateit", "migrate", "0004"],
-        cwd=migrations_dir,
+        cwd=temp_dir,
         capture_output=True,
         text=True,
         check=True,
@@ -145,11 +149,13 @@ def test_targeted_migration_and_rollback(database: SupportedDatabase, migrations
 
     rollback_result = subprocess.run(
         ["migrateit", "rollback", "0002"],
-        cwd=migrations_dir,
+        cwd=temp_dir,
         capture_output=True,
         text=True,
         check=True,
     )
+    print(rollback_result.stdout)
+    print(rollback_result.stderr)
 
     assert rollback_result.returncode == 0
     assert "Rollback complete" in rollback_result.stdout
@@ -157,13 +163,13 @@ def test_targeted_migration_and_rollback(database: SupportedDatabase, migrations
 
 
 @pytest.mark.integration
-def test_show_and_validate(database: SupportedDatabase, migrations_dir: Path) -> None:
-    _prepare_migrations_dir(database, migrations_dir)
-    changelog = ChangelogRepository.load(migrations_dir / "changelog.json")
+def test_show_and_validate(database: SupportedDatabase, temp_dir: Path) -> None:
+    _prepare_migrations_dir(database, temp_dir)
+    changelog = ChangelogRepository.load()
 
     result = subprocess.run(
         ["migrateit", "show", "--validate"],
-        cwd=migrations_dir,
+        cwd=temp_dir,
         capture_output=True,
         text=True,
         check=True,
@@ -178,39 +184,40 @@ def test_show_and_validate(database: SupportedDatabase, migrations_dir: Path) ->
 
 
 @pytest.mark.integration
-def test_drop(database: SupportedDatabase, migrations_dir: Path) -> None:
-    _prepare_migrations_dir(database, migrations_dir)
-    changelog = ChangelogRepository.load(migrations_dir / "changelog.json")
+def test_drop(database: SupportedDatabase, temp_dir: Path) -> None:
+    _prepare_migrations_dir(database, temp_dir)
+    changelog = ChangelogRepository.load()
     migration_idx = f"{len(changelog.migrations) - 1:04d}"
 
     result = subprocess.run(
         ["migrateit", "drop", migration_idx],
-        cwd=migrations_dir,
+        cwd=temp_dir,
         capture_output=True,
         text=True,
         check=True,
     )
 
-    new_changelog = ChangelogRepository.load(migrations_dir / "changelog.json")
+    new_changelog = ChangelogRepository.load()
+    migrations_dir = temp_dir / "migrations"
     assert result.returncode == 0
     assert "dropped and removed" in result.stdout
     assert len(new_changelog.migrations) == len(changelog.migrations) - 1
-    assert len([m for m in (migrations_dir / "migrations").iterdir() if m.name.startswith(migration_idx)]) == 0
+    assert len([m for m in migrations_dir.iterdir() if m.name.startswith(migration_idx)]) == 0
 
 
 @pytest.mark.integration
-def test_squash(database: SupportedDatabase, migrations_dir: Path) -> None:
-    _prepare_migrations_dir(database, migrations_dir)
+def test_squash(database: SupportedDatabase, temp_dir: Path) -> None:
+    _prepare_migrations_dir(database, temp_dir)
 
-    old_changelog = ChangelogRepository.load(migrations_dir / "changelog.json")
+    old_changelog = ChangelogRepository.load()
     result = subprocess.run(
         ["migrateit", "squash", "0002", "0004"],
-        cwd=migrations_dir,
+        cwd=temp_dir,
         capture_output=True,
         text=True,
         check=True,
     )
-    new_changelog = ChangelogRepository.load(migrations_dir / "changelog.json")
+    new_changelog = ChangelogRepository.load()
 
     assert result.returncode == 0
     assert "Squashing migration: 0002" in result.stdout

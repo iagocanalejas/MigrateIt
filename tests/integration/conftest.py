@@ -1,4 +1,3 @@
-import os
 import subprocess
 from collections.abc import Generator
 from pathlib import Path
@@ -6,13 +5,6 @@ from pathlib import Path
 import pytest
 
 from migrateit.models.config import SupportedDatabase
-
-
-@pytest.fixture(autouse=True)
-def migrations_dir(tmp_path_factory: pytest.TempPathFactory) -> Generator[Path]:
-    temp_dir = tmp_path_factory.mktemp("migrations")
-    os.environ["MIGRATEIT_MIGRATIONS_DIR"] = str(temp_dir)
-    yield Path(temp_dir)
 
 
 @pytest.fixture(
@@ -24,9 +16,16 @@ def migrations_dir(tmp_path_factory: pytest.TempPathFactory) -> Generator[Path]:
         pytest.param(SupportedDatabase.ORACLE, marks=pytest.mark.oracle, id="oracle"),
     ]
 )
-def database(request: pytest.FixtureRequest) -> Generator[SupportedDatabase]:
+def database(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SupportedDatabase]:
     yield request.param
-    subprocess.run(["migrateit", "rollback", "--zero"], stdout=subprocess.DEVNULL)
+    result = subprocess.run(
+        ["migrateit", "rollback", "--zero"],
+        cwd=temp_dir,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.returncode == 0
 
     if request.param == SupportedDatabase.SQLITE:
         Path("migrateit.db").unlink(missing_ok=True)

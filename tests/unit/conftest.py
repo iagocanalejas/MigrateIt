@@ -12,6 +12,7 @@ from migrateit.clients._client import SqlClient, get_client
 from migrateit.clients.mysql import MySqlClient
 from migrateit.cmd import cmd_init, cmd_run
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
+from migrateit.models.migration import Migration
 from migrateit.models.repository import ChangelogRepository
 
 INITIAL_MIGRATION = "0000_migrateit.sql"
@@ -28,6 +29,7 @@ def _get_mysql_port(database: SupportedDatabase) -> int:
 
 @contextmanager
 def connection(database_type: SupportedDatabase) -> Generator[Any]:
+    C.MIGRATEIT_MIGRATIONS_TABLE = TEST_MIGRATIONS_TABLE
     match database_type:
         case SupportedDatabase.POSTGRES:
             import psycopg
@@ -181,24 +183,13 @@ END;
 def client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlClient[Any]]:
     database_type = request.param
     # Shared setup
-    migrations_dir = temp_dir / "migrations"
-    migrations_file = temp_dir / "changelog.json"
     with connection(database_type) as conn:
         # Run cmd_init to create the initial migration (includes changelog creation)
-        cmd_init(
-            table_name=TEST_MIGRATIONS_TABLE,
-            migrations_dir=migrations_dir,
-            migrations_file=migrations_file,
-            database=database_type,
-        )
+        cmd_init(database=database_type)
 
         # Reload changelog and create client
-        changelog = ChangelogRepository.load(migrations_file)
-        config = MigrateItConfig(
-            table_name=TEST_MIGRATIONS_TABLE,
-            migrations_dir=migrations_dir,
-            changelog=changelog,
-        )
+        changelog = ChangelogRepository.load()
+        config = MigrateItConfig(changelog=changelog)
         client = get_client(config, conn)
 
         # Run cmd_run to apply initial migration
@@ -206,14 +197,9 @@ def client(request: pytest.FixtureRequest, temp_dir: Path) -> Generator[SqlClien
         yield client
 
 
-def _create_migration_file(
-    migrations_dir: Path,
-    filename: str,
-    sql: str = "SELECT 1;",
-    rollback_sql: str = "SELECT 2;",
-) -> Path:
-    migrations_dir.mkdir(parents=True, exist_ok=True)
-    path = migrations_dir / filename
+def _create_migration_file(filename: str, sql: str = "SELECT 1;", rollback_sql: str = "SELECT 2;") -> Path:
+    Migration.migrations_dir.mkdir(parents=True, exist_ok=True)
+    path = Migration.migrations_dir / filename
     with open(path, "w") as f:
         f.write(sql + "\n")
         f.write(f"{C.ROLLBACK_SPLIT_TAG}")
@@ -299,14 +285,13 @@ def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
             raise NotImplementedError
 
 
-def _mock_create_migration(temp_dir: Path, database: SupportedDatabase) -> None:
-    migrations_dir = temp_dir / "migrations"
+def _mock_create_migration(database: SupportedDatabase) -> None:
     query = f"""CREATE TABLE IF NOT EXISTS {TEST_TABLE} (id SERIAL PRIMARY KEY);"""
     rollback = f"""DROP TABLE IF EXISTS {TEST_TABLE};"""
     if database == SupportedDatabase.ORACLE:
         query = f"""CREATE TABLE "{TEST_TABLE}" (id NUMBER PRIMARY KEY);"""
         rollback = f"""DROP TABLE "{TEST_TABLE}";"""
-    _create_migration_file(migrations_dir, MIGRATION_NAME, sql=query, rollback_sql=rollback)
+    _create_migration_file(MIGRATION_NAME, sql=query, rollback_sql=rollback)
 
 
 def _drop_test_table(client: SqlClient[Any], table_name: str) -> None:

@@ -1,4 +1,6 @@
 import functools
+import importlib
+import os
 import tempfile
 from collections.abc import Callable, Generator
 from pathlib import Path
@@ -6,6 +8,10 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+
+from migrateit import constants as C
+from migrateit.models.changelog import Changelog
+from migrateit.models.migration import Migration
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -27,6 +33,22 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     session._original_cached_property_get = original_get  # type: ignore
 
 
+@pytest.fixture()
+def temp_dir() -> Generator[Path]:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
+
+
+@pytest.fixture(autouse=True)
+def change_globals(temp_dir: Path) -> Generator[None]:
+    os.environ["MIGRATEIT_MIGRATIONS_DIR"] = str(temp_dir)
+    importlib.reload(C)
+    assert C.MIGRATEIT_ROOT_DIR == temp_dir
+    Changelog.path = C.MIGRATEIT_CHANGELOG_FILE
+    Migration.migrations_dir = C.MIGRATEIT_MIGRATIONS_DIR
+    yield
+
+
 @pytest.fixture(autouse=True, scope="session")
 def suppress_write() -> Generator[None]:
     with (
@@ -34,9 +56,3 @@ def suppress_write() -> Generator[None]:
         patch("migrateit.reporters.output.write_line", lambda *_: None),
     ):
         yield
-
-
-@pytest.fixture()
-def temp_dir() -> Generator[Path]:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)

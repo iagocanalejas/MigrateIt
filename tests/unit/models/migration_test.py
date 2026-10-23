@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -6,8 +5,6 @@ import pytest
 from tests.unit.conftest import MIGRATION_NAME
 
 from migrateit.constants import ROLLBACK_SPLIT_TAG
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import (
     Migration,
     create_migration_directory,
@@ -16,7 +13,7 @@ from migrateit.models.migration import (
 )
 from migrateit.models.sql import remove_sql_comments
 
-# --- get_content_and_hash tests ---
+# --- get_content tests ---
 
 
 @pytest.mark.unit
@@ -29,7 +26,7 @@ def test_get_migration_content_and_hash_no_rollback(temp_dir: Path) -> None:
         f.write("SELECT 1;")
 
     with pytest.raises(ValueError, match="No rollback"):
-        m.get_content_and_hash(migrations_dir)
+        m.content
 
 
 @pytest.mark.unit
@@ -42,7 +39,7 @@ def test_get_migration_content_and_hash_more_than_one_rollback(temp_dir: Path) -
         f.write("SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;" + ROLLBACK_SPLIT_TAG + "SELECT 3;")
 
     with pytest.raises(ValueError, match="Too many rollback"):
-        m.get_content_and_hash(migrations_dir)
+        m.content
 
 
 @pytest.mark.unit
@@ -54,8 +51,7 @@ def test_get_migration_content_clean_comments(temp_dir: Path) -> None:
     with open(migrations_dir / MIGRATION_NAME, "w") as f:
         f.write("-- Comment\n" + "SELECT 1;" + ROLLBACK_SPLIT_TAG + "SELECT 2;")
 
-    code, _, _ = m.get_content_and_hash(migrations_dir)
-    assert "--" not in code
+    assert "--" not in m.content[0]
 
 
 # --- migration.to_dict tests ---
@@ -75,56 +71,13 @@ def test_migration_to_dict_with_parents() -> None:
     assert d == {"name": "0001_add.sql", "initial": False, "parents": ("0000_init.sql",)}
 
 
-# --- migration.from_json tests ---
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
-def test_changelog_file_from_json_valid(database: SupportedDatabase) -> None:
-    json_str = json.dumps(
-        {
-            "version": 1,
-            "database": database.value,
-            "migrations": [{"name": "0000_init.sql", "initial": True, "parents": []}],
-        }
-    )
-    path = Path("/tmp/test_changelog.json")
-    changelog = Changelog.from_json(json_str, path)
-    assert changelog.version == 1
-    assert changelog.database == database
-    assert len(changelog.migrations) == 1
-    assert changelog.migrations[0].name == "0000_init.sql"
-    assert changelog.migrations[0].initial is True
-
-
-@pytest.mark.unit
-def test_changelog_file_from_json_no_migrations() -> None:
-    json_str = '{"version": 1}'
-    path = Path("/tmp/test_changelog.json")
-    changelog = Changelog.from_json(json_str, path)
-    assert changelog.version == 1
-    assert changelog.migrations == []
-
-
-@pytest.mark.unit
-def test_changelog_file_from_json_invalid_json() -> None:
-    with pytest.raises(ValueError, match="Expecting property name"):
-        Changelog.from_json("{invalid json", Path("/tmp/test.json"))
-
-
-@pytest.mark.unit
-def test_changelog_file_from_json_missing_version() -> None:
-    with pytest.raises(ValueError, match="'version'"):
-        Changelog.from_json('{"migrations": []}', Path("/tmp/test.json"))
-
-
 # --- create_migration_directory tests ---
 
 
 @pytest.mark.unit
 def test_create_migration_directory(temp_dir: Path) -> None:
     d = temp_dir / "migrations"
-    create_migration_directory(d)
+    create_migration_directory()
     assert d.is_dir()
 
 
@@ -132,7 +85,7 @@ def test_create_migration_directory(temp_dir: Path) -> None:
 def test_create_migration_directory_already_exists(temp_dir: Path) -> None:
     d = temp_dir / "migrations"
     d.mkdir(exist_ok=True)
-    create_migration_directory(d)
+    create_migration_directory()
     assert d.is_dir()
 
 
@@ -224,7 +177,8 @@ def test_retrieve_sql_no_rollback_tag_removes_comments(temp_dir: Path) -> None:
 
 @pytest.mark.unit
 def _make_migration_file(temp_dir: Path, filename: str = "0001_test.sql") -> Path:
-    file_path = temp_dir / filename
+    (temp_dir / "migrations").mkdir(parents=True, exist_ok=True)
+    file_path = temp_dir / "migrations" / filename
     template = f"-- Migration {file_path.name}\n-- Created on 2024-01-01\n\n{ROLLBACK_SPLIT_TAG}"
     file_path.write_text(template)
     return file_path
@@ -301,3 +255,16 @@ def test_write_file_removed_while_processing(temp_dir: Path) -> None:
     ):
         with pytest.raises(FileNotFoundError, match="does not exist. Removed while processing."):
             write_into_migration_file(file_path, sql="SELECT 1;", rollback=None)
+
+
+# --- rename_squashed tests ---
+
+
+@pytest.mark.unit
+def test_rename_squashed(temp_dir: Path) -> None:
+    file_path = _make_migration_file(temp_dir, filename="0001_test.sql")
+    _make_migration_file(temp_dir, filename="squashed_0001_test.sql")
+    m = Migration(name=file_path.name, initial=True, parents=())
+
+    with pytest.raises(ValueError, match="already exists"):
+        m.rename_squashed()

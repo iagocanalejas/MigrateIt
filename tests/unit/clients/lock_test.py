@@ -27,13 +27,8 @@ def _patch_lock_timeouts() -> Generator[None]:
 
 @contextmanager
 def _second_client(database: SupportedDatabase, temp_dir: Path) -> Generator[SqlClient[Any]]:
-    migrations_dir = temp_dir / "migrations"
-    migrations_file = temp_dir / "changelog.json"
-
     with connection(database) as conn:
         config = MigrateItConfig(
-            table_name=TEST_MIGRATIONS_TABLE,
-            migrations_dir=migrations_dir,
             changelog=Changelog(
                 version=1,
                 database=database,
@@ -44,7 +39,6 @@ def _second_client(database: SupportedDatabase, temp_dir: Path) -> Generator[Sql
                         parents=(),
                     )
                 ],
-                path=migrations_file,
             ),
         )
         yield get_client(config, conn)

@@ -5,14 +5,13 @@ import platform
 import shlex
 import subprocess
 from collections import Counter
-from pathlib import Path
 from typing import Any
 
 import inquirer
 
+from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.clients._lock import DatabaseLock
-from migrateit.constants import VALID_EDITORS
 from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import (
     Migration,
@@ -29,32 +28,36 @@ from migrateit.reporters.logs import logger
 
 def _validate_editor(editor: str) -> str:
     basename = os.path.basename(editor)
-    if basename not in VALID_EDITORS:
+    if basename not in C.VALID_EDITORS:
         if os.path.isabs(editor) and os.path.isfile(editor) and os.access(editor, os.X_OK):
             return editor
         raise ValueError(
             f"Unsafe editor: {editor!r}. "
-            f"Known safe editors: {', '.join(sorted(VALID_EDITORS))}. "
+            f"Known safe editors: {', '.join(sorted(C.VALID_EDITORS))}. "
             f"Or provide an absolute path to a valid executable."
         )
     return editor
 
 
-def cmd_init(table_name: str, migrations_dir: Path, migrations_file: Path, database: SupportedDatabase) -> int:
+def cmd_init(database: SupportedDatabase) -> int:
     write_line(f"Initializing {database.value} database migrations")
-    write_line(f"\tCreating migrations file: {migrations_file}")
-    changelog = ChangelogRepository.create(migrations_file, database)
+    changelog = ChangelogRepository.create(database)
+    write_line(f"\tCreating migrations file: {changelog.path}")
 
-    write_line(f"\tCreating migrations directory: {migrations_dir}")
-    create_migration_directory(migrations_dir)
+    write_line(f"\tCreating migrations directory: {Migration.migrations_dir}")
+    create_migration_directory()
 
-    write_line(f"\tCreating migration for table: {table_name}")
-    migration = MigrationManager(changelog).create_new_migration(migrations_dir=migrations_dir, name="migrateit")
+    write_line(f"\tCreating migration for table: {C.MIGRATEIT_MIGRATIONS_TABLE}")
+    migration = MigrationManager(changelog).create_new_migration(name="migrateit")
 
-    sql, rollback = _get_init_migration_sql(database, table_name)
-    write_into_migration_file(Path(migrations_dir / migration.name), sql=sql, rollback=rollback)
+    sql, rollback = _get_init_migration_sql(database, C.MIGRATEIT_MIGRATIONS_TABLE)
+    write_into_migration_file(migration.path, sql=sql, rollback=rollback)
+
     ChangelogRepository.save(changelog)
-    write_line(f"Initialization complete: table={table_name} directory={migrations_dir}")
+    write_line("Initialization complete:")
+    write_line(f"\ttable={C.MIGRATEIT_MIGRATIONS_TABLE}")
+    write_line(f"\tmigrations={Migration.migrations_dir}")
+    write_line(f"\tchangelog={changelog.path}")
 
     return 0
 
@@ -87,7 +90,6 @@ def cmd_export(client: SqlClient[Any], name: str | None) -> int:
 
     write_line(f"Creating new migration: {name}")
     migration = client.migrations.create_new_migration(
-        migrations_dir=client.migrations_dir,
         name=name,
         dependencies=(client.changelog.root.name,),
         skip_changelog=True,
@@ -128,11 +130,7 @@ def cmd_new(
         dependencies = choices.get("dependencies", None) if choices else None
 
     write_line(f"Creating new migration: {name}")
-    migration = client.migrations.create_new_migration(
-        migrations_dir=client.migrations_dir,
-        name=name,
-        dependencies=dependencies,
-    )
+    migration = client.migrations.create_new_migration(name=name, dependencies=dependencies)
     write_line(f"Migration file created: {migration.name}")
     ChangelogRepository.save(client.changelog)
 
@@ -141,7 +139,7 @@ def cmd_new(
 
     editor = os.getenv("EDITOR", "notepad.exe" if platform.system() == "Windows" else "vim")
     editor = _validate_editor(editor)
-    cmd = shlex.split(editor) + [str(client.migrations_dir / migration.name)]
+    cmd = shlex.split(editor) + [str(migration.path)]
     try:
         rc = subprocess.run(cmd, timeout=30).returncode
     except FileNotFoundError:  # pragma: no cover
@@ -260,7 +258,6 @@ def cmd_squash(
         raise ValueError("Cannot squash migrations that are not in the same state.")
 
     squashed_migration = client.migrations.create_new_migration(
-        migrations_dir=client.migrations_dir,
         name=name,
         dependencies=start_migration.parents,
         skip_changelog=True,
@@ -270,10 +267,10 @@ def cmd_squash(
         migration = client.migrations.get_migration_by_name(migration_name)
         logger.debug("Merging %s into %s", migration.name, squashed_migration.name)
         write_line(f"Squashing migration: {migration.name}")
-        sql, rollback = retrieve_migration_sqls(client.migrations_dir / migration.name)
-        write_into_migration_file(client.migrations_dir / squashed_migration.name, sql=sql, rollback=rollback)
+        sql, rollback = retrieve_migration_sqls(migration.path)
+        write_into_migration_file(squashed_migration.path, sql=sql, rollback=rollback)
 
-        new_migration = migration.rename_squashed(migrations_dir=client.migrations_dir)
+        new_migration = migration.rename_squashed()
         write_line(f"Renaming migration {migration.name} to {new_migration.name}")
 
     write_line(f"Squashed migration created: {squashed_migration.name}")
@@ -352,15 +349,13 @@ def cmd_drop(client: SqlClient[Any], name: str) -> int:
     if target_migration.initial:
         raise ValueError(f"Cannot drop the initial migration {name}.")
 
-    path = target_migration.get_full_path(client.migrations_dir)
-    assert path.exists(), f"Migration file {path.name} does not exist."
-
     statuses = client.retrieve_migration_statuses()
     if statuses[target_migration.name] == MigrationStatus.APPLIED:
         client.apply_migration(target_migration, is_rollback=True)
         write_line(f"Migration {target_migration.name} rolled back from the database.")
 
-    path.unlink()
+    path = target_migration.path  # NOTE: save it as calling target_migration.path will fail after we unlink it
+    target_migration.path.unlink()
     write_line(f"Migration file removed: {path.name}")
 
     client.changelog.migrations.remove(target_migration)

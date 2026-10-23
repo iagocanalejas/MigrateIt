@@ -1,4 +1,4 @@
-from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -16,32 +16,14 @@ from migrateit.models.config import MigrateItConfig
     ],
 )
 def test_validate_config(table_name: object, expected_error: type[Exception], expected_match: str | None) -> None:
-    config = MigrateItConfig(
-        table_name=table_name,  # type: ignore[arg-type]
-        migrations_dir=Path("/tmp/migrations"),
-        changelog=Changelog(version=1, path=Path("/tmp/changelog.json")),
-    )
-    with pytest.raises(expected_error, match=expected_match):
-        MigrateItConfig.validate(config)
-
-
-@pytest.mark.unit
-def test_validate_config_missing_migrations_dir() -> None:
-    config = MigrateItConfig(
-        table_name="ok",
-        migrations_dir=None,  # type: ignore[arg-type]
-        changelog=Changelog(version=1, path=Path("/tmp/x.json")),
-    )
-    with pytest.raises(ValueError, match="Migrations directory is required"):
-        MigrateItConfig.validate(config)
+    with patch("migrateit.clients._client.C.MIGRATEIT_MIGRATIONS_TABLE", table_name):
+        with pytest.raises(expected_error, match=expected_match):
+            MigrateItConfig(changelog=Changelog(version=1))
 
 
 @pytest.mark.unit
 def test_validate_config_missing_changelog_path() -> None:
-    config = MigrateItConfig(
-        table_name="ok",
-        migrations_dir=Path("/tmp/migrations"),
-        changelog=None,  # type: ignore[arg-type]
-    )
     with pytest.raises(ValueError, match="Migrations file is required"):
-        MigrateItConfig.validate(config)
+        MigrateItConfig(
+            changelog=None,  # type: ignore[arg-type]
+        )

@@ -1,10 +1,14 @@
 import importlib.metadata
 import os
+from pathlib import Path
 
 VERSION = importlib.metadata.version("migrateit")
 
-MIGRATEIT_ROOT_DIR = os.getenv("MIGRATEIT_MIGRATIONS_DIR", "migrateit")
 MIGRATEIT_MIGRATIONS_TABLE = os.getenv("MIGRATEIT_MIGRATIONS_TABLE", "MIGRATEIT_CHANGELOG")
+
+MIGRATEIT_ROOT_DIR = Path(os.getenv("MIGRATEIT_MIGRATIONS_DIR", "migrateit")).resolve()
+MIGRATEIT_MIGRATIONS_DIR = MIGRATEIT_ROOT_DIR / "migrations"
+MIGRATEIT_CHANGELOG_FILE = MIGRATEIT_ROOT_DIR / "changelog.json"
 
 MIGRATION_PATTERN = r"^\d{4}_[a-zA-Z0-9_-]+\.sql$"
 ROLLBACK_SPLIT_TAG = "-- Rollback migration"

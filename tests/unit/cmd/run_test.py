@@ -13,7 +13,7 @@ from tests.unit.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file, _
 
 def test_cmd_run_and_rerun(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_new.sql")
+    _create_migration_file("0001_new.sql")
 
     cmd_run(client=client)
     rows = _get_query_rows(client, f"SELECT migration_name FROM {client._q(TEST_MIGRATIONS_TABLE)}")
@@ -26,10 +26,10 @@ def test_cmd_run_and_rerun(client: SqlClient[Any]) -> None:
 
 def test_cmd_run_fake(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_new.sql", sql="CREATE TABLE test (id INTEGER PRIMARY KEY);")
+    _create_migration_file("0001_new.sql", sql="CREATE TABLE test (id INTEGER PRIMARY KEY);")
 
     cmd_new(client, name="new", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0002_new.sql", sql="CREATE TABLE test2 (id INTEGER PRIMARY KEY);")
+    _create_migration_file("0002_new.sql", sql="CREATE TABLE test2 (id INTEGER PRIMARY KEY);")
 
     cmd_run(client=client, is_fake=True)
     rows = _get_query_rows(client, f"SELECT migration_name FROM {client._q(TEST_MIGRATIONS_TABLE)}")
@@ -41,7 +41,6 @@ def test_cmd_run_fake(client: SqlClient[Any]) -> None:
 def test_cmd_run_rollback(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
     _create_migration_file(
-        client.migrations_dir,
         "0001_new.sql",
         sql="CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY);",
         rollback_sql="DROP TABLE test;",
@@ -63,7 +62,7 @@ def test_cmd_run_full_rollback_no_name(client: SqlClient[Any]) -> None:
 
 def test_cmd_run_plan_only(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_new.sql", sql="CREATE TABLE test (id INTEGER PRIMARY KEY);")
+    _create_migration_file("0001_new.sql", sql="CREATE TABLE test (id INTEGER PRIMARY KEY);")
 
     cmd_run(client=client, is_plan_only=True)
     rows = _get_query_rows(client, f"SELECT migration_name FROM {client._q(TEST_MIGRATIONS_TABLE)}")
@@ -73,7 +72,7 @@ def test_cmd_run_plan_only(client: SqlClient[Any]) -> None:
 
 def test_cmd_run_rollbacks_on_error(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_new.sql", sql="INVALID SQL")
+    _create_migration_file("0001_new.sql", sql="INVALID SQL")
 
     spy_connection = MagicMock(wraps=client.connection)
     client.connection = spy_connection
@@ -107,7 +106,7 @@ def test_cmd_run_no_migrations_to_rollback(client: SqlClient[Any]) -> None:
     cmd_run(client=client)
 
     cmd_new(client, name="new", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_new.sql")
+    _create_migration_file("0001_new.sql")
 
     with patch("migrateit.cmd.write_line") as mock_write_line:
         cmd_run(client=client, name="0001", is_rollback=True)
@@ -139,7 +138,7 @@ def test_cmd_run_hash_update_fake(client: SqlClient[Any]) -> None:
 
 def test_cmd_run_hash_update_success(client: SqlClient[Any]) -> None:
     cmd_new(client, name="new", no_edit=True)
-    _create_migration_file(client.migrations_dir, "0001_new.sql")
+    _create_migration_file("0001_new.sql")
 
     cmd_run(client=client, name="0001")
     rows_before = _get_query_rows(client, f"SELECT migration_name, change_hash FROM {client._q(TEST_MIGRATIONS_TABLE)}")
