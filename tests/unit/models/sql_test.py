@@ -28,7 +28,7 @@ from migrateit.models.sql import patch_sql_statement, sql_to_statements
         (
             SupportedDatabase.ORACLE,
             "CREATE TABLE users (id INT);",
-            "CREATE TABLE users (id INT);",  # Bypassed due to early return
+            "CREATE TABLE IF NOT EXISTS users (id INT);",  # Bypassed due to early return
         ),
         # 2. DROP TABLE tests
         (
@@ -39,9 +39,21 @@ from migrateit.models.sql import patch_sql_statement, sql_to_statements
         (
             SupportedDatabase.ORACLE,
             "DROP TABLE users;",
-            "DROP TABLE users;",  # Bypassed due to early return
+            "DROP TABLE IF EXISTS users;",  # Bypassed due to early return
         ),
-        # 3. ALTER TABLE ... ADD COLUMN tests (Supported: MYSQL, MARIADB, POSTGRES)
+        # 3. CREATE INDEX tests
+        (
+            SupportedDatabase.SQLITE,
+            "CREATE INDEX users_idx ON users;",
+            "CREATE INDEX IF NOT EXISTS users_idx ON users;",
+        ),
+        # 4. DROP INDEX tests
+        (
+            SupportedDatabase.SQLITE,
+            "DROP INDEX users_idx;",
+            "DROP INDEX IF EXISTS users_idx;",
+        ),
+        # 5. ALTER TABLE ... ADD COLUMN tests (Supported: MYSQL, MARIADB, POSTGRES)
         (
             SupportedDatabase.MYSQL,
             "ALTER TABLE users ADD COLUMN age INT;",
@@ -60,14 +72,14 @@ from migrateit.models.sql import patch_sql_statement, sql_to_statements
         (
             SupportedDatabase.SQLITE,
             "ALTER TABLE users ADD COLUMN age INT;",
-            "ALTER TABLE users ADD COLUMN age INT;",  # Unsupported DB
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS age INT;",  # Unsupported DB
         ),
         (
             SupportedDatabase.ORACLE,
-            "ALTER TABLE users ADD COLUMN age INT;",
-            "ALTER TABLE users ADD COLUMN age INT;",  # Bypassed early
+            "ALTER TABLE users ADD age INT;",
+            "ALTER TABLE users ADD age INT;",  # Bypassed early
         ),
-        # 4. ALTER TABLE ... DROP COLUMN tests (Supported: POSTGRES only)
+        # 6. ALTER TABLE ... DROP COLUMN tests (Supported: POSTGRES only)
         (
             SupportedDatabase.POSTGRES,
             "ALTER TABLE users DROP COLUMN age;",
@@ -78,7 +90,7 @@ from migrateit.models.sql import patch_sql_statement, sql_to_statements
             "ALTER TABLE users DROP COLUMN age;",
             "ALTER TABLE users DROP COLUMN age;",  # Unsupported DB
         ),
-        # 5. Comment stripping integration test
+        # 7. Comment stripping integration test
         (
             SupportedDatabase.SQLITE,
             "CREATE TABLE users (id INT); -- this is a comment",

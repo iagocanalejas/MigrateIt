@@ -48,7 +48,7 @@ class OracleClient(SqlClient["oracledb.Connection"]):
         migrations_query = f"""
 CREATE SEQUENCE {seq_name} START WITH 1 INCREMENT BY 1 NOCACHE;
 
-CREATE TABLE {cls._q(table_name)} (
+CREATE TABLE IF NOT EXISTS {cls._q(table_name)} (
     id NUMBER DEFAULT {seq_name}.NEXTVAL PRIMARY KEY,
     migration_name VARCHAR2(255) UNIQUE NOT NULL,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -57,7 +57,7 @@ CREATE TABLE {cls._q(table_name)} (
 );
 """
         reverse_query = f"""
-DROP TABLE {cls._q(table_name)} CASCADE CONSTRAINTS;
+DROP TABLE IF EXISTS {cls._q(table_name)} CASCADE CONSTRAINTS;
 DROP SEQUENCE {seq_name};
 """
         return migrations_query, reverse_query

@@ -44,19 +44,78 @@ def patch_sql_statement(database: SupportedDatabase, sql: str) -> str:
     sql = remove_sql_comments(sql)
     upper_sql = sql.upper()
 
-    if database == SupportedDatabase.ORACLE:
-        return sql
+    # 1. CREATE TABLE IF NOT EXISTS
+    if re.search(r"\bCREATE\s+TABLE\b", upper_sql) and not re.search(r"\bIF\s+NOT\s+EXISTS\b", upper_sql):
+        sql = re.sub(
+            r"\bCREATE\s+TABLE\b",
+            "CREATE TABLE IF NOT EXISTS",
+            sql,
+            flags=re.IGNORECASE,
+            count=1,
+        )
+        upper_sql = sql.upper()
 
-    if "CREATE TABLE" in upper_sql and "IF NOT EXISTS" not in upper_sql:
-        return re.sub("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", sql, flags=re.IGNORECASE)
-    if "DROP TABLE" in upper_sql and "IF EXISTS" not in upper_sql:
-        return re.sub("DROP TABLE", "DROP TABLE IF EXISTS", sql, flags=re.IGNORECASE)
+    # 2. DROP TABLE IF EXISTS
+    if re.search(r"\bDROP\s+TABLE\b", upper_sql) and not re.search(r"\bIF\s+EXISTS\b", upper_sql):
+        sql = re.sub(
+            r"\bDROP\s+TABLE\b",
+            "DROP TABLE IF EXISTS",
+            sql,
+            flags=re.IGNORECASE,
+            count=1,
+        )
+        upper_sql = sql.upper()
 
-    if database in {SupportedDatabase.MYSQL, SupportedDatabase.MARIADB, SupportedDatabase.POSTGRES}:
-        if "ALTER TABLE" in upper_sql and "ADD COLUMN" in upper_sql and "IF NOT EXISTS" not in upper_sql:
-            return re.sub("ADD COLUMN", "ADD COLUMN IF NOT EXISTS", sql, flags=re.IGNORECASE)
-    if database in {SupportedDatabase.POSTGRES}:
-        if "ALTER TABLE" in upper_sql and "DROP COLUMN" in upper_sql and "IF EXISTS" not in upper_sql:
-            return re.sub("DROP COLUMN", "DROP COLUMN IF EXISTS", sql, flags=re.IGNORECASE)
+    # 3. CREATE INDEX IF NOT EXISTS (Supports UNIQUE indexes too)
+    if re.search(r"\bCREATE\s+(?:UNIQUE\s+)?INDEX\b", upper_sql) and not re.search(r"\bIF\s+NOT\s+EXISTS\b", upper_sql):
+        sql = re.sub(
+            r"\bCREATE\s+(UNIQUE\s+)?INDEX\b",
+            r"CREATE \1INDEX IF NOT EXISTS",
+            sql,
+            flags=re.IGNORECASE,
+            count=1,
+        )
+        upper_sql = sql.upper()
+
+    # 4. DROP INDEX IF EXISTS
+    if re.search(r"\bDROP\s+INDEX\b", upper_sql) and not re.search(r"\bIF\s+EXISTS\b", upper_sql):
+        sql = re.sub(
+            r"\bDROP\s+INDEX\b",
+            "DROP INDEX IF EXISTS",
+            sql,
+            flags=re.IGNORECASE,
+            count=1,
+        )
+        upper_sql = sql.upper()
+
+    # 5. ALTER TABLE ... ADD [COLUMN] IF NOT EXISTS
+    if (
+        re.search(r"\bALTER\s+TABLE\b", upper_sql)
+        and re.search(r"\bADD\s+(?:COLUMN\s+)?", upper_sql)
+        and not re.search(r"\bIF\s+NOT\s+EXISTS\b", upper_sql)
+    ):
+        sql = re.sub(
+            r"\bADD\s+COLUMN\b",
+            "ADD COLUMN IF NOT EXISTS",
+            sql,
+            flags=re.IGNORECASE,
+            count=1,
+        )
+        upper_sql = sql.upper()
+
+    # 6. ALTER TABLE ... DROP COLUMN IF EXISTS
+    if database in {SupportedDatabase.POSTGRES, SupportedDatabase.SQLITE}:
+        if (
+            re.search(r"\bALTER\s+TABLE\b", upper_sql)
+            and re.search(r"\bDROP\s+COLUMN\b", upper_sql)
+            and not re.search(r"\bIF\s+EXISTS\b", upper_sql)
+        ):
+            sql = re.sub(
+                r"\bDROP\s+COLUMN\b",
+                "DROP COLUMN IF EXISTS",
+                sql,
+                flags=re.IGNORECASE,
+                count=1,
+            )
 
     return sql
