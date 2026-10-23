@@ -60,8 +60,7 @@ def test_cmd_squash_not_all_applied(client: SqlClient[Any]) -> None:
 
 
 def test_cmd_squash_no_end_too_few_migrations(client: SqlClient[Any]) -> None:
-    with pytest.raises(ValueError, match="squash less than 3"):
-        cmd_squash(client, start_migration_name="0000_migrateit.sql")
+    assert cmd_squash(client, start_migration_name="0000_migrateit.sql") != 0
 
 
 def test_cmd_squash_no_end_uses_last_migration(client: SqlClient[Any]) -> None:
@@ -84,9 +83,7 @@ def test_cmd_squash_no_end_uses_last_migration(client: SqlClient[Any]) -> None:
 def test_cmd_squash_no_migrations_table(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
     mock_client.is_migrations_table_created.return_value = False  # type: ignore
-
-    with pytest.raises(ValueError, match="does not exist"):
-        cmd_squash(mock_client, start_migration_name="0001")
+    assert cmd_squash(mock_client, start_migration_name="0001") != 0
 
 
 @pytest.mark.unit
@@ -100,8 +97,7 @@ def test_cmd_squash_no_path_found(temp_dir: Path) -> None:
     ]
     # Patch find_path on the real MigrationManager to return no path
     with patch.object(mock_client.migrations, "find_path", return_value=[]):
-        with pytest.raises(ValueError, match="No path found"):
-            cmd_squash(mock_client, start_migration_name="0001_a", end_migration_name="0001_a")
+        assert cmd_squash(mock_client, start_migration_name="0001_a", end_migration_name="0001_a") != 0
 
 
 @pytest.mark.unit
@@ -115,8 +111,7 @@ def test_cmd_squash_initial_migration(temp_dir: Path) -> None:
     mock_client.changelog.migrations.append(
         Migration(name="0002_third.sql", parents=("0001_second.sql",)),
     )
-    with pytest.raises(ValueError, match="Cannot squash initial"):
-        cmd_squash(mock_client, start_migration_name="0000_migrateit.sql")
+    assert cmd_squash(mock_client, start_migration_name="0000_migrateit.sql") != 0
 
 
 @pytest.mark.unit
@@ -134,6 +129,4 @@ def test_cmd_squash_different_states(temp_dir: Path) -> None:
         "0001_a.sql": MigrationStatus.APPLIED,
         "0002_b.sql": MigrationStatus.NOT_APPLIED,
     }
-
-    with pytest.raises(ValueError, match="not in the same state"):
-        cmd_squash(mock_client, start_migration_name="0001_a", end_migration_name="0002_b")
+    assert cmd_squash(mock_client, start_migration_name="0001_a", end_migration_name="0002_b") != 0

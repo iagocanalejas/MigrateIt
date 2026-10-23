@@ -86,15 +86,13 @@ def test_cmd_run_rollbacks_on_error(client: SqlClient[Any]) -> None:
 @pytest.mark.unit
 def test_cmd_run_rollback_no_name(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
-    with pytest.raises(ValueError, match="Rollback requires a target"):
-        cmd_run(mock_client, is_rollback=True)
+    assert cmd_run(mock_client, is_rollback=True) != 0
 
 
 @pytest.mark.unit
 def test_cmd_run_full_rollback_with_name(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
-    with pytest.raises(ValueError, match="Cannot specify a target migration"):
-        cmd_run(mock_client, name="0001", is_rollback=True, is_full_rollback=True)
+    assert cmd_run(mock_client, name="0001", is_rollback=True, is_full_rollback=True) != 0
 
 
 def test_cmd_run_by_name_not_found(client: SqlClient[Any]) -> None:
@@ -121,19 +119,16 @@ def test_cmd_run_all_applied(client: SqlClient[Any]) -> None:
 
 
 def test_cmd_run_hash_update_no_target(client: SqlClient[Any]) -> None:
-    with pytest.raises(ValueError, match="requires a target migration"):
-        cmd_run(client=client, is_hash_update=True)
+    assert cmd_run(client=client, is_hash_update=True) != 0
 
 
 def test_cmd_run_hash_update_initial(client: SqlClient[Any]) -> None:
     initial = [m for m in client.changelog.migrations if m.initial][0]
-    with pytest.raises(ValueError, match="hash for the initial migration"):
-        cmd_run(client=client, name=initial.name, is_hash_update=True)
+    assert cmd_run(client=client, name=initial.name, is_hash_update=True) != 0
 
 
 def test_cmd_run_hash_update_fake(client: SqlClient[Any]) -> None:
-    with pytest.raises(ValueError, match="Cannot update hash"):
-        cmd_run(client=client, is_fake=True, is_hash_update=True)
+    assert cmd_run(client=client, is_fake=True, is_hash_update=True) != 0
 
 
 def test_cmd_run_hash_update_success(client: SqlClient[Any]) -> None:

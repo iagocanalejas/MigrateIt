@@ -24,6 +24,7 @@ from migrateit.models.migration_manager import MigrationManager
 from migrateit.models.repository import ChangelogRepository
 from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, write_line
 from migrateit.reporters.logs import logger
+from migrateit.reporters.output import write_line_error
 
 
 def _validate_editor(editor: str) -> str:
@@ -40,6 +41,11 @@ def _validate_editor(editor: str) -> str:
 
 
 def cmd_init(database: SupportedDatabase) -> int:
+    migrations = _get_init_migration_sql(database, C.MIGRATEIT_MIGRATIONS_TABLE)
+    if migrations is None:
+        write_line_error(f"Database {database} is not supported yet")
+        return 1
+
     write_line(f"Initializing {database.value} database migrations")
     changelog = ChangelogRepository.create(database)
     write_line(f"\tCreating migrations file: {changelog.path}")
@@ -50,7 +56,7 @@ def cmd_init(database: SupportedDatabase) -> int:
     write_line(f"\tCreating migration for table: {C.MIGRATEIT_MIGRATIONS_TABLE}")
     migration = MigrationManager(changelog).create_new_migration(name="migrateit")
 
-    sql, rollback = _get_init_migration_sql(database, C.MIGRATEIT_MIGRATIONS_TABLE)
+    sql, rollback = migrations
     write_into_migration_file(migration.path, sql=sql, rollback=rollback)
 
     ChangelogRepository.save(changelog)
@@ -62,7 +68,7 @@ def cmd_init(database: SupportedDatabase) -> int:
     return 0
 
 
-def _get_init_migration_sql(database: SupportedDatabase, table_name: str) -> tuple[str, str]:
+def _get_init_migration_sql(database: SupportedDatabase, table_name: str) -> tuple[str, str] | None:
     match database:
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
             from migrateit.clients.mysql import MySqlClient
@@ -81,7 +87,7 @@ def _get_init_migration_sql(database: SupportedDatabase, table_name: str) -> tup
 
             return SqliteClient.create_migrations_table_str(table_name=table_name)
         case _:
-            raise NotImplementedError(f"Database {database} is not supported yet")
+            return None
 
 
 def cmd_export(client: SqlClient[Any], name: str | None) -> int:
@@ -110,9 +116,11 @@ def cmd_new(
     interactive: bool = False,
 ) -> int:
     if not client.is_migrations_table_created():
-        raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
+        write_line_error(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
+        return 1
     if interactive and dependencies is not None and len(dependencies) > 0:
-        raise ValueError("Cannot specify both `--interactive` and `--dependencies`.")
+        write_line_error("Cannot specify both `--interactive` and `--dependencies`.")
+        return 1
 
     # NOTE: required in case-sensitive OSs
     name = name.lower()
@@ -162,18 +170,22 @@ def cmd_run(
 ) -> int:
     if (is_fake or is_rollback) and is_hash_update:
         action = "faking" if is_fake else "rolling back"
-        raise ValueError(f"Cannot update hash while {action}.")
+        write_line_error(f"Cannot update hash while {action}.")
+        return 1
 
     if is_hash_update:
         if name is None:
-            raise ValueError("Hash update requires a target migration name.")
+            write_line_error("Hash update requires a target migration name.")
+            return 1
         return _cmd_run_hash_update(client, client.migrations.get_migration_by_name(name))
 
     if is_rollback and not (name or is_full_rollback):
-        raise ValueError("Rollback requires a target migration name.")
+        write_line_error("Rollback requires a target migration name.")
+        return 1
 
     if is_full_rollback and name:
-        raise ValueError("Cannot specify a target migration name when using `--zero`.")
+        write_line_error("Cannot specify a target migration name when using `--zero`.")
+        return 1
 
     statuses = client.retrieve_migration_statuses()
     client.validate_migrations(statuses)
@@ -217,6 +229,7 @@ def cmd_run(
             except Exception:  # pragma: no cover
                 pass
             raise
+
     direction = "Migration" if not is_rollback else "Rollback"
     action = "applied" if not is_rollback else "rolled back"
     write_line(f"{direction} complete: {len(migration_plan)} migration(s) {action}.")
@@ -232,11 +245,13 @@ def cmd_squash(
     name: str | None = None,
 ) -> int:
     if not client.is_migrations_table_created():
-        raise ValueError(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
+        write_line_error(f"Migrations table={client.table_name} does not exist. Please run `init` & `migrate` first.")
+        return 1
 
     if not end_migration_name:
         if len(client.changelog.migrations) < 3:
-            raise ValueError("Cannot squash less than 3 migrations.")
+            write_line_error("Cannot squash less than 3 migrations.")
+            return 1
         end_migration_name = client.changelog.migrations[-1].name
 
     start_migration = client.migrations.get_migration_by_name(start_migration_name)
@@ -249,13 +264,16 @@ def cmd_squash(
     to_squash = client.migrations.find_path(start_migration.name, end_migration.name)
     write_line(f"Following migrations will be squashed: {', '.join(to_squash)}")
     if not to_squash:
-        raise ValueError(f"No path found from {start_migration.name} to {end_migration.name}.")
+        write_line_error(f"No path found from {start_migration.name} to {end_migration.name}.")
+        return 1
     if any(m.initial for m in (client.migrations.get_migration_by_name(m) for m in to_squash)):
-        raise ValueError("Cannot squash initial migrations.")
+        write_line_error("Cannot squash initial migrations.")
+        return 1
 
     statuses = client.retrieve_migration_statuses()
     if not all(statuses[m] == statuses[to_squash[0]] for m in to_squash):
-        raise ValueError("Cannot squash migrations that are not in the same state.")
+        write_line_error("Cannot squash migrations that are not in the same state.")
+        return 1
 
     squashed_migration = client.migrations.create_new_migration(
         name=name,
@@ -345,9 +363,11 @@ def cmd_show(client: SqlClient[Any], list_mode: bool = False, validate_sql: bool
 def cmd_drop(client: SqlClient[Any], name: str) -> int:
     target_migration = client.migrations.get_migration_by_name(name)
     if any(target_migration.name in m.parents for m in client.changelog.migrations):
-        raise ValueError(f"Cannot drop migration {name}, it is a parent of other migrations.")
+        write_line_error(f"Cannot drop migration {name}, it is a parent of other migrations.")
+        return 1
     if target_migration.initial:
-        raise ValueError(f"Cannot drop the initial migration {name}.")
+        write_line_error(f"Cannot drop the initial migration {name}.")
+        return 1
 
     statuses = client.retrieve_migration_statuses()
     if statuses[target_migration.name] == MigrationStatus.APPLIED:
@@ -366,7 +386,8 @@ def cmd_drop(client: SqlClient[Any], name: str) -> int:
 
 def _cmd_run_hash_update(client: SqlClient[Any], target_migration: Migration) -> int:
     if target_migration.initial:
-        raise ValueError("Cannot update hash for the initial migration")
+        write_line_error("Cannot update hash for the initial migration")
+        return 1
     write_line(f"Updating hash for migration: {target_migration.name}")
     client.update_migration_hash(target_migration)
     client.connection.commit()

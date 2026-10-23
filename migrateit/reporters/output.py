@@ -7,7 +7,7 @@ from typing import IO, Any
 
 from migrateit.models.migration import MigrationStatus
 
-from ._utils import GREEN, NORMAL
+from ._utils import GREEN, NORMAL, RED
 
 STATUS_COLORS = {
     "reset": "\033[0m",
@@ -42,7 +42,15 @@ def write_line_b(
 
 
 def write_line(s: str | None = None, **kwargs: Any) -> None:
-    write_line_b(s.encode() if s is not None else s, **kwargs)
+    if s is None:
+        return
+    write_line_b(s.encode(), **kwargs)
+
+
+def write_line_error(s: str | None = None, **kwargs: Any) -> None:
+    if s is None:
+        return
+    write_line_b(f"\n{RED}ERROR: {s}{NORMAL}".encode(), **kwargs)
 
 
 def print_logo() -> None:

@@ -46,9 +46,7 @@ def test_cmd_drop_is_parent(temp_dir: Path) -> None:
         Migration(name="0000_init.sql", initial=True, parents=()),
         Migration(name="0001_child.sql", parents=("0000_init.sql",)),
     ]
-
-    with pytest.raises(ValueError, match="it is a parent"):
-        cmd_drop(mock_client, name="0000_init.sql")
+    assert cmd_drop(mock_client, name="0000_init.sql") != 0
 
 
 @pytest.mark.unit
@@ -57,9 +55,7 @@ def test_cmd_drop_is_initial(temp_dir: Path) -> None:
     mock_client.changelog.migrations = [
         Migration(name="0000_init.sql", initial=True, parents=()),
     ]
-
-    with pytest.raises(ValueError, match="Cannot drop the initial"):
-        cmd_drop(mock_client, name="0000_init.sql")
+    assert cmd_drop(mock_client, name="0000_init.sql") != 0
 
 
 @pytest.mark.unit

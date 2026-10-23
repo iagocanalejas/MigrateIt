@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from migrateit.cmd import _get_init_migration_sql, cmd_init
+from migrateit.cmd import cmd_init
 from migrateit.constants import ROLLBACK_SPLIT_TAG
 from migrateit.models.config import SupportedDatabase
 from tests.unit.conftest import INITIAL_MIGRATION
@@ -36,5 +36,4 @@ def test_cmd_init_already_initialized(database: SupportedDatabase, temp_dir: Pat
 
 @pytest.mark.unit
 def test_get_init_migration_sql_unsupported() -> None:
-    with pytest.raises(NotImplementedError, match="not supported yet"):
-        _get_init_migration_sql("fake", "test_table")  # type: ignore[arg-type]
+    assert cmd_init("fake") != 0  # type: ignore[arg-type]

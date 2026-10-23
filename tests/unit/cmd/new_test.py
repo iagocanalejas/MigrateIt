@@ -101,15 +101,14 @@ def test_cmd_new_with_dependencies(temp_dir: Path) -> None:
 @pytest.mark.unit
 def test_cmd_new_interactive_with_dependencies_raises_value_error(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
-
-    with pytest.raises(ValueError, match="Cannot specify both `--interactive` and `--dependencies`"):
-        cmd_new(
-            client=mock_client,
-            name="test_migration",
-            dependencies=("0000_migrateit.sql",),
-            interactive=True,
-            no_edit=True,
-        )
+    returncode = cmd_new(
+        client=mock_client,
+        name="test_migration",
+        dependencies=("0000_migrateit.sql",),
+        interactive=True,
+        no_edit=True,
+    )
+    assert returncode != 0
 
 
 @pytest.mark.unit
@@ -174,6 +173,4 @@ def test_validate_editor_unknown_raises() -> None:
 def test_cmd_new_no_migrations_table(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
     mock_client.is_migrations_table_created.return_value = False  # type: ignore
-
-    with pytest.raises(ValueError, match="does not exist"):
-        cmd_new(mock_client, name="test")
+    assert cmd_new(mock_client, name="test") != 0
