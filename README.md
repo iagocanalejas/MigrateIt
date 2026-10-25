@@ -110,8 +110,17 @@ migrateit migrate --plan-only
 # Run a specific migration
 migrateit migrate 0001
 
+# Run migrations interactively
+migrateit migrate --interactive
+
 # Rollback a migration
 migrateit rollback 0001
+
+# Rollback including the initial migration
+migrateit rollback --zero
+
+# Rollback interactively
+migrateit rollback --interactive
 
 # Squash migrations into a single file
 migrateit squash 0001 0005
@@ -176,16 +185,17 @@ options:
 ```
 
 ```sh
-usage: migrateit migrate [-h] [--fake] [--plan-only] [--update-hash] [name]
+usage: migrateit migrate [-h] [-i] [--fake] [--plan-only] [--update-hash] [name]
 
 positional arguments:
   name           Name of the migration to run
 
 options:
-  -h, --help     show this help message and exit
-  --fake         Fakes the migration marking it as ran.
-  --plan-only    Dry run the migration without applying it.
-  --update-hash  Update the hash of the migration.
+  -h, --help           show this help message and exit
+  -i, --interactive    Allow to interactively select the migration to apply.
+  --fake               Fakes the migration marking it as ran.
+  --plan-only          Dry run the migration without applying it.
+  --update-hash        Update the hash of the migration.
 ```
 
 ```sh
@@ -208,15 +218,17 @@ options:
 ```
 
 ```sh
-usage: migrateit rollback [-h] [--fake] [--plan-only] [name]
+usage: migrateit rollback [-h] [-0] [-i] [--fake] [--plan-only] [name]
 
 positional arguments:
   name          Name of the migration to rollback
 
 options:
-  -h, --help    show this help message and exit
-  --fake        Fakes the rollback marking it as undone.
-  --plan-only    Dry run the migration without applying it.
+  -h, --help           show this help message and exit
+  -0, --zero           Reverse all the applied migrations, even the 'migrateit' one.
+  -i, --interactive    Allow to interactively select the migration to rollback.
+  --fake               Fakes the rollback marking it as undone.
+  --plan-only          Dry run the migration without applying it.
 ```
 
 ```sh
