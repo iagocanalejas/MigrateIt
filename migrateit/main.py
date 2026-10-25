@@ -78,6 +78,7 @@ def main() -> int:
                         is_fake=args.fake,
                         is_hash_update=args.update_hash,
                         is_plan_only=args.plan_only,
+                        interactive=args.interactive,
                     )
                 elif args.command == "rollback":
                     return commands.cmd_run(
@@ -86,6 +87,7 @@ def main() -> int:
                         is_fake=args.fake,
                         is_rollback=True,
                         is_plan_only=args.plan_only,
+                        interactive=args.interactive,
                     )
                 elif args.command == "squash":
                     return commands.cmd_squash(
@@ -154,6 +156,13 @@ def _cmd_new(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 def _cmd_migrate(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("name", type=str, nargs="?", default=None, help="Name of the migration to run")
     parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        default=False,
+        help="Allow to interactively select the migration to apply.",
+    )
+    parser.add_argument(
         "--fake",
         action="store_true",
         default=False,
@@ -183,6 +192,13 @@ def _cmd_rollback(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Reverse all the applied migrations, even the 'migrateit' one.",
+    )
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        default=False,
+        help="Allow to interactively select the migration to rollback.",
     )
     parser.add_argument(
         "--fake",

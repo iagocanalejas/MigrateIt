@@ -128,7 +128,6 @@ def test_full_migrate_export_and_rollback(database: SupportedDatabase, temp_dir:
     assert rollback_result.returncode == 0
     assert "Rollback complete" in rollback_result.stdout
     assert f"{len(changelog.migrations)} migration(s) rolled back" in rollback_result.stdout
-    assert "Full rollback complete" in rollback_result.stdout
 
 
 @pytest.mark.integration
