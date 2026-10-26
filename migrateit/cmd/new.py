@@ -46,15 +46,20 @@ def cmd_new(
     name = name.lower()
 
     if interactive:
-        choices = inquirer.prompt(
-            [
-                inquirer.Checkbox(
-                    "dependencies",
-                    message="Select dependencies for the migration",
-                    choices=[m.name for m in client.changelog.migrations],
-                )
-            ],
-        )
+        try:
+            choices = inquirer.prompt(
+                [
+                    inquirer.Checkbox(
+                        "dependencies",
+                        message="Select dependencies for the migration",
+                        choices=[m.name for m in client.changelog.migrations],
+                    )
+                ],
+                raise_keyboard_interrupt=True,
+            )
+        except KeyboardInterrupt:  # pragma: no cover
+            write_line_error("Aborted by user.")
+            return 1
         dependencies = choices.get("dependencies", None) if choices else None
 
     write_line(f"Creating new migration '{name}'.")

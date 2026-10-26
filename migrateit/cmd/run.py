@@ -37,7 +37,12 @@ def cmd_run(
         write_line_error("`migrateit rollback` requires a target migration name.")
         return 1
 
-    migration_plan = _build_migration_plan(client, name, is_rollback=is_rollback, interactive=interactive)
+    try:
+        migration_plan = _build_migration_plan(client, name, is_rollback=is_rollback, interactive=interactive)
+    except KeyboardInterrupt:  # pragma: no cover
+        write_line_error("Aborted by user.")
+        return 1
+
     if not migration_plan:
         if is_rollback:
             write_line("No migrations to roll back.")
@@ -78,16 +83,21 @@ def _cmd_run_hash_update(client: SqlClient[Any], name: str | None, interactive: 
     if interactive:
         if name is not None:
             name = client.migrations.get_migration_by_name(name).name
-        target_name = inquirer.prompt(
-            [
-                inquirer.List(
-                    "target",
-                    message="Select migration to update hash for:",
-                    choices=[m.name for m in client.changelog.migrations],
-                    default=name,
-                )
-            ],
-        )
+        try:
+            target_name = inquirer.prompt(
+                [
+                    inquirer.List(
+                        "target",
+                        message="Select migration to update hash for:",
+                        choices=[m.name for m in client.changelog.migrations],
+                        default=name,
+                    )
+                ],
+                raise_keyboard_interrupt=True,
+            )
+        except KeyboardInterrupt:  # pragma: no cover
+            write_line_error("Aborted by user.")
+            return 1
         name = target_name.get("target", None) if target_name else None
 
     if name is None:
@@ -144,7 +154,8 @@ def _build_interactive_plan(
                 message=f"Select migrations to {'rollback' if is_rollback else 'apply'}.",
                 choices=choice_list,
             )
-        ]
+        ],
+        raise_keyboard_interrupt=True,
     )
 
     selected_names = choices.get("migrations") if choices else None
