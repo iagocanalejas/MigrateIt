@@ -7,8 +7,9 @@ import pytest
 from migrateit.clients._client import SqlClient
 from migrateit.cmd import cmd_new, cmd_run, cmd_squash
 from migrateit.models.migration import Migration, MigrationStatus
+from tests.unit.clients.conftest import _get_query_rows
 from tests.unit.cmd.conftest import _mock_client
-from tests.unit.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file, _get_query_rows
+from tests.unit.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, _create_migration_file
 
 
 def test_cmd_squash_all_applied(client: SqlClient[Any]) -> None:

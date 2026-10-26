@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -263,11 +262,9 @@ def test_build_error_message_empty_description(temp_dir: Path) -> None:
     client = _client_with_mocked_connection(temp_dir)
     _create_migration_file(MIGRATION_NAME, sql="SELECT 1;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
+    error = type("Error", (), {"description": "", "line_pos": None})()
 
-    error = MagicMock()
-    error.description = ""
-
-    result = client._build_error_message(migration, [error])
+    result = client._build_error_message(migration, [error])  # pyright: ignore
     assert len(result) == 1
     assert "SQL Syntax Error (unknown location)" in str(result[0])
 
@@ -277,12 +274,9 @@ def test_build_error_message_no_quoted_source(temp_dir: Path) -> None:
     client = _client_with_mocked_connection(temp_dir)
     _create_migration_file(MIGRATION_NAME, sql="SELECT 1;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
+    error = type("Error", (), {"description": "unqualified statement", "line_pos": 1})()
 
-    error = MagicMock()
-    error.description = "unqualified statement"
-    error.line_pos = 1
-
-    result = client._build_error_message(migration, [error])
+    result = client._build_error_message(migration, [error])  # pyright: ignore
     assert len(result) == 1
     assert "SQL Syntax Error: unqualified statement" in str(result[0])
 
@@ -292,12 +286,9 @@ def test_build_error_message_source_not_in_lines(temp_dir: Path) -> None:
     client = _client_with_mocked_connection(temp_dir)
     _create_migration_file(MIGRATION_NAME, sql="SELECT 1;")
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
+    error = type("Error", (), {"description": "Unknown column 'nonexistent_col'", "line_pos": 5})()
 
-    error = MagicMock()
-    error.description = "Unknown column 'nonexistent_col'"
-    error.line_pos = 5
-
-    result = client._build_error_message(migration, [error])
+    result = client._build_error_message(migration, [error])  # pyright: ignore
     assert len(result) == 1
     assert "Line 1" in str(result[0])
     assert "Position 5" in str(result[0])

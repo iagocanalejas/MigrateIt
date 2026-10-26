@@ -5,16 +5,18 @@ import pytest
 
 from migrateit.clients._client import SqlClient
 from migrateit.models.migration import Migration, MigrationStatus
+from tests.unit.clients.conftest import (
+    _drop_test_table,
+    _migration_is_applied,
+    _table_exists,
+)
 from tests.unit.conftest import (
     INITIAL_MIGRATION,
     MIGRATION_NAME,
     TEST_MIGRATIONS_TABLE,
     TEST_TABLE,
     _create_migration_file,
-    _drop_test_table,
-    _migration_is_applied,
     _mock_create_migration,
-    _table_exists,
 )
 
 

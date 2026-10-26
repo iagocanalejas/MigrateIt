@@ -6,8 +6,9 @@ import pytest
 from migrateit.clients._client import SqlClient
 from migrateit.cmd import cmd_drop, cmd_new, cmd_run
 from migrateit.models.migration import Migration
+from tests.unit.clients.conftest import _get_query_rows
 from tests.unit.cmd.conftest import _mock_client
-from tests.unit.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file, _get_query_rows
+from tests.unit.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file
 
 
 def test_cmd_drop(client: SqlClient[Any]) -> None:

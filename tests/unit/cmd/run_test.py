@@ -7,8 +7,9 @@ import pytest
 from migrateit.clients._client import SqlClient
 from migrateit.clients._lock import _DummyLocker
 from migrateit.cmd import cmd_new, cmd_run
+from tests.unit.clients.conftest import _get_query_rows, _table_exists
 from tests.unit.cmd.conftest import _mock_client
-from tests.unit.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file, _get_query_rows, _table_exists
+from tests.unit.conftest import TEST_MIGRATIONS_TABLE, _create_migration_file
 
 # --- migrate ---
 

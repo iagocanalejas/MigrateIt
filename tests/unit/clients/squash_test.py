@@ -3,12 +3,12 @@ from typing import Any
 from migrateit.clients._client import SqlClient
 from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration
+from tests.unit.clients.conftest import _migration_is_applied
 from tests.unit.conftest import (
     INITIAL_MIGRATION,
     MIGRATION_NAME,
     TEST_MIGRATIONS_TABLE,
     _create_migration_file,
-    _migration_is_applied,
 )
 
 

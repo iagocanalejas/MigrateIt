@@ -185,184 +185,186 @@ def test_get_next_migration_path_overwrite_index_declined(temp_dir: Path) -> Non
 
 
 @pytest.mark.unit
-def test_build_plan_simple_forward() -> None:
-    migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=()),
-        Migration(name="0001_add_table.sql", parents=("0000_init.sql",)),
-    ]
+@pytest.mark.parametrize(
+    ("migrations", "statuses", "target", "is_rollback", "expected"),
+    [
+        pytest.param(
+            [
+                Migration(name="0000_init.sql", initial=True, parents=()),
+                Migration(name="0001_add_table.sql", parents=("0000_init.sql",)),
+            ],
+            {"0000_init.sql": MigrationStatus.APPLIED, "0001_add_table.sql": MigrationStatus.NOT_APPLIED},
+            None,
+            False,
+            ["0001_add_table.sql"],
+            id="simple_forward",
+        ),
+        pytest.param(
+            [
+                Migration(name="0000_init.sql", initial=True, parents=()),
+                Migration(name="0001_left.sql", parents=("0000_init.sql",)),
+                Migration(name="0002_right.sql", parents=("0000_init.sql", "0001_left.sql")),
+                Migration(name="0003_merge.sql", parents=("0001_left.sql", "0002_right.sql")),
+            ],
+            dict.fromkeys(
+                ["0000_init.sql", "0001_left.sql", "0002_right.sql", "0003_merge.sql"], MigrationStatus.NOT_APPLIED
+            ),
+            None,
+            False,
+            ["0000_init.sql", "0001_left.sql", "0002_right.sql", "0003_merge.sql"],
+            id="diamond_requeue_visited",
+        ),
+        pytest.param(
+            [
+                Migration(name="0000_init.sql", initial=True, parents=()),
+                Migration(name="0001_init.sql", parents=("0000_init.sql",)),
+                Migration(name="0002_init.sql", parents=("0001_init.sql",)),
+                Migration(name="0003_init.sql", parents=("0000_init.sql", "0002_init.sql")),
+            ],
+            dict.fromkeys(
+                ["0000_init.sql", "0001_init.sql", "0002_init.sql", "0003_init.sql"], MigrationStatus.NOT_APPLIED
+            ),
+            None,
+            False,
+            ["0000_init.sql", "0001_init.sql", "0002_init.sql", "0003_init.sql"],
+            id="unvisited_parents",
+        ),
+        pytest.param(
+            [
+                Migration(name="0000_init.sql", initial=True, parents=()),
+                Migration(name="0001_init.sql", parents=("0000_init.sql",)),
+                Migration(name="0002_init.sql", parents=("0001_init.sql", "0000_init.sql")),
+            ],
+            dict.fromkeys(["0000_init.sql", "0001_init.sql", "0002_init.sql"], MigrationStatus.NOT_APPLIED),
+            "0002_init.sql",
+            False,
+            ["0001_init.sql", "0000_init.sql", "0002_init.sql"],
+            id="already_visited_neighbor",
+        ),
+        pytest.param(
+            [
+                Migration(name="0000_init.sql", initial=True, parents=()),
+                Migration(name="0001_add.sql", parents=("0000_init.sql",)),
+                Migration(name="0002_more.sql", parents=("0001_add.sql",)),
+            ],
+            {
+                "0000_init.sql": MigrationStatus.APPLIED,
+                "0001_add.sql": MigrationStatus.APPLIED,
+                "0002_more.sql": MigrationStatus.NOT_APPLIED,
+            },
+            "0001_add.sql",
+            True,
+            ["0001_add.sql"],
+            id="rollback_applied",
+        ),
+        pytest.param(
+            [
+                Migration(name="0000_init.sql", initial=True, parents=()),
+                Migration(name="0001_add.sql", parents=("0000_init.sql",)),
+                Migration(name="0002_more.sql", parents=("0001_add.sql",)),
+            ],
+            {
+                "0000_init.sql": MigrationStatus.APPLIED,
+                "0001_add.sql": MigrationStatus.APPLIED,
+                "0002_more.sql": MigrationStatus.NOT_APPLIED,
+            },
+            "0000_init.sql",
+            True,
+            ["0001_add.sql", "0000_init.sql"],
+            id="rollback_root",
+        ),
+        pytest.param(
+            [
+                Migration(name="0000_init.sql", initial=True, parents=()),
+                Migration(name="0001_add.sql", parents=("0000_init.sql",)),
+            ],
+            {
+                "0000_init.sql": MigrationStatus.APPLIED,
+                "0001_add.sql": MigrationStatus.NOT_APPLIED,
+            },
+            "0001_add.sql",
+            False,
+            ["0001_add.sql"],
+            id="bottom_up",
+        ),
+        pytest.param(
+            [Migration(name="0000_init.sql", initial=True, parents=())],
+            {"0000_init.sql": MigrationStatus.APPLIED},
+            None,
+            True,
+            ["0000_init.sql"],
+            id="rollback_no_target",
+        ),
+    ],
+)
+def test_build_plan(
+    migrations: list[Migration],
+    statuses: dict[str, MigrationStatus],
+    target: str | None,
+    is_rollback: bool,
+    expected: list[str],
+) -> None:
     changelog = Changelog(version=1, migrations=migrations)
     manager = MigrationManager(changelog)
-    statuses = {"0000_init.sql": MigrationStatus.APPLIED, "0001_add_table.sql": MigrationStatus.NOT_APPLIED}
-
-    plan = manager.build_migration_plan(statuses)
-    assert len(plan) == 1
-    assert plan[0].name == "0001_add_table.sql"
-
-
-@pytest.mark.unit
-def test_build_plan_diamond_requeue_visited() -> None:
-    """Diamond DAG with cross-parent dependency."""
-    migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=()),
-        Migration(name="0001_left.sql", parents=("0000_init.sql",)),
-        Migration(name="0002_right.sql", parents=("0000_init.sql", "0001_left.sql")),
-        Migration(name="0003_merge.sql", parents=("0001_left.sql", "0002_right.sql")),
-    ]
-    changelog = Changelog(version=1, migrations=migrations)
-    manager = MigrationManager(changelog)
-    statuses = dict.fromkeys([m.name for m in migrations], MigrationStatus.NOT_APPLIED)
-
-    plan = manager.build_migration_plan(statuses)
-    assert [m.name for m in plan] == ["0000_init.sql", "0001_left.sql", "0002_right.sql", "0003_merge.sql"]
-
-
-@pytest.mark.unit
-def test_build_plan_unvisited_parents() -> None:
-    """DAG where a node is enqueued before its parent is visited."""
-    migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=()),
-        Migration(name="0001_init.sql", parents=("0000_init.sql",)),
-        Migration(name="0002_init.sql", parents=("0001_init.sql",)),
-        Migration(name="0003_init.sql", parents=("0000_init.sql", "0002_init.sql")),
-    ]
-    changelog = Changelog(version=1, migrations=migrations)
-    manager = MigrationManager(changelog)
-    statuses = dict.fromkeys([m.name for m in migrations], MigrationStatus.NOT_APPLIED)
-
-    plan = manager.build_migration_plan(statuses)
-    assert [m.name for m in plan] == ["0000_init.sql", "0001_init.sql", "0002_init.sql", "0003_init.sql"]
-
-
-@pytest.mark.unit
-def test_build_plan_already_visited_neighbor() -> None:
-    """DAG where a neighbor is already in queue when we try to add it."""
-    migrations = [
-        Migration(name="0000_init.sql", initial=True, parents=()),
-        Migration(name="0001_init.sql", parents=("0000_init.sql",)),
-        Migration(name="0002_init.sql", parents=("0001_init.sql", "0000_init.sql")),
-    ]
-    changelog = Changelog(version=1, migrations=migrations)
-    manager = MigrationManager(changelog)
-    statuses = dict.fromkeys([m.name for m in migrations], MigrationStatus.NOT_APPLIED)
-
-    plan = manager.build_migration_plan(statuses_map=statuses, target_migration=migrations[2])
-    assert [m.name for m in plan] == ["0001_init.sql", "0000_init.sql", "0002_init.sql"]
-
-
-@pytest.mark.unit
-def test_build_plan_rollback_applied() -> None:
-    m1 = Migration(name="0000_init.sql", initial=True, parents=())
-    m2 = Migration(name="0001_add.sql", parents=("0000_init.sql",))
-    m3 = Migration(name="0002_more.sql", parents=("0001_add.sql",))
-    changelog = Changelog(version=1, migrations=[m1, m2, m3])
-    manager = MigrationManager(changelog)
-    statuses: dict[str, MigrationStatus] = {
-        "0000_init.sql": MigrationStatus.APPLIED,
-        "0001_add.sql": MigrationStatus.APPLIED,
-        "0002_more.sql": MigrationStatus.NOT_APPLIED,
-    }
-    plan = manager.build_migration_plan(statuses, m2, is_rollback=True)
-    assert len(plan) == 1
-    assert plan[0].name == "0001_add.sql"
-
-
-@pytest.mark.unit
-def test_build_plan_rollback_root() -> None:
-    m1 = Migration(name="0000_init.sql", initial=True, parents=())
-    m2 = Migration(name="0001_add.sql", parents=("0000_init.sql",))
-    m3 = Migration(name="0002_more.sql", parents=("0001_add.sql",))
-    changelog = Changelog(version=1, migrations=[m1, m2, m3])
-    manager = MigrationManager(changelog)
-    statuses: dict[str, MigrationStatus] = {
-        "0000_init.sql": MigrationStatus.APPLIED,
-        "0001_add.sql": MigrationStatus.APPLIED,
-        "0002_more.sql": MigrationStatus.NOT_APPLIED,
-    }
-    plan = manager.build_migration_plan(statuses, m1, is_rollback=True)
-    assert len(plan) == 2
-    assert plan[0].name == "0001_add.sql"
-
-
-@pytest.mark.unit
-def test_build_plan_bottom_up() -> None:
-    m1 = Migration(name="0000_init.sql", initial=True, parents=())
-    m2 = Migration(name="0001_add.sql", parents=("0000_init.sql",))
-    changelog = Changelog(version=1, migrations=[m1, m2])
-    manager = MigrationManager(changelog)
-    statuses: dict[str, MigrationStatus] = {
-        "0000_init.sql": MigrationStatus.APPLIED,
-        "0001_add.sql": MigrationStatus.NOT_APPLIED,
-    }
-    plan = manager.build_migration_plan(statuses, m2, is_rollback=False)
-    assert len(plan) == 1
-    assert plan[0].name == "0001_add.sql"
-
-
-@pytest.mark.unit
-def test_build_plan_rollback_no_target() -> None:
-    m = Migration(name="0000_init.sql", initial=True, parents=())
-    changelog = Changelog(version=1, migrations=[m])
-    manager = MigrationManager(changelog)
-    statuses: dict[str, MigrationStatus] = {"0000_init.sql": MigrationStatus.APPLIED}
-    plan = manager.build_migration_plan(statuses, is_rollback=True)
-    assert len(plan) == 1
-    assert plan[0].name == "0000_init.sql"
+    target_migration = next(m for m in migrations if m.name == target) if target else None
+    plan = manager.build_migration_plan(statuses, target_migration, is_rollback=is_rollback)
+    assert [m.name for m in plan] == expected
 
 
 # --- manager.find_path tests ---
 
 
 @pytest.mark.unit
-def test_find_path_same_node() -> None:
-    cl = Changelog(version=1, migrations=[Migration(name="0001_a")])
+@pytest.mark.parametrize(
+    ("migrations", "start", "end", "expected"),
+    [
+        pytest.param(
+            [Migration(name="0001_a")],
+            "0001_a",
+            "0001_a",
+            ["0001_a"],
+            id="same_node",
+        ),
+        pytest.param(
+            [
+                Migration(name="0001_a"),
+                Migration(name="0002_b", parents=("0001_a",)),
+                Migration(name="0003_c", parents=("0002_b",)),
+            ],
+            "0001_a",
+            "0003_c",
+            ["0001_a", "0002_b", "0003_c"],
+            id="linear",
+        ),
+        pytest.param(
+            [
+                Migration(name="0001_a"),
+                Migration(name="0002_b"),
+            ],
+            "0001_a",
+            "0002_b",
+            [],
+            id="no_path",
+        ),
+        pytest.param(
+            [
+                Migration(name="0001_a"),
+                Migration(name="0002_b", parents=("0001_a",)),
+                Migration(name="0003_c", parents=("0001_a",)),
+                Migration(name="0004_d", parents=("0003_c",)),
+            ],
+            "0001_a",
+            "0004_d",
+            ["0001_a", "0003_c", "0004_d"],
+            id="branching",
+        ),
+    ],
+)
+def test_find_path(migrations: list[Migration], start: str, end: str, expected: list[str]) -> None:
+    cl = Changelog(version=1, migrations=migrations)
     manager = MigrationManager(cl)
-    path = manager.find_path("0001_a", "0001_a")
-    assert path == ["0001_a"]
-
-
-@pytest.mark.unit
-def test_find_path_linear() -> None:
-    cl = Changelog(
-        version=1,
-        migrations=[
-            Migration(name="0001_a"),
-            Migration(name="0002_b", parents=("0001_a",)),
-            Migration(name="0003_c", parents=("0002_b",)),
-        ],
-    )
-    manager = MigrationManager(cl)
-    path = manager.find_path("0001_a", "0003_c")
-    assert path == ["0001_a", "0002_b", "0003_c"]
-
-
-@pytest.mark.unit
-def test_find_path_no_path() -> None:
-    cl = Changelog(
-        version=1,
-        migrations=[
-            Migration(name="0001_a"),
-            Migration(name="0002_b"),
-        ],
-    )
-    manager = MigrationManager(cl)
-    path = manager.find_path("0001_a", "0002_b")
-    assert path == []
-
-
-@pytest.mark.unit
-def test_find_path_branching() -> None:
-    cl = Changelog(
-        version=1,
-        migrations=[
-            Migration(name="0001_a"),
-            Migration(name="0002_b", parents=("0001_a",)),
-            Migration(name="0003_c", parents=("0001_a",)),
-            Migration(name="0004_d", parents=("0003_c",)),
-        ],
-    )
-    manager = MigrationManager(cl)
-    path = manager.find_path("0001_a", "0004_d")
-    assert path == ["0001_a", "0003_c", "0004_d"]
+    path = manager.find_path(start, end)
+    assert path == expected
 
 
 # --- manager.print_list / manager.print_dag tests ---

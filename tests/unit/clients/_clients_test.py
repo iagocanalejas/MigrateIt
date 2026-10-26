@@ -13,13 +13,12 @@ from migrateit.models.changelog import Changelog
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.connection import get_connection
 from migrateit.models.migration import Migration, MigrationStatus
-from tests.unit.clients.conftest import _client_with_mocked_connection
+from tests.unit.clients.conftest import _client_with_mocked_connection, _drop_test_table
 from tests.unit.conftest import (
     INITIAL_MIGRATION,
     MIGRATION_NAME,
     TEST_MIGRATIONS_TABLE,
     _create_migration_file,
-    _drop_test_table,
 )
 
 # --- _q — identifier quoting ---
@@ -61,18 +60,6 @@ def test_get_connection(database: SupportedDatabase, driver: str) -> None:
 
 
 @pytest.mark.unit
-def test_get_connection_sqlite() -> None:
-    from migrateit.clients.sqlite import SqliteClient
-
-    # With SQLITE we can create a real connection
-    f = Path(SqliteClient.get_connection_params()["file_name"])
-    result = get_connection(SupportedDatabase.SQLITE)
-    assert isinstance(result, sqlite3.Connection)
-    result.close()
-    f.unlink()
-
-
-@pytest.mark.unit
 def test_get_connection_mysql_connection_string() -> None:
     with (
         patch("migrateit.models.connection.mysql.connector.connect") as mock_connect,
@@ -96,6 +83,18 @@ def test_get_connection_oracle_connection_string() -> None:
         result = get_connection(SupportedDatabase.ORACLE)
         assert result == mock_conn
         mock_connect.assert_called_once()
+
+
+@pytest.mark.unit
+def test_get_connection_sqlite() -> None:
+    from migrateit.clients.sqlite import SqliteClient
+
+    # With SQLITE we can create a real connection
+    f = Path(SqliteClient.get_connection_params()["file_name"])
+    result = get_connection(SupportedDatabase.SQLITE)
+    assert isinstance(result, sqlite3.Connection)
+    result.close()
+    f.unlink()
 
 
 @pytest.mark.unit
