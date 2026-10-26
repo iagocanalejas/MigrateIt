@@ -4,7 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from migrateit.cmd import _validate_editor, cmd_new
+from migrateit.cmd import cmd_new
+from migrateit.cmd.new import _validate_editor
 from migrateit.models.migration import Migration
 from migrateit.models.repository import ChangelogRepository
 
@@ -16,7 +17,7 @@ def test_cmd_new_with_editor(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
 
     with (
-        patch("migrateit.cmd.subprocess.run", return_value=MagicMock(returncode=0)) as mock_call,
+        patch("migrateit.cmd.new.subprocess.run", return_value=MagicMock(returncode=0)) as mock_call,
         patch.dict(os.environ, {"EDITOR": "vim"}, clear=False),
     ):
         result = cmd_new(mock_client, name="test_migration", no_edit=False)
@@ -32,7 +33,7 @@ def test_cmd_new_without_editor(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
 
     with (
-        patch("migrateit.cmd.subprocess.run", return_value=MagicMock(returncode=0)) as mock_call,
+        patch("migrateit.cmd.new.subprocess.run", return_value=MagicMock(returncode=0)) as mock_call,
         patch.dict(os.environ, {"EDITOR": "vim"}, clear=False),
     ):
         result = cmd_new(mock_client, name="test_migration", no_edit=True)
@@ -117,7 +118,7 @@ def test_cmd_new_interactive_selection(temp_dir: Path) -> None:
 
     prompt_result = {"dependencies": ["0000_migrateit.sql"]}
 
-    with patch("migrateit.cmd.inquirer.prompt", return_value=prompt_result) as mock_prompt:
+    with patch("migrateit.cmd.new.inquirer.prompt", return_value=prompt_result) as mock_prompt:
         cmd_new(client=mock_client, name="interactive_migration", interactive=True, no_edit=True)
 
         mock_prompt.assert_called_once()
@@ -135,7 +136,7 @@ def test_cmd_new_interactive_selection(temp_dir: Path) -> None:
 def test_cmd_new_interactive_cancelled(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
 
-    with patch("migrateit.cmd.inquirer.prompt", return_value=None) as mock_prompt:
+    with patch("migrateit.cmd.new.inquirer.prompt", return_value=None) as mock_prompt:
         result = cmd_new(client=mock_client, name="cancelled_migration", interactive=True, no_edit=True)
 
         assert result == 0

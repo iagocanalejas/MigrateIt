@@ -27,7 +27,7 @@ class MigrationManager:
         self,
         name: str,
         dependencies: tuple[str, ...] | None = None,
-        skip_changelog: bool = False,
+        isolated: bool = False,
     ) -> Migration:
         if not name.isidentifier():
             raise ValueError(f"Migration name '{name}' is not a valid identifier")
@@ -51,7 +51,7 @@ class MigrationManager:
             initial=is_initial,
             parents=() if is_initial else (dependencies or (self.migrations[-1].name,)),
         )
-        if not skip_changelog:
+        if not isolated:
             self.migrations.append(new_migration)
         write_line(f"\tMigration {new_migration.name} created successfully")
         if dependencies:

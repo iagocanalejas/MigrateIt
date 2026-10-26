@@ -219,9 +219,9 @@ def test_squash(database: SupportedDatabase, temp_dir: Path) -> None:
     new_changelog = ChangelogRepository.load()
 
     assert result.returncode == 0
-    assert "Squashing migration: 0002" in result.stdout
-    assert "Squashing migration: 0003" in result.stdout
-    assert "Squashing migration: 0004" in result.stdout
+    assert "Squashing migration: '0002" in result.stdout
+    assert "Squashing migration: '0003" in result.stdout
+    assert "Squashing migration: '0004" in result.stdout
     assert "removed 3 migration" in result.stdout
-    assert f"added {len(old_changelog.migrations):04d}_" in result.stdout
+    assert f"added '{len(old_changelog.migrations):04d}_" in result.stdout
     assert len(new_changelog.migrations) == len(old_changelog.migrations) - 2

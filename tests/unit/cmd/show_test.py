@@ -53,7 +53,7 @@ def test_cmd_show_validate_sql_success(temp_dir: Path) -> None:
 
     with (
         patch.object(client, "validate_sql_syntax", return_value=None),
-        patch("migrateit.cmd.write_line") as mock_write,
+        patch("migrateit.cmd.show.write_line") as mock_write,
     ):
         cmd_show(client, validate_sql=True)
         call_args = [c[0][0] for c in mock_write.call_args_list]
@@ -70,7 +70,7 @@ def test_cmd_show_validate_sql_failure(temp_dir: Path) -> None:
 
     with (
         patch.object(client, "validate_sql_syntax", return_value=[(Exception("syntax error"), "SELECT *;")]),
-        patch("migrateit.cmd.write_line") as mock_write,
+        patch("migrateit.cmd.show.write_line") as mock_write,
     ):
         cmd_show(client, validate_sql=True)
         call_args = [c[0][0] for c in mock_write.call_args_list]
@@ -85,7 +85,7 @@ def test_cmd_show_shows_pending_hint(temp_dir: Path) -> None:
     client.retrieve_migration_statuses.return_value = {"0001_init.sql": MigrationStatus.NOT_APPLIED}  # type: ignore
     client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=())]
 
-    with patch("migrateit.cmd.write_line") as mock_write:
+    with patch("migrateit.cmd.show.write_line") as mock_write:
         cmd_show(client)
         call_args = [c[0][0] for c in mock_write.call_args_list]
         hints = [c for c in call_args if "pending" in c.lower()]
@@ -114,7 +114,7 @@ def test_cmd_show_shows_hint(temp_dir: Path, statuses: dict[str, MigrationStatus
     client.retrieve_migration_statuses.return_value = statuses  # type: ignore
     client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=())]
 
-    with patch("migrateit.cmd.write_line") as mock_write:
+    with patch("migrateit.cmd.show.write_line") as mock_write:
         cmd_show(client)
         call_args = [c[0][0] for c in mock_write.call_args_list]
         hints = [c for c in call_args if search_term in c.lower()]
@@ -127,7 +127,7 @@ def test_cmd_show_no_hint_when_all_clean(temp_dir: Path) -> None:
     client.retrieve_migration_statuses.return_value = {"0001_init.sql": MigrationStatus.APPLIED}  # type: ignore
     client.changelog.migrations = [Migration(name="0001_init.sql", initial=True, parents=())]
 
-    with patch("migrateit.cmd.write_line") as mock_write:
+    with patch("migrateit.cmd.show.write_line") as mock_write:
         cmd_show(client)
         call_args = [c[0][0] for c in mock_write.call_args_list]
         hints = [c for c in call_args if "pending" in c.lower() or "conflicts" in c.lower() or "missing" in c.lower()]
