@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from migrateit import constants as C
 from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import (

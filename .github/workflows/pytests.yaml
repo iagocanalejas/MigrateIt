@@ -54,13 +54,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - python-version: "3.13"
-            postgres-version: "17"
+          - postgres-version: "17"
             mysql-version: "8"
             mariadb-version: "12"
             oracle-version: "23-slim-faststart"
-          - python-version: "3.14"
-            postgres-version: "18"
+          - postgres-version: "18"
             mysql-version: "26"
             mariadb-version: "12"
             oracle-version: "23-slim-faststart"
@@ -122,10 +120,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.x"
           cache: "pip"
 
       - name: Install requirements
@@ -157,8 +154,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - python-version: "3.14"
-            postgres-version: "18"
+          - postgres-version: "18"
             mysql-version: "26"
             mariadb-version: "12"
             oracle-version: "23-slim-faststart"
@@ -220,10 +216,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.x"
           cache: "pip"
 
       - name: Install requirements

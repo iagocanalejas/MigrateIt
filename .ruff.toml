@@ -24,7 +24,7 @@ exclude = [
     "__init__.py",
 ]
 
-target-version = "py313"
+target-version = "py314"
 src = ["migrateit", "tests"]
 line-length = 120
 
