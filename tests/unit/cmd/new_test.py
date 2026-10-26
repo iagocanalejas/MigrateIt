@@ -175,3 +175,23 @@ def test_cmd_new_no_migrations_table(temp_dir: Path) -> None:
     mock_client = _mock_client(temp_dir)
     mock_client.is_migrations_table_created.return_value = False  # type: ignore
     assert cmd_new(mock_client, name="test") != 0
+
+
+@pytest.mark.unit
+def test_cmd_new_editor_file_not_found(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+
+    with patch("migrateit.cmd.new.subprocess.run", side_effect=FileNotFoundError("no editor")):
+        result = cmd_new(client=mock_client, name="test_migration", no_edit=False)
+
+    assert result == 1
+
+
+@pytest.mark.unit
+def test_cmd_new_editor_nonzero_returncode(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+
+    with patch("migrateit.cmd.new.subprocess.run", return_value=MagicMock(returncode=1)):
+        result = cmd_new(client=mock_client, name="test_migration", no_edit=False)
+
+    assert result == 1

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from migrateit.clients.mysql import MySqlClient, _process_routines
+from migrateit.clients.mysql import MySqlClient, _process_pk_unique, _process_routines
 from migrateit.models.changelog import Changelog
 from migrateit.models.config import MigrateItConfig
 
@@ -56,3 +56,12 @@ def test_process_routines_valid_procedure() -> None:
     fwd, rb = _process_routines(client, rows)
     assert len(fwd) == 1
     assert len(rb) == 1
+
+
+@pytest.mark.unit
+def test_process_pk_unique_unknown_constraint_type() -> None:
+    client = _make_mock_client()
+    # Pass a row with an unsupported constraint type (not "PRIMARY KEY" or "UNIQUE")
+    rows: list[tuple[str, ...]] = [("mydb", "mytable", "mycon", "CHECK", "id > 0")]
+    with pytest.raises(ValueError, match="Unsupported constraint type"):
+        _process_pk_unique(client, rows)

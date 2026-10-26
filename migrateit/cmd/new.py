@@ -75,10 +75,10 @@ def cmd_new(
     cmd = shlex.split(editor) + [str(migration.path)]
     try:
         rc = subprocess.run(cmd, timeout=30).returncode
-    except FileNotFoundError:  # pragma: no cover
+    except FileNotFoundError:
         editor_name = shlex.split(editor)[0] if editor else "unknown"
         write_line_error(f"Could not find editor executable '{editor_name}'.")
         return 1
-    if rc != 0:  # pragma: no cover
+    if rc != 0:
         write_line_error(f"Editor exited with code {rc}.")
     return rc
