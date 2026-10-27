@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -35,5 +36,12 @@ def test_cmd_init_already_initialized(database: SupportedDatabase, temp_dir: Pat
 
 
 @pytest.mark.unit
-def test_get_init_migration_sql_unsupported() -> None:
+def test_cmd_init_unsupported_database() -> None:
     assert cmd_init("fake") != 0  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("database", list(SupportedDatabase), ids=lambda db: db.value)
+def test_cmd_init_fails_to_write_into_migration_file(database: SupportedDatabase) -> None:
+    with patch("migrateit.cmd.init.write_into_migration_file", return_value=False):
+        assert cmd_init(database) != 0

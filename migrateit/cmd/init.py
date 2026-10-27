@@ -28,7 +28,10 @@ def cmd_init(database: SupportedDatabase) -> int:
     migration = MigrationManager(changelog).create_new_migration(name="migrateit")
 
     sql, rollback = migrations
-    write_into_migration_file(migration.path, sql=sql, rollback=rollback)
+    updated = write_into_migration_file(migration.path, sql=sql, rollback=rollback)
+    if not updated:
+        write_line_error("No SQL content to write into the migration file.")
+        return 1
 
     ChangelogRepository.save(changelog)
     write_line("Initialization complete:")

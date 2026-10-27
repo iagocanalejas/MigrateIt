@@ -61,7 +61,9 @@ def cmd_squash(
         logger.debug("Merging %s into %s", migration.name, squashed_migration.name)
         write_line(f"Squashing migration: '{migration.name}'.")
         sql, rollback = retrieve_migration_sqls(migration.path)
-        write_into_migration_file(squashed_migration.path, sql=sql, rollback=rollback)
+        updated = write_into_migration_file(squashed_migration.path, sql=sql, rollback=rollback)
+        if not updated:
+            write_line_error(f"No SQL content to write into the migration file for '{migration.name}'.")
 
         new_migration = migration.rename_squashed()
         write_line(f"Renaming migration '{migration.name}' to '{new_migration.name}'.")

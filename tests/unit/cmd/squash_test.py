@@ -60,6 +60,22 @@ def test_cmd_squash_not_all_applied(client: SqlClient[Any]) -> None:
     assert "0002_second" not in changelog_names
 
 
+def test_cmd_squash_fails_with_empty_migration(client: SqlClient[Any]) -> None:
+    cmd_new(client, name="first", no_edit=True)
+    _create_migration_file("0001_first.sql")
+
+    cmd_new(client, name="second", no_edit=True)
+    _create_migration_file("0002_second.sql", sql="", rollback_sql="")
+
+    result = cmd_squash(client, start_migration_name="0001", end_migration_name="0002", name="squashed_0001_0002")
+    assert result == 0
+
+    changelog_names = [m.name for m in client.changelog.migrations]
+    assert "0003_squashed_0001_0002.sql" in changelog_names
+    assert "0001_first" not in changelog_names
+    assert "0002_second" not in changelog_names
+
+
 def test_cmd_squash_no_end_too_few_migrations(client: SqlClient[Any]) -> None:
     assert cmd_squash(client, start_migration_name="0000_migrateit.sql") != 0
 

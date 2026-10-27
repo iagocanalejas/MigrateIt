@@ -95,17 +95,19 @@ def get_migration_header(full_path: Path) -> str:
     return f"-- Migration {full_path.name}\n-- Created on {datetime.now().isoformat()}\n\n\n"
 
 
-def write_into_migration_file(migration_file: Path, sql: str | None, rollback: str | None) -> None:
+def write_into_migration_file(migration_file: Path, sql: str | None, rollback: str | None) -> bool:
     """
     Write SQL and rollback SQL into a migration file.
     Args:
         migration_file: The path to the migration file.
         sql: The SQL to write into the migration file.
         rollback: The rollback SQL to write into the migration file.
+    Returns:
+        True if the migration file was updated, False otherwise.
     """
     if (sql is None or not sql.strip()) and (rollback is None or not rollback.strip()):
         # NOTE: empty migrations can be skipped
-        return
+        return False
 
     migration_content = migration_file.read_text(encoding="utf-8")
     if C.ROLLBACK_SPLIT_TAG not in migration_content:
@@ -127,6 +129,7 @@ def write_into_migration_file(migration_file: Path, sql: str | None, rollback: s
     if not migration_file.exists():
         raise FileNotFoundError(f"{migration_file=} does not exist. Removed while processing.")
     migration_file.write_text(new_content, encoding="utf-8")
+    return True
 
 
 def retrieve_migration_sqls(migration_file: Path) -> tuple[str | None, str | None]:
