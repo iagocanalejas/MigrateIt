@@ -5,11 +5,7 @@ import pytest
 
 from migrateit.clients._client import SqlClient
 from migrateit.models.migration import Migration, MigrationStatus
-from tests.unit.clients.conftest import (
-    _drop_test_table,
-    _migration_is_applied,
-    _table_exists,
-)
+from tests.unit.clients.conftest import _migration_is_applied, _table_exists
 from tests.unit.conftest import (
     INITIAL_MIGRATION,
     MIGRATION_NAME,
@@ -31,8 +27,6 @@ def test_apply_migration_success(client: SqlClient[Any]) -> None:
     assert statuses[MIGRATION_NAME] == MigrationStatus.APPLIED
     assert _migration_is_applied(client, MIGRATION_NAME)
     assert _table_exists(client, TEST_TABLE)
-
-    _drop_test_table(client, TEST_TABLE)
 
 
 def test_apply_migration_fake(client: SqlClient[Any]) -> None:

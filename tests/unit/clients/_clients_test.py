@@ -13,7 +13,7 @@ from migrateit.models.changelog import Changelog
 from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.connection import get_connection
 from migrateit.models.migration import Migration, MigrationStatus
-from tests.unit.clients.conftest import _client_with_mocked_connection, _drop_test_table
+from tests.unit.clients.conftest import _client_with_mocked_connection
 from tests.unit.conftest import (
     INITIAL_MIGRATION,
     MIGRATION_NAME,
@@ -205,7 +205,27 @@ def test_table_exists_returns_true(client: SqlClient[Any]) -> None:
 
 def test_table_missing_returns_false(client: SqlClient[Any]) -> None:
     # drop the table first as is being created in pytest fixtures
-    _drop_test_table(client, TEST_MIGRATIONS_TABLE)
+    table_name = client._q(TEST_MIGRATIONS_TABLE)
+    match client.database:
+        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
+            with client.connection.cursor() as cursor:
+                cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+        case SupportedDatabase.ORACLE:
+            import oracledb
+
+            with client.connection.cursor() as cursor:
+                try:
+                    cursor.execute(f"DROP TABLE {table_name} CASCADE CONSTRAINTS PURGE")
+                except oracledb.DatabaseError as e:  # pragma: no cover[safety]
+                    (error,) = e.args
+                    if error.code != 942:
+                        raise
+                cursor.execute("PURGE RECYCLEBIN")
+        case SupportedDatabase.SQLITE:
+            client.connection.execute(f"DROP TABLE IF EXISTS {table_name}")
+        case _:  # pragma: no cover
+            raise NotImplementedError
+    client.connection.commit()
     assert not client.is_migrations_table_created()
 
 
@@ -282,7 +302,11 @@ def test_retrieve_migration_statuses_removed(temp_dir: Path) -> None:
 def test_update_migration_hash(client: SqlClient[Any]) -> None:
     _create_migration_file(MIGRATION_NAME)
     migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
-    client.config.changelog = Changelog(version=1, migrations=[Migration(name=INITIAL_MIGRATION), migration])
+    client.config.changelog = Changelog(
+        version=1,
+        database=client.database,
+        migrations=[Migration(name=INITIAL_MIGRATION), migration],
+    )
 
     client.apply_migration(migration, is_fake=False)
 

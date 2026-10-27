@@ -88,30 +88,6 @@ def _table_exists(client: SqlClient[Any], table_name: str) -> bool:
             raise NotImplementedError
 
 
-def _drop_test_table(client: SqlClient[Any], table_name: str) -> None:
-    table_name = client._q(table_name)
-    match client.database:
-        case SupportedDatabase.POSTGRES | SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
-            with client.connection.cursor() as cursor:
-                cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
-        case SupportedDatabase.ORACLE:
-            import oracledb
-
-            with client.connection.cursor() as cursor:
-                try:
-                    cursor.execute(f"DROP TABLE {table_name} CASCADE CONSTRAINTS PURGE")
-                except oracledb.DatabaseError as e:  # pragma: no cover[safety]
-                    (error,) = e.args
-                    if error.code != 942:
-                        raise
-                cursor.execute("PURGE RECYCLEBIN")
-        case SupportedDatabase.SQLITE:
-            client.connection.execute(f"DROP TABLE IF EXISTS {table_name}")
-        case _:  # pragma: no cover
-            raise NotImplementedError
-    client.connection.commit()
-
-
 def _client_with_mocked_connection(temp_dir: Path) -> SqlClient[Any]:
     changelog = ChangelogRepository.create(database=SupportedDatabase.POSTGRES)
     changelog.migrations.append(Migration(name=INITIAL_MIGRATION, initial=True, parents=()))

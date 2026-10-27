@@ -190,7 +190,7 @@ def test_validate_migrations_success(client: SqlClient[Any]) -> None:
         Migration(name=INITIAL_MIGRATION, initial=True, parents=()),
         Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,)),
     ]
-    client.config.changelog = Changelog(version=1, migrations=migrations)
+    client.config.changelog = Changelog(version=1, database=client.database, migrations=migrations)
     status_map = {
         INITIAL_MIGRATION: MigrationStatus.APPLIED,
         MIGRATION_NAME: MigrationStatus.APPLIED,
@@ -199,7 +199,7 @@ def test_validate_migrations_success(client: SqlClient[Any]) -> None:
 
 
 def test_validate_empty_migrations(client: SqlClient[Any]) -> None:
-    client.config.changelog = Changelog(version=1, migrations=[])
+    client.config.changelog = Changelog(version=1, database=client.database, migrations=[])
     statuses: dict[str, MigrationStatus] = {}
     client.validate_migrations(statuses)
 
@@ -209,7 +209,7 @@ def test_validate_multiple_initial_raises(client: SqlClient[Any]) -> None:
         Migration(name="0000_a.sql", initial=True, parents=()),
         Migration(name="0001_b.sql", initial=True, parents=()),
     ]
-    client.config.changelog = Changelog(version=1, migrations=migrations)
+    client.config.changelog = Changelog(version=1, database=client.database, migrations=migrations)
     statuses: dict[str, MigrationStatus] = {}
     with pytest.raises(ValueError, match="Multiple initial migrations found"):
         client.validate_migrations(statuses)
@@ -217,7 +217,7 @@ def test_validate_multiple_initial_raises(client: SqlClient[Any]) -> None:
 
 def test_validate_removed_raises(client: SqlClient[Any]) -> None:
     migrations = [Migration(name="0000_init.sql", initial=True, parents=())]
-    client.config.changelog = Changelog(version=1, migrations=migrations)
+    client.config.changelog = Changelog(version=1, database=client.database, migrations=migrations)
     statuses = {"0000_init.sql": MigrationStatus.APPLIED, "ghost.sql": MigrationStatus.REMOVED}
     with pytest.raises(ValueError, match="Removed migrations found"):
         client.validate_migrations(statuses)
@@ -228,7 +228,7 @@ def test_validate_parent_not_applied(client: SqlClient[Any]) -> None:
         Migration(name="0000_init.sql", initial=True, parents=()),
         Migration(name="0001_child.sql", parents=("0000_init.sql",)),
     ]
-    client.config.changelog = Changelog(version=1, migrations=migrations)
+    client.config.changelog = Changelog(version=1, database=client.database, migrations=migrations)
     statuses = {
         "0000_init.sql": MigrationStatus.NOT_APPLIED,
         "0001_child.sql": MigrationStatus.APPLIED,
@@ -298,6 +298,7 @@ def test_build_error_message_source_not_in_lines(temp_dir: Path) -> None:
 def test_show_migrations_order_error(client: SqlClient[Any]) -> None:
     changelog = Changelog(
         version=1,
+        database=client.database,
         migrations=[
             Migration(name="0000_migrateit.sql", initial=True, parents=()),
             Migration(name="0001_first.sql", parents=("0000_migrateit.sql",)),
