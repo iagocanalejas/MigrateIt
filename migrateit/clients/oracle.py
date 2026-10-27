@@ -90,7 +90,7 @@ DROP SEQUENCE {seq_name};
         query = """
 SELECT COUNT(*)
 FROM user_tables
-WHERE UPPER(table_name) = UPPER(:1)
+WHERE UPPER(table_name) = UPPER(:param)
 """
         result = self.execute_for_one(query, (self.table_name,))
         return result is not None and result[0] == 1
@@ -218,12 +218,9 @@ ORDER BY Trigger_Name;
 
     @staticmethod
     def _format_params(query: str, params: tuple[Any, ...]) -> tuple[str, dict[str, Any]]:
-        query = query.strip()
-        if query.endswith(";"):
-            query = query[:-1]
+        formatted = query.rstrip(";")
         if not params:
-            return query, {}
-        formatted = query
+            return formatted, {}
         for i, _ in enumerate(params, start=1):
             formatted = formatted.replace(":param", f":{i}", 1)
         return formatted, {str(i): v for i, v in enumerate(params, start=1)}

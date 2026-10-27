@@ -272,6 +272,7 @@ def _process_constraints(client: PsqlClient, rows: list[tuple[str, ...]]) -> tup
         fwd.append(
             f"ALTER TABLE ONLY {client._q(schema)}.{client._q(table)} ADD CONSTRAINT {client._q(conname)} {condef};"
         )
+    # NOTE: Postgres automatically drops constraints when the table is dropped.
     return fwd, []
 
 
@@ -281,6 +282,7 @@ def _process_indexes(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[l
         if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
         fwd.append(f"{indexdef};")
+    # NOTE: Postgres automatically drops indexes when the table is dropped.
     return fwd, []
 
 
@@ -290,4 +292,5 @@ def _process_triggers(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[
         if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in table.lower():
             continue
         fwd.append(f"{tgdef};")
+    # NOTE: Postgres automatically drops triggers when the table is dropped.
     return fwd, []

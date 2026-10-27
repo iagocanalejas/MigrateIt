@@ -2,7 +2,7 @@ import pytest
 from sqlfluff.core import Linter, SQLParseError
 
 from migrateit.models.config import SupportedDatabase
-from migrateit.models.sql import patch_sql_statement, sql_to_statements
+from migrateit.models.sql import ensure_semicolon, patch_sql_statement, sql_to_statements
 
 
 @pytest.mark.unit
@@ -153,3 +153,17 @@ def test_sql_to_statements(sql_input: str, expected_output: list[str], errors: l
     for idx, e in enumerate(errors):
         assert isinstance(e, SQLParseError)
         assert str(e) == str(err[idx])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "input_sql, expected_output",
+    [
+        ("SELECT 1;", "SELECT 1;"),
+        ("SELECT 1", "SELECT 1;"),
+        ("", ";"),
+        ("-- This is a comment", "-- This is a comment;"),
+    ],
+)
+def test_ensure_semicolon(input_sql: str, expected_output: str) -> None:
+    assert ensure_semicolon(input_sql) == expected_output

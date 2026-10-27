@@ -1,11 +1,12 @@
 import os
-import re
 from functools import partial
 from typing import TYPE_CHECKING, Any, override
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.clients._protocol import ExportItem
+from migrateit.models.config import SupportedDatabase
+from migrateit.models.sql import ensure_semicolon, patch_sql_statement
 
 if TYPE_CHECKING:
     import sqlite3  # noqa: F401
@@ -124,22 +125,13 @@ ORDER BY name;
 # ---------------------------------------------------------------------------
 
 
-def _ensure_if_not_exists(sql: str, prefix: str) -> str:
-    if prefix not in sql.upper():
-        return re.sub(rf"(?i){re.escape(prefix)}", prefix + "IF NOT EXISTS ", sql, count=1)
-    return sql
-
-
 def _process_tables(client: SqliteClient, rows: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
     fwd, rb = [], []
     for name, sql in rows:
         if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in name.lower():
             continue
 
-        sql_str = sql.strip()
-        if not sql_str.endswith(";"):  # pragma: no cover[safety]
-            sql_str += ";"
-        fwd.append(_ensure_if_not_exists(sql_str, "CREATE TABLE "))
+        fwd.append(patch_sql_statement(SupportedDatabase.SQLITE, ensure_semicolon(sql.strip())))
         rb.append(f"DROP TABLE IF EXISTS {client._q(name)};")
     return fwd, list(reversed(rb))
 
@@ -147,10 +139,7 @@ def _process_tables(client: SqliteClient, rows: list[tuple[str, str]]) -> tuple[
 def _process_views(client: SqliteClient, rows: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
     fwd, rb = [], []
     for name, sql in rows:
-        sql_str = sql.strip()
-        if not sql_str.endswith(";"):  # pragma: no cover[safety]
-            sql_str += ";"
-        fwd.append(_ensure_if_not_exists(sql_str, "CREATE VIEW "))
+        fwd.append(patch_sql_statement(SupportedDatabase.SQLITE, ensure_semicolon(sql.strip())))
         rb.append(f"DROP VIEW IF EXISTS {client._q(name)};")
     return fwd, rb
 
@@ -161,14 +150,8 @@ def _process_indexes(client: SqliteClient, rows: list[tuple[str, str, str]]) -> 
         if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in tbl_name.lower():
             continue
 
-        sql_str = sql.strip()
-        if not sql_str.endswith(";"):  # pragma: no cover[safety]
-            sql_str += ";"
-
-        sql_str = _ensure_if_not_exists(sql_str, "CREATE UNIQUE INDEX ")
-        sql_str = _ensure_if_not_exists(sql_str, "CREATE INDEX ")
-        fwd.append(sql_str)
-    # Rollback omitted: SQLite automatically drops indexes when the table is dropped.
+        fwd.append(patch_sql_statement(SupportedDatabase.SQLITE, ensure_semicolon(sql.strip())))
+    # NOTE: SQLite automatically drops indexes when the table is dropped.
     return fwd, []
 
 
@@ -178,10 +161,6 @@ def _process_triggers(client: SqliteClient, rows: list[tuple[str, str, str]]) ->
         if C.MIGRATEIT_MIGRATIONS_TABLE.lower() in tbl_name.lower():
             continue
 
-        sql_str = sql.strip()
-        if not sql_str.endswith(";"):  # pragma: no cover[safety]
-            sql_str += ";"
-
-        fwd.append(_ensure_if_not_exists(sql_str, "CREATE TRIGGER "))
-    # Rollback omitted: SQLite automatically drops triggers when the table is dropped.
+        fwd.append(patch_sql_statement(SupportedDatabase.SQLITE, ensure_semicolon(sql.strip())))
+    # NOTE: SQLite automatically drops triggers when the table is dropped.
     return fwd, []

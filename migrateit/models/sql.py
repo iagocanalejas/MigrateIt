@@ -13,6 +13,12 @@ def remove_sql_comments(sql: str) -> str:
     return "".join(segment.raw for segment in parsed.tree.raw_segments if not segment.is_type("comment")).strip()
 
 
+def ensure_semicolon(sql: str) -> str:
+    if not sql.endswith(";"):
+        sql += ";"
+    return sql
+
+
 def sql_to_statements(linter: Linter, sql: str) -> tuple[list[str], list[SQLBaseError]]:
     parsed = linter.parse_string(sql)
 

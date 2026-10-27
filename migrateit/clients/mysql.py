@@ -311,6 +311,7 @@ def _process_pk_unique(client: MySqlClient, rows: list[tuple[str, ...]]) -> tupl
             )
         else:  # pragma: no cover[safety]
             raise ValueError(f"Unsupported constraint type: {contype}")
+    # NOTE: MYSQL automatically drops constraints when the table is dropped.
     return fwd, []
 
 
@@ -332,6 +333,7 @@ def _process_foreign_keys(client: MySqlClient, rows: list[tuple[str, ...]]) -> t
             f"FOREIGN KEY ({fk_cols}) REFERENCES {client._q(ref_schema)}.{client._q(ref_table)} ({ref_cols_str}) "
             f"ON UPDATE {up_rule} ON DELETE {del_rule};"
         )
+    # NOTE: MYSQL automatically drops constraints when the table is dropped.
     return fwd, []
 
 
@@ -347,6 +349,7 @@ def _process_check_constraints(client: MySqlClient, rows: list[tuple[str, ...]])
             f"ALTER TABLE {client._q(schema)}.{client._q(table)} "
             f"ADD CONSTRAINT {client._q(conname)} CHECK ({check_clause});"
         )
+    # NOTE: MYSQL automatically drops constraints when the table is dropped.
     return fwd, []
 
 
@@ -366,6 +369,7 @@ def _process_indexes(client: MySqlClient, rows: list[tuple[str, ...]]) -> tuple[
         fwd.append(
             f"CREATE {unique_kw}INDEX {client._q(indexname)} ON {client._q(schema)}.{client._q(table)} ({idx_cols});"
         )
+    # NOTE: MYSQL automatically drops indexes when the table is dropped.
     return fwd, []
 
 

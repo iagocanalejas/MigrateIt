@@ -267,6 +267,7 @@ WHERE migration_name = {self.placeholder};
             # NOTE: this is a no-op for initial migrations because the table is already removed.
             return
 
+        args: tuple[str, ...]
         if is_rollback and not migration.initial:
             query, args = (
                 f"""
