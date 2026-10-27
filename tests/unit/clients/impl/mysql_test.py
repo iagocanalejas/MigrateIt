@@ -4,12 +4,12 @@ import pytest
 
 from migrateit.clients.mysql import MySqlClient, _process_pk_unique, _process_routines
 from migrateit.models.changelog import Changelog
-from migrateit.models.config import MigrateItConfig
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
 
 
 def _make_mock_client() -> MySqlClient:
     mock_conn: MagicMock = MagicMock()
-    changelog = Changelog(version=1, migrations=[])
+    changelog = Changelog(version=1, database=SupportedDatabase.MARIADB, migrations=[])
     config = MigrateItConfig(changelog=changelog)
     return MySqlClient(mock_conn, config)
 

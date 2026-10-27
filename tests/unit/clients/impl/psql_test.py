@@ -4,12 +4,12 @@ import pytest
 
 from migrateit.clients.psql import PsqlClient, _process_functions
 from migrateit.models.changelog import Changelog
-from migrateit.models.config import MigrateItConfig
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
 
 
 def _make_mock_client() -> PsqlClient:
     mock_conn: MagicMock = MagicMock()
-    changelog = Changelog(version=1, migrations=[])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[])
     config = MigrateItConfig(changelog=changelog)
     return PsqlClient(mock_conn, config)
 

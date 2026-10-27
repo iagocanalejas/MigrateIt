@@ -1,4 +1,5 @@
 import os
+import re
 from collections import defaultdict
 from functools import partial
 from typing import TYPE_CHECKING, Any, override
@@ -10,7 +11,12 @@ from migrateit.clients._protocol import ExportItem
 if TYPE_CHECKING:
     import oracledb  # noqa: F401
 
-_PLSQL_KEYWORDS = {"CREATE TRIGGER", "CREATE PROCEDURE", "CREATE FUNCTION", "BEGIN", "DECLARE"}
+
+_PLSQL_PATTERN = re.compile(
+    r"\b(CREATE\s+(OR\s+REPLACE\s+)?(TRIGGER|PROCEDURE|FUNCTION))\b|"
+    r"\b(BEGIN|DECLARE)\b",
+    re.IGNORECASE,
+)
 
 
 class OracleClient(SqlClient["oracledb.Connection"]):
@@ -62,9 +68,7 @@ DROP SEQUENCE {seq_name};
 
     @override
     def execute(self, query: str, params: tuple[Any, ...] = ()) -> None:
-        upper_query = query.strip().upper()
-        is_plsql_or_trigger = any(k in upper_query for k in _PLSQL_KEYWORDS)
-        if is_plsql_or_trigger:  # pragma: no cover
+        if _PLSQL_PATTERN.search(query):
             raise NotImplementedError("PL/SQL or trigger execution is not supported yet.")
 
         formatted_query, bound_params = self._format_params(query, params)
