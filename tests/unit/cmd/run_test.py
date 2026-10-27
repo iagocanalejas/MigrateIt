@@ -192,8 +192,7 @@ def test_cmd_run_rollbacks_on_error(client: SqlClient[Any]) -> None:
     client.connection = spy_connection
 
     with patch("migrateit.cmd.run.DatabaseLock._build_locker", return_value=_DummyLocker(client, client.table_name)):
-        with pytest.raises(Exception):
-            cmd_run(client, name="0001")
+        cmd_run(client, name="0001")
         spy_connection.rollback.assert_called_once()
 
 

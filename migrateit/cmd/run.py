@@ -25,7 +25,7 @@ def cmd_run(
         if is_fake:
             write_line_error("Cannot run `--update-hash` with `--fake`.")
         if is_rollback:
-            write_line_error("Cannot run `migrateit rollback` with `--hash-update`.")
+            write_line_error("Cannot run `migrateit rollback` with `--update-hash`.")
         return 1
 
     if is_hash_update:
@@ -64,12 +64,13 @@ def cmd_run(
                 write_line(f"\t{action.lower().capitalize()} migration: '{migration.name}'")
                 client.apply_migration(migration, is_fake=is_fake, is_rollback=is_rollback)
             client.connection.commit()
-        except Exception:
+        except Exception as e:
             try:
                 client.connection.rollback()
             except Exception:  # pragma: no cover
                 pass
-            raise
+            write_line_error(f"{e}")
+            return 1
 
     direction = "Rollback" if is_rollback else "Migration"
     action = "rolled back" if is_rollback else "applied"
