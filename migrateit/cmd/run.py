@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import inquirer
@@ -15,17 +16,20 @@ from migrateit.reporters.output import write_line_error
 def cmd_run(
     client: SqlClient[Any],
     name: str | None = None,
-    is_fake: bool = False,
     is_rollback: bool = False,
+    is_forced: bool = False,
+    is_fake: bool = False,
     is_hash_update: bool = False,
     is_plan_only: bool = False,
     interactive: bool = False,
 ) -> int:
-    if (is_fake or is_rollback) and is_hash_update:
+    if (is_fake or is_rollback or is_forced) and is_hash_update:
         if is_fake:
             write_line_error("Cannot run `--update-hash` with `--fake`.")
         if is_rollback:
             write_line_error("Cannot run `migrateit rollback` with `--update-hash`.")
+        if is_forced:
+            write_line_error("Cannot run `--update-hash` and `--force`.")
         return 1
 
     if is_hash_update:
@@ -35,8 +39,22 @@ def cmd_run(
         write_line_error("`migrateit rollback` requires a target migration name.")
         return 1
 
+    if is_forced and interactive:
+        write_line_error("`--forze` and `--interactive` cannot be used together.")
+        return 1
+
+    if is_forced and not name:
+        write_line_error("`--forze` requires a target migration.")
+        return 1
+
     try:
-        migration_plan = _build_migration_plan(client, name, is_rollback=is_rollback, interactive=interactive)
+        migration_plan = _build_migration_plan(
+            client,
+            name,
+            is_rollback=is_rollback,
+            is_forced=is_forced,
+            interactive=interactive,
+        )
     except KeyboardInterrupt:  # pragma: no cover
         write_line_error("Aborted by user.")
         return 1
@@ -62,7 +80,12 @@ def cmd_run(
         try:
             for migration in migration_plan:
                 write_line(f"\t{action.lower().capitalize()} migration: '{migration.name}'")
-                client.apply_migration(migration, is_fake=is_fake, is_rollback=is_rollback)
+                client.apply_migration(
+                    migration,
+                    is_rollback=is_rollback,
+                    is_forced=is_forced,
+                    is_fake=is_fake,
+                )
             client.connection.commit()
         except Exception as e:
             try:
@@ -119,8 +142,13 @@ def _build_migration_plan(
     client: SqlClient[Any],
     name: str | None,
     is_rollback: bool = False,
+    is_forced: bool = False,
     interactive: bool = False,
 ) -> list[Migration]:
+    if is_forced:
+        assert name is not None, "Forced migration requires a name."  # NOTE: checked in `cmd_run()`
+        return [Migration(name=Path(name).with_suffix(".sql").name)]
+
     statuses = client.retrieve_migration_statuses()
     client.validate_migrations(statuses)
 

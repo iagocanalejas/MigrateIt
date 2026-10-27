@@ -191,11 +191,12 @@ positional arguments:
   name           Name of the migration to run
 
 options:
-  -h, --help           show this help message and exit
-  -i, --interactive    Allow to interactively select the migration to apply.
-  --fake               Fakes the migration marking it as ran.
-  --plan-only          Dry run the migration without applying it.
-  --update-hash        Update the hash of the migration.
+  -h, --help         show this help message and exit
+  -i, --interactive  Allow to interactively select the migration to apply.
+  -f, --force        Forces the migration to run even if it's not in the changelog or if it's already applied.
+  --fake             Fakes the migration marking it as ran.
+  --plan-only        Dry run the migration without applying it.
+  --update-hash      Update the hash of the migration.
 ```
 
 ```sh
@@ -224,11 +225,12 @@ positional arguments:
   name          Name of the migration to rollback
 
 options:
-  -h, --help           show this help message and exit
-  -0, --zero           Reverse all the applied migrations, even the 'migrateit' one.
-  -i, --interactive    Allow to interactively select the migration to rollback.
-  --fake               Fakes the rollback marking it as undone.
-  --plan-only          Dry run the migration without applying it.
+  -h, --help         show this help message and exit
+  -0, --zero         Reverse all the applied migrations, even the 'migrateit' one.
+  -i, --interactive  Allow to interactively select the migration to rollback.
+  -f, --force        Force the rollback to run even if it's not in the changelog or if it's already rolled back.
+  --fake             Fakes the migration marking it as ran.
+  --plan-only        Dry run the migration without applying it.
 ```
 
 ```sh

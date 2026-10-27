@@ -72,13 +72,20 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def apply_migration(self, migration: Migration, is_rollback: bool = False, is_fake: bool = False) -> None:
+    def apply_migration(
+        self,
+        migration: Migration,
+        is_rollback: bool = False,
+        is_forced: bool = False,
+        is_fake: bool = False,
+    ) -> None:
         """
         Apply a migration to the database.
 
         Args:
             migration: The migration object to apply.
             is_rollback: If True, apply the reverse of the migration.
+            is_forced: If True, apply the migration even if it has already been applied.
             is_fake: If True, apply the migration without executing it.
         """
         ...
@@ -136,7 +143,7 @@ class SqlClientProtocol(Protocol):
         ...
 
     def _get_database_hash(self, migration_name: str) -> str: ...
-    def _update_migration_changelog(self, migration: Migration, is_rollback: bool) -> None: ...
+    def _update_migration_changelog(self, migration: Migration, is_rollback: bool, is_forced: bool) -> None: ...
 
 
 class SqlConnectionProtocol(Protocol):

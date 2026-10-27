@@ -112,12 +112,19 @@ FROM {self._q(self.table_name)};
         return migrations
 
     @override
-    def apply_migration(self, migration: Migration, is_rollback: bool = False, is_fake: bool = False) -> None:
-        is_applied = self.is_migration_applied(migration) if not migration.initial else False
-        if not migration.initial and is_applied != is_rollback:
-            if is_rollback:
-                raise ValueError(f"Migration '{migration.name}' is not applied, cannot undo it")
-            raise ValueError(f"Migration '{migration.name}' is already applied, cannot apply it again")
+    def apply_migration(
+        self,
+        migration: Migration,
+        is_rollback: bool = False,
+        is_forced: bool = False,
+        is_fake: bool = False,
+    ) -> None:
+        if not is_forced:
+            is_applied = self.is_migration_applied(migration) if not migration.initial else False
+            if not migration.initial and is_applied != is_rollback:
+                if is_rollback:
+                    raise ValueError(f"Migration '{migration.name}' is not applied, cannot undo it.")
+                raise ValueError(f"Migration '{migration.name}' is already applied, cannot apply it again.")
 
         migration_code, reverse_migration_code = migration.content
         code = migration_code if not is_rollback else reverse_migration_code
@@ -131,7 +138,7 @@ FROM {self._q(self.table_name)};
             assert len(statements) > 0, "No statements found in migration code"
             for stmt in statements:
                 self.execute(patch_sql_statement(self.database, stmt))
-        self._update_migration_changelog(migration, is_rollback)
+        self._update_migration_changelog(migration, is_rollback, is_forced=is_forced)
 
     @override
     def squash_migrations(self, migrations: list[str], new_migration: Migration) -> None:
@@ -244,7 +251,7 @@ WHERE migration_name = {self.placeholder};
         return result[0]
 
     @override
-    def _update_migration_changelog(self, migration: Migration, is_rollback: bool) -> None:
+    def _update_migration_changelog(self, migration: Migration, is_rollback: bool, is_forced: bool) -> None:
         if migration.initial and is_rollback:
             # NOTE: this is a no-op for initial migrations because the table is already removed.
             return
@@ -261,7 +268,24 @@ WHERE migration_name = {self.placeholder}
 INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
 VALUES ({self.placeholder}, {self.placeholder});
 """
-        self.execute(query, (migration.path.name, migration.hash))
+
+        _SAVEPOINT = "changelog_savepoint"
+        try:
+            self.execute(f"SAVEPOINT {_SAVEPOINT};")
+            self.execute(query, (migration.path.name, migration.hash))
+        except Exception:
+            if not is_forced:
+                raise
+            fallback_query = f"""
+UPDATE {self._q(self.table_name)}
+SET change_hash = {self.placeholder}
+WHERE migration_name = {self.placeholder};
+            """
+            self.execute(f"ROLLBACK TO SAVEPOINT {_SAVEPOINT};")
+            self.execute(fallback_query, (migration.hash, migration.path.name))
+        finally:
+            if self.database not in {SupportedDatabase.ORACLE}:
+                self.execute(f"RELEASE SAVEPOINT {_SAVEPOINT};")
 
     def _build_error_message(self, migration: Migration, errors: list[SQLBaseError]) -> list[SyntaxError]:
         lines = migration.path.read_text(encoding="utf-8").splitlines(keepends=True)
