@@ -112,12 +112,12 @@ FROM {self._q(self.table_name)};
         return migrations
 
     @override
-    def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
+    def apply_migration(self, migration: Migration, is_rollback: bool = False, is_fake: bool = False) -> None:
         is_applied = self.is_migration_applied(migration) if not migration.initial else False
         if not migration.initial and is_applied != is_rollback:
             if is_rollback:
-                raise ValueError(f"Migration {migration.name} is not applied, cannot undo it")
-            raise ValueError(f"Migration {migration.name} is already applied, cannot apply it again")
+                raise ValueError(f"Migration '{migration.name}' is not applied, cannot undo it")
+            raise ValueError(f"Migration '{migration.name}' is already applied, cannot apply it again")
 
         migration_code, reverse_migration_code = migration.content
         code = migration_code if not is_rollback else reverse_migration_code
@@ -246,6 +246,7 @@ WHERE migration_name = {self.placeholder};
     @override
     def _update_migration_changelog(self, migration: Migration, is_rollback: bool) -> None:
         if migration.initial and is_rollback:
+            # NOTE: this is a no-op for initial migrations because the table is already removed.
             return
 
         if is_rollback and not migration.initial:

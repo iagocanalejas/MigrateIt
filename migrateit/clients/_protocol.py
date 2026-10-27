@@ -72,14 +72,14 @@ class SqlClientProtocol(Protocol):
         """
         ...
 
-    def apply_migration(self, migration: Migration, is_fake: bool = False, is_rollback: bool = False) -> None:
+    def apply_migration(self, migration: Migration, is_rollback: bool = False, is_fake: bool = False) -> None:
         """
         Apply a migration to the database.
 
         Args:
             migration: The migration object to apply.
-            fake: If True, apply the migration without executing it.
-            undo: If True, apply the reverse of the migration.
+            is_rollback: If True, apply the reverse of the migration.
+            is_fake: If True, apply the migration without executing it.
         """
         ...
 
