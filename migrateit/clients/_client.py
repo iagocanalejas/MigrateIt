@@ -1,13 +1,9 @@
 import functools
 import os
 import re
-import sqlite3
 from abc import ABC
-from typing import TYPE_CHECKING, Any, override
+from typing import Any, override
 
-import mysql.connector
-import oracledb
-import psycopg
 from sqlfluff.core import Linter, SQLBaseError
 
 from migrateit import constants as C
@@ -17,18 +13,9 @@ from migrateit.models.config import MigrateItConfig, SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
 from migrateit.models.migration_manager import MigrationManager
 from migrateit.models.sql import patch_sql_statement, sql_to_statements
+from migrateit.models.types import Connection, DatabaseError
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
-
-if TYPE_CHECKING:
-    from migrateit.models.connection import Connection
-
-DatabaseError: tuple[type[Exception], ...] = (
-    mysql.connector.Error,
-    oracledb.DatabaseError,
-    psycopg.Error,
-    sqlite3.Error,
-)
 
 
 class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):

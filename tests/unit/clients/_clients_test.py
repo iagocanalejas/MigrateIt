@@ -44,10 +44,10 @@ def test_q_invalid_name(name: str, quote_char: str) -> None:
 @pytest.mark.parametrize(
     "database,driver",
     [
-        pytest.param(SupportedDatabase.POSTGRES, "migrateit.models.connection.psycopg.connect", id="postgres"),
-        pytest.param(SupportedDatabase.MYSQL, "migrateit.models.connection.mysql.connector.connect", id="mysql"),
-        pytest.param(SupportedDatabase.MARIADB, "migrateit.models.connection.mysql.connector.connect", id="mariadb"),
-        pytest.param(SupportedDatabase.ORACLE, "migrateit.models.connection.oracledb.connect", id="oracle"),
+        pytest.param(SupportedDatabase.POSTGRES, "psycopg.connect", id="postgres"),
+        pytest.param(SupportedDatabase.MYSQL, "mysql.connector.connect", id="mysql"),
+        pytest.param(SupportedDatabase.MARIADB, "mysql.connector.connect", id="mariadb"),
+        pytest.param(SupportedDatabase.ORACLE, "oracledb.connect", id="oracle"),
     ],
 )
 def test_get_connection(database: SupportedDatabase, driver: str) -> None:
@@ -62,7 +62,7 @@ def test_get_connection(database: SupportedDatabase, driver: str) -> None:
 @pytest.mark.unit
 def test_get_connection_mysql_connection_string() -> None:
     with (
-        patch("migrateit.models.connection.mysql.connector.connect") as mock_connect,
+        patch("mysql.connector.connect") as mock_connect,
         patch.dict(os.environ, {"DB_URL": "mysql://user:pass@host:3306/mydb"}),
     ):
         mock_conn: Any = MagicMock()
@@ -75,7 +75,7 @@ def test_get_connection_mysql_connection_string() -> None:
 @pytest.mark.unit
 def test_get_connection_oracle_connection_string() -> None:
     with (
-        patch("migrateit.models.connection.oracledb.connect") as mock_connect,
+        patch("oracledb.connect") as mock_connect,
         patch.dict(os.environ, {"DB_URL": "oracle+oracledb://user:pass@host:1521/service"}),
     ):
         mock_conn: Any = MagicMock()
