@@ -110,7 +110,9 @@ class _DBTableLocker(Locker):
                 self.is_locked = True
                 logger.debug("Acquired lock for table %s", self._table_name)
                 return
-            except Exception as e:
+            except KeyboardInterrupt, SystemExit:  # pragma: no cover
+                raise
+            except BaseException as e:
                 if time.monotonic() >= end_time:
                     msg = f"Could not acquire lock for {self._table_name} within {LOCK_TIMEOUT_SECONDS}s"
                     raise RuntimeError(msg) from e

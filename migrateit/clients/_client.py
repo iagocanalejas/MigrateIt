@@ -1,9 +1,13 @@
 import functools
 import os
 import re
+import sqlite3
 from abc import ABC
 from typing import TYPE_CHECKING, Any, override
 
+import mysql.connector
+import oracledb
+import psycopg
 from sqlfluff.core import Linter, SQLBaseError
 
 from migrateit import constants as C
@@ -18,6 +22,13 @@ from migrateit.reporters.output import write_line
 
 if TYPE_CHECKING:
     from migrateit.models.connection import Connection
+
+DatabaseError: tuple[type[Exception], ...] = (
+    mysql.connector.Error,
+    oracledb.DatabaseError,
+    psycopg.Error,
+    sqlite3.Error,
+)
 
 
 class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
@@ -273,7 +284,7 @@ VALUES ({self.placeholder}, {self.placeholder});
         try:
             self.execute(f"SAVEPOINT {_SAVEPOINT};")
             self.execute(query, (migration.path.name, migration.hash))
-        except Exception:
+        except DatabaseError:
             if not is_forced:
                 raise
             fallback_query = f"""

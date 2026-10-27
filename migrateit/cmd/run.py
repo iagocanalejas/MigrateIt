@@ -90,7 +90,7 @@ def cmd_run(
         except Exception as e:
             try:
                 client.connection.rollback()
-            except Exception:  # pragma: no cover
+            except BaseException:  # pragma: no cover
                 pass
             write_line_error(f"{e}")
             return 1
