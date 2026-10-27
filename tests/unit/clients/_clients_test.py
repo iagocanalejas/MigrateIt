@@ -164,7 +164,7 @@ def test_get_environment_params_from_env_vars_oracle() -> None:
 
 @pytest.mark.unit
 def test_sql_client_none_connection_raises(temp_dir: Path) -> None:
-    config = MigrateItConfig(changelog=Changelog(version=1))
+    config = MigrateItConfig(changelog=Changelog(version=1, database=SupportedDatabase.POSTGRES))
     with pytest.raises(ValueError, match="connection cannot be None"):
         SqlClient[None](None, config)  # type: ignore
 

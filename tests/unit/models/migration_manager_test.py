@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from migrateit.models.changelog import Changelog
+from migrateit.models.config import SupportedDatabase
 from migrateit.models.migration import Migration, MigrationStatus
 from migrateit.models.migration_manager import MigrationManager
 
@@ -14,7 +15,11 @@ from migrateit.models.migration_manager import MigrationManager
 def test_create_new_migration_invalid_name(temp_dir: Path) -> None:
     path = temp_dir / "migrations"
     path.mkdir(parents=True, exist_ok=True)
-    changelog = Changelog(version=1, migrations=[Migration(name="0000_init.sql", initial=True, parents=())])
+    changelog = Changelog(
+        version=1,
+        database=SupportedDatabase.POSTGRES,
+        migrations=[Migration(name="0000_init.sql", initial=True, parents=())],
+    )
     manager = MigrationManager(changelog)
     with pytest.raises(ValueError, match="not a valid identifier"):
         manager.create_new_migration(name="invalid-name")
@@ -24,7 +29,11 @@ def test_create_new_migration_invalid_name(temp_dir: Path) -> None:
 def test_create_new_migration_dependency_not_found(temp_dir: Path) -> None:
     path = temp_dir / "migrations"
     path.mkdir(parents=True, exist_ok=True)
-    changelog = Changelog(version=1, migrations=[Migration(name="0000_init.sql", initial=True, parents=())])
+    changelog = Changelog(
+        version=1,
+        database=SupportedDatabase.POSTGRES,
+        migrations=[Migration(name="0000_init.sql", initial=True, parents=())],
+    )
     manager = MigrationManager(changelog)
     with pytest.raises(ValueError, match="Some dependencies"):
         manager.create_new_migration(name="test", dependencies=("9999_missing",))
@@ -34,7 +43,7 @@ def test_create_new_migration_dependency_not_found(temp_dir: Path) -> None:
 def test_create_new_migration_initial_with_deps_raises(temp_dir: Path) -> None:
     path = temp_dir / "migrations"
     path.mkdir(parents=True, exist_ok=True)
-    changelog = Changelog(version=1, migrations=[])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[])
     manager = MigrationManager(changelog)
     fake_migration = Migration(name="0000_init.sql", initial=True)
     with (
@@ -50,7 +59,11 @@ def test_create_new_migration_initial_with_deps_raises(temp_dir: Path) -> None:
 
 @pytest.mark.unit
 def test_get_migration_by_name_invalid_prefix() -> None:
-    changelog = Changelog(version=1, migrations=[Migration(name="0000_init.sql", initial=True)])
+    changelog = Changelog(
+        version=1,
+        database=SupportedDatabase.POSTGRES,
+        migrations=[Migration(name="0000_init.sql", initial=True)],
+    )
     manager = MigrationManager(changelog)
     with pytest.raises(ValueError, match="Invalid"):
         manager.get_migration_by_name("not_a_number")
@@ -62,7 +75,7 @@ def test_get_migration_by_name_invalid_prefix() -> None:
 @pytest.mark.unit
 def test_changelog_file_exist_migration_by_name_exact() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
-    changelog = Changelog(version=1, migrations=[m])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
     manager = MigrationManager(changelog)
     assert manager.exist_migration_by_name("0001_test.sql") is True
 
@@ -70,7 +83,7 @@ def test_changelog_file_exist_migration_by_name_exact() -> None:
 @pytest.mark.unit
 def test_changelog_file_exist_migration_by_name_prefix() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
-    changelog = Changelog(version=1, migrations=[m])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
     manager = MigrationManager(changelog)
     assert manager.exist_migration_by_name("0001_other.sql") is True
 
@@ -78,7 +91,7 @@ def test_changelog_file_exist_migration_by_name_prefix() -> None:
 @pytest.mark.unit
 def test_changelog_file_exist_migration_by_name_not_found() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
-    changelog = Changelog(version=1, migrations=[m])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
     manager = MigrationManager(changelog)
     assert manager.exist_migration_by_name("0002_other.sql") is False
 
@@ -86,7 +99,7 @@ def test_changelog_file_exist_migration_by_name_not_found() -> None:
 @pytest.mark.unit
 def test_changelog_file_exist_migration_by_name_abs_path() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
-    changelog = Changelog(version=1, migrations=[m])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
     manager = MigrationManager(changelog)
     assert manager.exist_migration_by_name("/some/path/0001_test.sql") is True
 
@@ -98,7 +111,7 @@ def test_changelog_file_exist_migration_by_name_abs_path() -> None:
 def test_changelog_file_get_migration_by_name() -> None:
     m1 = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     m2 = Migration(name="0002_other.sql", parents=("0001_test.sql",))
-    changelog = Changelog(version=1, migrations=[m1, m2])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m1, m2])
     manager = MigrationManager(changelog)
     result = manager.get_migration_by_name("0001")
     assert result.name == "0001_test.sql"
@@ -107,7 +120,7 @@ def test_changelog_file_get_migration_by_name() -> None:
 @pytest.mark.unit
 def test_changelog_file_get_migration_by_name_full() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
-    changelog = Changelog(version=1, migrations=[m])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
     manager = MigrationManager(changelog)
     result = manager.get_migration_by_name("0001_test.sql")
     assert result.name == "0001_test.sql"
@@ -116,7 +129,7 @@ def test_changelog_file_get_migration_by_name_full() -> None:
 @pytest.mark.unit
 def test_changelog_file_get_migration_by_name_not_found() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
-    changelog = Changelog(version=1, migrations=[m])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
     manager = MigrationManager(changelog)
     with pytest.raises(ValueError, match="not found"):
         manager.get_migration_by_name("0002_nonexistent")
@@ -125,7 +138,7 @@ def test_changelog_file_get_migration_by_name_not_found() -> None:
 @pytest.mark.unit
 def test_changelog_file_get_migration_by_name_abs_path() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
-    changelog = Changelog(version=1, migrations=[m])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
     manager = MigrationManager(changelog)
     result = manager.get_migration_by_name("/some/path/0001_test.sql")
     assert result.name == "0001_test.sql"
@@ -145,6 +158,7 @@ def test_get_next_migration_path_overwrite_index(temp_dir: Path) -> None:
 
     changelog = Changelog(
         version=1,
+        database=SupportedDatabase.POSTGRES,
         migrations=[
             Migration(name="0000_init.sql", initial=True, parents=()),
             Migration(name="0001_existing.sql", parents=("0000_init.sql",)),
@@ -169,6 +183,7 @@ def test_get_next_migration_path_overwrite_index_declined(temp_dir: Path) -> Non
 
     changelog = Changelog(
         version=1,
+        database=SupportedDatabase.POSTGRES,
         migrations=[
             Migration(name="0000_init.sql", initial=True, parents=()),
             Migration(name="0001_existing.sql", parents=("0000_init.sql",)),
@@ -304,7 +319,7 @@ def test_build_plan(
     is_rollback: bool,
     expected: list[str],
 ) -> None:
-    changelog = Changelog(version=1, migrations=migrations)
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     manager = MigrationManager(changelog)
     target_migration = next(m for m in migrations if m.name == target) if target else None
     plan = manager.build_migration_plan(statuses, target_migration, is_rollback=is_rollback)
@@ -361,7 +376,7 @@ def test_build_plan(
     ],
 )
 def test_find_path(migrations: list[Migration], start: str, end: str, expected: list[str]) -> None:
-    cl = Changelog(version=1, migrations=migrations)
+    cl = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     manager = MigrationManager(cl)
     path = manager.find_path(start, end)
     assert path == expected
@@ -376,7 +391,7 @@ def test_print_list() -> None:
         Migration(name="0000_init.sql", initial=True, parents=()),
         Migration(name="0001_add.sql", parents=("0000_init.sql",)),
     ]
-    changelog = Changelog(version=1, migrations=migrations)
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     manager = MigrationManager(changelog)
     status_map: dict[str, MigrationStatus] = {
         "0000_init.sql": MigrationStatus.APPLIED,
@@ -401,7 +416,7 @@ def test_print_dag() -> None:
         Migration(name="0001_add.sql", parents=("0000_init.sql",)),
         Migration(name="0002_two.sql", parents=("0000_init.sql", "0001_add.sql")),
     ]
-    changelog = Changelog(version=1, migrations=migrations)
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     manager = MigrationManager(changelog)
     status_map: dict[str, MigrationStatus] = {
         "0000_init.sql": MigrationStatus.APPLIED,
@@ -423,7 +438,7 @@ def test_print_dag() -> None:
 @pytest.mark.unit
 def test_print_dag_no_children() -> None:
     m = Migration(name="0000_init.sql", initial=True, parents=())
-    changelog = Changelog(version=1, migrations=[m])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
     manager = MigrationManager(changelog)
     status_map: dict[str, MigrationStatus] = {"0000_init.sql": MigrationStatus.APPLIED}
 

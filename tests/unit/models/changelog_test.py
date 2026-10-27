@@ -12,7 +12,7 @@ from migrateit.models.migration import Migration
 
 @pytest.mark.unit
 def test_root_no_migrations_raises() -> None:
-    changelog = Changelog(version=1, migrations=[])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[])
     with pytest.raises(ValueError, match="No migrations found"):
         changelog.root
 
@@ -21,6 +21,7 @@ def test_root_no_migrations_raises() -> None:
 def test_root_not_initial_raises() -> None:
     changelog = Changelog(
         version=1,
+        database=SupportedDatabase.POSTGRES,
         migrations=[Migration(name="0001_not_initial.sql", parents=())],
     )
     with pytest.raises(ValueError, match="Initial migration is not defined"):
@@ -31,6 +32,7 @@ def test_root_not_initial_raises() -> None:
 def test_root_returns_first() -> None:
     changelog = Changelog(
         version=1,
+        database=SupportedDatabase.POSTGRES,
         migrations=[
             Migration(name="0000_init.sql", initial=True, parents=()),
             Migration(name="0001_next.sql", parents=("0000_init.sql",)),
@@ -78,7 +80,7 @@ def test_build_tree_simple_chain() -> None:
         Migration(name="0001_test.sql", parents=("0000_init.sql",)),
         Migration(name="0002_next.sql", parents=("0001_test.sql",)),
     ]
-    changelog = Changelog(version=1, migrations=migrations)
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     tree = changelog.migrations_tree
     assert list(tree.keys()) == ["0000_init.sql", "0001_test.sql", "0002_next.sql"]
     assert tree["0000_init.sql"] == [migrations[1]]
@@ -93,7 +95,7 @@ def test_build_tree_duplicated_name_raises() -> None:
         Migration(name="0001_test.sql", parents=("0000_init.sql",)),
         Migration(name="0001_test.sql", parents=("0000_init.sql",)),
     ]
-    changelog = Changelog(version=1, migrations=migrations)
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     with pytest.raises(ValueError, match="duplicated"):
         changelog.migrations_tree
 
@@ -104,7 +106,7 @@ def test_build_tree_with_multiple_parents() -> None:
     m2 = Migration(name="0001_branch_a.sql", parents=("0000_init.sql",))
     m3 = Migration(name="0002_branch_b.sql", parents=("0000_init.sql",))
     m4 = Migration(name="0003_merge.sql", parents=("0001_branch_a.sql", "0002_branch_b.sql"))
-    changelog = Changelog(version=1, migrations=[m1, m2, m3, m4])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m1, m2, m3, m4])
     tree = changelog.migrations_tree
     assert tree["0003_merge.sql"] == []
     assert m4 in tree["0001_branch_a.sql"]

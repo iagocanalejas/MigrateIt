@@ -12,7 +12,7 @@ from migrateit.models.migration import Migration
 @dataclass(kw_only=True)
 class Changelog:
     version: int
-    database: SupportedDatabase = SupportedDatabase.POSTGRES
+    database: SupportedDatabase
     migrations: list[Migration] = field(default_factory=list)
 
     path = C.MIGRATEIT_CHANGELOG_FILE

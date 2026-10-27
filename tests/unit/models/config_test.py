@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from migrateit.models.changelog import Changelog
-from migrateit.models.config import MigrateItConfig
+from migrateit.models.config import MigrateItConfig, SupportedDatabase
 
 
 @pytest.mark.unit
@@ -18,7 +18,7 @@ from migrateit.models.config import MigrateItConfig
 def test_validate_config(table_name: object, expected_error: type[Exception], expected_match: str | None) -> None:
     with patch("migrateit.clients._client.C.MIGRATEIT_MIGRATIONS_TABLE", table_name):
         with pytest.raises(expected_error, match=expected_match):
-            MigrateItConfig(changelog=Changelog(version=1))
+            MigrateItConfig(changelog=Changelog(version=1, database=SupportedDatabase.POSTGRES))
 
 
 @pytest.mark.unit

@@ -36,7 +36,7 @@ def test_save_changelog_file(temp_dir: Path) -> None:
 
 @pytest.mark.unit
 def test_save_changelog_file_not_exists(temp_dir: Path) -> None:
-    cl = Changelog(version=1)
+    cl = Changelog(version=1, database=SupportedDatabase.POSTGRES)
     with pytest.raises(FileNotFoundError):
         ChangelogRepository.save(cl)
 
@@ -53,7 +53,7 @@ def test_load_changelog_file_not_exists(temp_dir: Path) -> None:
 @pytest.mark.unit
 def test_load_changelog_file_valid(temp_dir: Path) -> None:
     path = temp_dir / "changelog.json"
-    cl = Changelog(version=1, migrations=[])
+    cl = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[])
     path.write_text(cl.to_json())
     loaded = ChangelogRepository.load()
     assert loaded.version == 1
@@ -66,7 +66,7 @@ def test_load_changelog_file_multiple_initial_raises(temp_dir: Path) -> None:
         Migration(name="0000_a.sql", initial=True, parents=()),
         Migration(name="0001_b.sql", initial=True, parents=()),
     ]
-    cl = Changelog(version=1, migrations=migrations)
+    cl = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     path.write_text(cl.to_json())
     with pytest.raises(ValueError, match="exactly one initial migration"):
         ChangelogRepository.load()
@@ -76,7 +76,7 @@ def test_load_changelog_file_multiple_initial_raises(temp_dir: Path) -> None:
 def test_load_changelog_file_initial_with_parents_raises(temp_dir: Path) -> None:
     path = temp_dir / "changelog.json"
     migrations = [Migration(name="0000_a.sql", initial=True, parents=("0001_b.sql",))]
-    cl = Changelog(version=1, migrations=migrations)
+    cl = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     path.write_text(cl.to_json())
     with pytest.raises(ValueError, match="cannot have parents"):
         ChangelogRepository.load()
@@ -86,7 +86,7 @@ def test_load_changelog_file_initial_with_parents_raises(temp_dir: Path) -> None
 def test_load_changelog_file_non_initial_without_parents_raises(temp_dir: Path) -> None:
     path = temp_dir / "changelog.json"
     migrations = [Migration(name="0000_a.sql", initial=True, parents=())]
-    cl = Changelog(version=1, migrations=migrations)
+    cl = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     path.write_text(cl.to_json())
     # Single initial migration is valid; adding a non-initial without parents
     migrations.append(Migration(name="0001_b.sql", parents=()))
@@ -103,7 +103,7 @@ def test_load_changelog_with_non_existing_parent(temp_dir: Path) -> None:
         Migration(name="0000_init.sql", initial=True, parents=()),
         Migration(name="0001_test.sql", parents=("9999_missing.sql",)),
     ]
-    changelog = Changelog(version=1, migrations=migrations)
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     path.write_text(changelog.to_json())
 
     with pytest.raises(ValueError, match="non-existent parent"):
@@ -118,7 +118,7 @@ def test_get_migration_by_name_prefix_collision_returns_first(temp_dir: Path) ->
     changelog_path = temp_dir / "changelog.json"
     changelog_path.touch()
 
-    changelog = Changelog(version=1, migrations=[m1, m2])
+    changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m1, m2])
     changelog_path.write_text(changelog.to_json())
 
     with pytest.raises(ValueError, match="duplicated index"):
@@ -132,7 +132,7 @@ def test_load_changelog_bad_migration_name(temp_dir: Path) -> None:
         Migration(name="0000_init.sql", initial=True, parents=()),
         Migration(name="bad_name.sql", parents=("0000_init.sql",)),
     ]
-    cl = Changelog(version=1, migrations=migrations)
+    cl = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
     path.write_text(cl.to_json())
     with pytest.raises(ValueError, match="does not match the pattern"):
         ChangelogRepository.load()

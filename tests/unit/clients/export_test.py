@@ -70,6 +70,7 @@ def test_export_invalid_parents(client: SqlClient[Any]) -> None:
 def test_export_database_schema_wrong_parents(temp_dir: Path) -> None:
     changelog = Changelog(
         version=1,
+        database=SupportedDatabase.POSTGRES,
         migrations=[Migration(name="0000_init.sql", initial=True, parents=())],
     )
     config = MigrateItConfig(changelog=changelog)
