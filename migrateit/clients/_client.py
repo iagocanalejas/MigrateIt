@@ -268,22 +268,27 @@ WHERE migration_name = {self.placeholder};
             return
 
         if is_rollback and not migration.initial:
-            query = f"""
+            query, args = (
+                f"""
 DELETE FROM {self._q(self.table_name)}
-WHERE migration_name = {self.placeholder}
-    AND change_hash = {self.placeholder};
-"""
+WHERE migration_name = {self.placeholder};
+""",
+                (migration.path.name,),
+            )
         else:
             # NOTE: this will raise an expected error if the migration was already applied.
-            query = f"""
+            query, args = (
+                f"""
 INSERT INTO {self._q(self.table_name)} (migration_name, change_hash)
 VALUES ({self.placeholder}, {self.placeholder});
-"""
+""",
+                (migration.path.name, migration.hash),
+            )
 
         _SAVEPOINT = "changelog_savepoint"
         try:
             self.execute(f"SAVEPOINT {_SAVEPOINT};")
-            self.execute(query, (migration.path.name, migration.hash))
+            self.execute(query, args)
         except DatabaseError:
             if not is_forced:
                 raise
