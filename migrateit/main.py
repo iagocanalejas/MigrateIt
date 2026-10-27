@@ -73,6 +73,7 @@ def main() -> int:
                     return commands.cmd_run(
                         client,
                         args.name,
+                        is_forced=args.force,
                         is_fake=args.fake,
                         is_hash_update=args.update_hash,
                         is_plan_only=args.plan_only,
@@ -82,8 +83,9 @@ def main() -> int:
                     return commands.cmd_run(
                         client,
                         "0000" if args.zero else args.name,
-                        is_fake=args.fake,
                         is_rollback=True,
+                        is_forced=args.force,
+                        is_fake=args.fake,
                         is_plan_only=args.plan_only,
                         interactive=args.interactive,
                     )
@@ -161,6 +163,13 @@ def _cmd_migrate(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         help="Allow to interactively select the migration to apply.",
     )
     parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        default=False,
+        help="Forces the migration to run even if it's not in the changelog or if it's already applied.",
+    )
+    parser.add_argument(
         "--fake",
         action="store_true",
         default=False,
@@ -197,6 +206,13 @@ def _cmd_rollback(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Allow to interactively select the migration to rollback.",
+    )
+    parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        default=False,
+        help="Force the rollback to run even if it's not in the changelog or if it's already rolled back.",
     )
     parser.add_argument(
         "--fake",

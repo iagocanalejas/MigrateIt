@@ -321,12 +321,27 @@ def test_update_migration_hash(client: SqlClient[Any]) -> None:
     assert old_hash == new_hash  # same file, same hash
 
 
+def test_insert_already_existing(client: SqlClient[Any]) -> None:
+    _create_migration_file(MIGRATION_NAME)
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
+    client.config.changelog = Changelog(
+        version=1,
+        database=client.database,
+        migrations=[Migration(name=INITIAL_MIGRATION), migration],
+    )
+
+    client.apply_migration(migration, is_fake=False)
+
+    with pytest.raises(Exception):
+        client._update_migration_changelog(migration, is_rollback=False, is_forced=False)
+
+
 @pytest.mark.unit
 def test_update_initial_rollback_is_nop(temp_dir: Path) -> None:
     client = _client_with_mocked_connection(temp_dir)
     migration = Migration(name="0000_init.sql", initial=True)
 
-    client._update_migration_changelog(migration, is_rollback=True)
+    client._update_migration_changelog(migration, is_rollback=True, is_forced=False)
 
     client.connection.cursor.return_value.execute.assert_not_called()
 

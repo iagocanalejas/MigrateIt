@@ -27,11 +27,14 @@ def test_cmd_run_and_rerun(client: SqlClient[Any]) -> None:
     assert len(rows) == 2
 
 
-def test_cmd_run_all_applied(client: SqlClient[Any]) -> None:
-    cmd_run(client=client)
-    with patch("migrateit.cmd.run.write_line") as mock_write_line:
-        cmd_run(client=client)
-    mock_write_line.assert_called_once_with("All migrations already applied.")
+def test_cmd_run_forced(client: SqlClient[Any]) -> None:
+    _create_migration_file("no_changelog_migration.sql", sql="CREATE TABLE test (id INTEGER PRIMARY KEY);")
+
+    cmd_run(client=client, name="no_changelog_migration", is_forced=True)
+
+    rows = _get_query_rows(client, f"SELECT migration_name FROM {client._q(TEST_MIGRATIONS_TABLE)}")
+    assert len(rows) == 2
+    assert _table_exists(client, "test")
 
 
 def test_cmd_run_fake(client: SqlClient[Any]) -> None:
@@ -107,6 +110,25 @@ def test_cmd_run_interactive_noop(client: SqlClient[Any]) -> None:
     assert len(rows) == 1
     assert not _table_exists(client, "test")
     assert not _table_exists(client, "test2")
+
+
+def test_cmd_run_all_applied(client: SqlClient[Any]) -> None:
+    cmd_run(client=client)
+    with patch("migrateit.cmd.run.write_line") as mock_write_line:
+        cmd_run(client=client)
+    mock_write_line.assert_called_once_with("All migrations already applied.")
+
+
+@pytest.mark.unit
+def test_cmd_run_forced_no_name(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+    assert cmd_run(mock_client, is_forced=True) != 0
+
+
+@pytest.mark.unit
+def test_cmd_run_forced_interactive(temp_dir: Path) -> None:
+    mock_client = _mock_client(temp_dir)
+    assert cmd_run(mock_client, name="name", is_forced=True, interactive=True) != 0
 
 
 # --- rollback ---
@@ -279,6 +301,10 @@ def test_cmd_run_hash_update_no_target(client: SqlClient[Any]) -> None:
 def test_cmd_run_hash_update_initial(client: SqlClient[Any]) -> None:
     initial = [m for m in client.changelog.migrations if m.initial][0]
     assert cmd_run(client=client, name=initial.name, is_hash_update=True) != 0
+
+
+def test_cmd_run_hash_update_forced(client: SqlClient[Any]) -> None:
+    assert cmd_run(client=client, is_forced=True, is_hash_update=True) != 0
 
 
 def test_cmd_run_hash_update_fake(client: SqlClient[Any]) -> None:

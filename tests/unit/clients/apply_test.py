@@ -100,6 +100,20 @@ def test_apply_migration_already_applied(client: SqlClient[Any]) -> None:
         client.apply_migration(migration, is_fake=False)
 
 
+def test_force_apply_migration_already_applied(client: SqlClient[Any]) -> None:
+    _mock_create_migration(client.database)
+    migration = Migration(name=MIGRATION_NAME, parents=(INITIAL_MIGRATION,))
+    client.changelog.migrations.append(migration)
+
+    client.apply_migration(migration)
+    client.apply_migration(migration, is_forced=True, is_fake=True)
+
+    statuses = client.retrieve_migration_statuses()
+    assert _migration_is_applied(client, MIGRATION_NAME)
+    assert statuses[MIGRATION_NAME] == MigrationStatus.APPLIED
+    assert _table_exists(client, TEST_TABLE)
+
+
 def test_apply_migration_file_missing(client: SqlClient[Any]) -> None:
     migration = Migration(name="not_found.sql", parents=(INITIAL_MIGRATION,))
     client.changelog.migrations.append(migration)
