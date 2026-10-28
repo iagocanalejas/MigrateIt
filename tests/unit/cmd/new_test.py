@@ -119,8 +119,9 @@ def test_cmd_new_interactive_selection(temp_dir: Path) -> None:
     prompt_result = {"dependencies": ["0000_migrateit.sql"]}
 
     with patch("migrateit.cmd.new.inquirer.prompt", return_value=prompt_result) as mock_prompt:
-        cmd_new(client=mock_client, name="interactive_migration", interactive=True, no_edit=True)
+        result = cmd_new(client=mock_client, name="interactive_migration", interactive=True, no_edit=True)
 
+        assert result == 0
         mock_prompt.assert_called_once()
         # Verify choices were generated from existing migrations
         checkbox = mock_prompt.call_args[0][0][0]

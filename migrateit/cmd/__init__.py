@@ -1,3 +1,4 @@
+from .add import cmd_add as cmd_add
 from .drop import cmd_drop as cmd_drop
 from .export import cmd_export as cmd_export
 from .init import cmd_init as cmd_init

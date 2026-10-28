@@ -1,8 +1,6 @@
-import re
-
-from migrateit import constants as C
 from migrateit.models.changelog import Changelog
 from migrateit.models.config import SupportedDatabase
+from migrateit.models.migration import Migration
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
@@ -26,8 +24,7 @@ class ChangelogRepository:
                 raise ValueError(f"Initial migration {m.name} cannot have parents")
             if not m.initial and len(m.parents) == 0:
                 raise ValueError(f"Migration {m.name} must have parents")
-            if not re.match(C.MIGRATION_PATTERN, m.name):
-                raise ValueError(f"Migration name {m.name} does not match the pattern")
+            Migration.assert_valid_name(m.name)
 
             if m.index in seen_indexes:
                 raise ValueError(f"Migration name {m.name} has a duplicated index")

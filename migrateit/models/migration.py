@@ -62,6 +62,11 @@ class Migration:
             WHITESPACE_RE.sub(" ", remove_sql_comments(rb_migration)).strip(),
         )
 
+    @staticmethod
+    def assert_valid_name(name: str) -> None:
+        if not re.match(C.MIGRATION_PATTERN, name):
+            raise ValueError(f"Migration name {name} does not match the pattern")
+
     def rename_squashed(self) -> Migration:
         new_name = f"squashed_{self.name}"
         new_path = self.path.parent / new_name

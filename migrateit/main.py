@@ -28,14 +28,15 @@ def main() -> int:
         parser = subparsers.add_parser(name, help=help)
         return parser
 
-    _cmd_init(_add_cmd("init", help="Initialize the migration directory and database"))
-    _cmd_export(_add_cmd("export", help="Export the current database schema to a migration file"))
-    _cmd_new(_add_cmd("new", help="Create a new migration"))
-    _cmd_migrate(_add_cmd("migrate", help="Run migrations"))
-    _cmd_rollback(_add_cmd("rollback", help="Rollback migrations"))
-    _cmd_squash(_add_cmd("squash", help="Squash migrations into a single file"))
-    _cmd_show(_add_cmd("show", help="Show migration status"))
-    _cmd_drop(_add_cmd("drop", help="Drop and rollback a migration"))
+    _cmd_init(_add_cmd("init", help="Initialize the migration directory and database."))
+    _cmd_show(_add_cmd("show", help="Show migration status."))
+    _cmd_new(_add_cmd("new", help="Create a new migration."))
+    _cmd_add(_add_cmd("add", help="Add an existing migration file to the migrations."))
+    _cmd_drop(_add_cmd("drop", help="Drop and rollback a migration."))
+    _cmd_migrate(_add_cmd("migrate", help="Run migrations."))
+    _cmd_rollback(_add_cmd("rollback", help="Rollback migrations."))
+    _cmd_squash(_add_cmd("squash", help="Squash migrations into a single file."))
+    _cmd_export(_add_cmd("export", help="Export the current database schema to a migration file."))
     args = parser.parse_args()
 
     print_logo()
@@ -61,6 +62,13 @@ def main() -> int:
                         name=args.name or f"auto_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                         dependencies=tuple(args.dependencies) if args.dependencies else None,
                         no_edit=args.no_edit,
+                        interactive=args.interactive,
+                    )
+                elif args.command == "add":
+                    return commands.cmd_add(
+                        client,
+                        name=args.name,
+                        dependencies=tuple(args.dependencies) if args.dependencies else None,
                         interactive=args.interactive,
                     )
                 elif args.command == "show":
@@ -154,6 +162,25 @@ def _cmd_new(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         help="Avoid opening the migration file in an editor after creation.",
     )
     parser.set_defaults(func=commands.cmd_new)
+    return parser
+
+
+def _cmd_add(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument("name", type=str, default=None, help="Name of the migration to add.")
+    parser.add_argument(
+        "-d",
+        "--dependencies",
+        nargs="+",
+        help="List of migration names that this migration depends on.",
+    )
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        default=False,
+        help="Allow to interactively select the migration dependencies.",
+    )
+    parser.set_defaults(func=commands.cmd_add)
     return parser
 
 

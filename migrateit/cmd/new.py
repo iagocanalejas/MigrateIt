@@ -62,7 +62,7 @@ def cmd_new(
 
     write_line(f"Creating new migration '{name}'.")
     migration = client.migrations.create_new_migration(name=name, dependencies=dependencies)
-    write_line(f"Migration file created: {migration.name}.")
+    write_line(f"Migration file created: '{migration.name}'.")
     ChangelogRepository.save(client.changelog)
 
     if no_edit:

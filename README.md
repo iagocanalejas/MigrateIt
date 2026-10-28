@@ -255,3 +255,16 @@ options:
   -h, --help  show this help message and exit
   --preserve  Drop the migration without rolling it back first.
 ```
+
+```sh
+usage: migrateit add [-h] [-d DEPENDENCIES [DEPENDENCIES ...]] [-i] name
+
+positional arguments:
+  name                  Name of the migration to add.
+
+options:
+  -h, --help            show this help message and exit
+  -d, --dependencies DEPENDENCIES [DEPENDENCIES ...]
+                        List of migration names that this migration depends on.
+  -i, --interactive     Allow to interactively select the migration dependencies.
+```

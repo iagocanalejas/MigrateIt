@@ -85,6 +85,25 @@ def test_new(database: SupportedDatabase, temp_dir: Path) -> None:
 
 
 @pytest.mark.integration
+def test_add(database: SupportedDatabase, temp_dir: Path) -> None:
+    _prepare_migrations_dir(database, temp_dir)
+
+    old_changelog = ChangelogRepository.load()
+    subprocess.run(
+        ["migrateit", "add", "0100", "-d", "0000"],
+        cwd=temp_dir,
+        stdout=subprocess.DEVNULL,
+    )
+    new_changelog = ChangelogRepository.load()
+    new_migratrion = new_changelog.migrations[-1]
+
+    assert len(new_changelog.migrations) == len(old_changelog.migrations) + 1
+    assert not new_migratrion.initial
+    assert new_migratrion.parents == [new_changelog.migrations[0].name]
+    assert (temp_dir / "migrations" / new_migratrion.name).exists()
+
+
+@pytest.mark.integration
 def test_full_migrate_export_and_rollback(database: SupportedDatabase, temp_dir: Path) -> None:
     _prepare_migrations_dir(database, temp_dir)
     changelog = ChangelogRepository.load()
