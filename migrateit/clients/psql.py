@@ -132,9 +132,26 @@ ORDER BY c.table_schema, c.table_name, c.ordinal_position;
 SELECT n.nspname, p.proname, pg_get_functiondef(p.oid), pg_get_function_identity_arguments(p.oid)
 FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND p.prokind IN ('f', 'p');
+WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+    AND p.prokind IN ('f', 'p')
+    AND NOT EXISTS (
+        SELECT 1
+        FROM pg_depend d
+        WHERE d.objid = p.oid
+        AND d.deptype = 'e'
+    );
                 """,
                 process_rows=partial(_process_functions, self),
+            ),
+            ExportItem(
+                name="extensions",
+                metadata_query="""
+SELECT e.extname, n.nspname
+FROM pg_extension e
+JOIN pg_namespace n ON n.oid = e.extnamespace
+WHERE e.extname != 'plpgsql';
+                """,
+                process_rows=partial(_process_extensions, self),
             ),
             ExportItem(
                 name="views",
@@ -256,9 +273,20 @@ def _process_functions(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple
     return fwd, rb
 
 
+def _process_extensions(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
+    fwd, rb = [], []
+    for ext_name, schema_name in rows:
+        fwd.append(f"CREATE EXTENSION IF NOT EXISTS {client._q(ext_name)} WITH SCHEMA {client._q(schema_name)};")
+        rb.append(f"DROP EXTENSION IF EXISTS {client._q(ext_name)} CASCADE;")
+    return fwd, rb
+
+
 def _process_views(client: PsqlClient, rows: list[tuple[str, ...]]) -> tuple[list[str], list[str]]:
     fwd, rb = [], []
     for schema, view_name, view_def in rows:
+        if not view_def:  # pragma: no cover
+            # NOTE: view not owned by current user
+            continue
         fwd.append(f"CREATE OR REPLACE VIEW {client._q(schema)}.{client._q(view_name)} AS\n{view_def.strip()};")
         rb.append(f"DROP VIEW IF EXISTS {client._q(schema)}.{client._q(view_name)};")
     return fwd, rb

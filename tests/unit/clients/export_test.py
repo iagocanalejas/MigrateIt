@@ -99,6 +99,7 @@ def _create_database_schema(client: SqlClient[Any]) -> None:
         case SupportedDatabase.POSTGRES:
             with client.connection.cursor() as cursor:
                 cursor.execute("CREATE SCHEMA app_schema;")
+                cursor.execute("CREATE EXTENSION unaccent;")
                 cursor.execute("""
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
