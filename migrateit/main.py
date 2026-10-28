@@ -97,7 +97,11 @@ def main() -> int:
                         name=args.name,
                     )
                 elif args.command == "drop":
-                    return commands.cmd_drop(client, args.name)
+                    return commands.cmd_drop(
+                        client,
+                        args.name,
+                        preserve=args.preserve,
+                    )
                 else:
                     raise NotImplementedError(f"Command {args.command} not implemented.")
         else:
@@ -272,6 +276,12 @@ def _cmd_show(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 def _cmd_drop(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("name", type=str, default=None, help="Name of the migration to drop.")
+    parser.add_argument(
+        "--preserve",
+        action="store_true",
+        default=False,
+        help="Drop the migration without rolling it back first.",
+    )
     parser.set_defaults(func=commands.cmd_drop)
     return parser
 

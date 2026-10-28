@@ -246,11 +246,12 @@ options:
 ```
 
 ```sh
-usage: migrateit drop [-h] name
+usage: migrateit drop [-h] [--preserve] name
 
 positional arguments:
   name        Name of the migration to drop.
 
 options:
   -h, --help  show this help message and exit
+  --preserve  Drop the migration without rolling it back first.
 ```

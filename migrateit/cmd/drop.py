@@ -9,7 +9,7 @@ from migrateit.reporters import write_line
 from migrateit.reporters.output import write_line_error
 
 
-def cmd_drop(client: SqlClient[Any], name: str) -> int:
+def cmd_drop(client: SqlClient[Any], name: str, preserve: bool = False) -> int:
     target_migration = client.migrations.get_migration_by_name(name)
     if any(target_migration.name in m.parents for m in client.changelog.migrations):
         write_line_error(f"Cannot drop migration '{name}': it is a parent of another migration.")
@@ -18,11 +18,12 @@ def cmd_drop(client: SqlClient[Any], name: str) -> int:
         write_line_error("Cannot drop the initial migration.")
         return 1
 
-    write_line(f"Dropping migration '{target_migration.name}'.")
-    statuses = client.retrieve_migration_statuses()
-    if statuses.get(target_migration.name) == MigrationStatus.APPLIED:
-        client.apply_migration(target_migration, is_rollback=True)
-        write_line("\tMigration rolled back from the database.")
+    if not preserve:
+        write_line(f"Dropping migration '{target_migration.name}'.")
+        statuses = client.retrieve_migration_statuses()
+        if statuses.get(target_migration.name) == MigrationStatus.APPLIED:
+            client.apply_migration(target_migration, is_rollback=True)
+            write_line("\tMigration rolled back from the database.")
 
     path = target_migration.path  # NOTE: save it as calling target_migration.path will fail after we unlink it
     path.unlink()
