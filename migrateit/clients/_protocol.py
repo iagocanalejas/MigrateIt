@@ -3,9 +3,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from migrateit.models.config import SupportedDatabase
-    from migrateit.models.connection import Connection
-    from migrateit.models.migration import Migration, MigrationStatus
+    from migrateit.clients._connection import Connection
+    from migrateit.models import Migration, MigrationStatus, SupportedDatabase
 
 
 @dataclass(frozen=True)
@@ -21,12 +20,12 @@ class SqlClientProtocol(Protocol):
     def export_items(self) -> list[ExportItem]: ...
 
     @classmethod
-    def get_connection_params(cls) -> dict[str, Any]:
+    def get_connection(cls) -> Connection:
         """
-        Get the database URL from the environment variables.
+        Get a connection to the database.
 
         Returns:
-            The database URL as a string.
+            A connection to the database.
         """
         ...
 

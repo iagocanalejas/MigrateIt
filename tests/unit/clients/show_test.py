@@ -1,8 +1,7 @@
 from typing import Any
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.config import SupportedDatabase
-from migrateit.models.migration import Migration, MigrationStatus
+from migrateit.models import Migration, MigrationStatus, SupportedDatabase
 from tests.unit.conftest import INITIAL_MIGRATION, MIGRATION_NAME, TEST_MIGRATIONS_TABLE, _mock_create_migration
 
 

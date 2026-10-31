@@ -2,7 +2,7 @@ import time
 from typing import Protocol, Self, override
 
 from migrateit.clients._protocol import SqlConnectionProtocol
-from migrateit.models.config import SupportedDatabase
+from migrateit.models import SupportedDatabase
 from migrateit.reporters.logs import logger
 
 LOCK_TIMEOUT_SECONDS = 30

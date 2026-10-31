@@ -8,9 +8,9 @@ import inquirer
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
-from migrateit.models.repository import ChangelogRepository
 from migrateit.reporters import write_line
 from migrateit.reporters.output import write_line_error
+from migrateit.repository import ChangelogRepository
 
 
 def _validate_editor(editor: str) -> str:

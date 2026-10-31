@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from migrateit.cmd.add import cmd_add
-from migrateit.models.repository import ChangelogRepository
+from migrateit.repository import ChangelogRepository
 from tests.unit.conftest import MIGRATION_NAME, _create_migration_file
 
 from .conftest import _mock_client

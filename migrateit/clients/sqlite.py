@@ -1,15 +1,13 @@
 import os
+import sqlite3
 from functools import partial
-from typing import TYPE_CHECKING, Any, override
+from typing import Any, override
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.clients._protocol import ExportItem
-from migrateit.models.config import SupportedDatabase
+from migrateit.models import SupportedDatabase
 from migrateit.models.sql import ensure_semicolon, patch_sql_statement
-
-if TYPE_CHECKING:
-    import sqlite3  # noqa: F401
 
 
 class SqliteClient(SqlClient["sqlite3.Connection"]):
@@ -22,11 +20,13 @@ class SqliteClient(SqlClient["sqlite3.Connection"]):
 
     @override
     @classmethod
-    def get_connection_params(cls) -> dict[str, Any]:
+    def get_connection(cls) -> sqlite3.Connection:
         db_url = os.getenv(cls.VARNAME_DB_URL)
         if db_url:
-            return {"url": db_url}
-        return {"file_name": os.getenv(cls.VARNAME_DB_FILE, "migrateit.db")}
+            file_name = db_url.replace("sqlite:///", "")
+        else:
+            file_name = os.getenv(cls.VARNAME_DB_FILE, "migrateit.db")
+        return sqlite3.connect(file_name, autocommit=False)
 
     @override
     @classmethod

@@ -3,10 +3,8 @@ from unittest.mock import patch
 
 import pytest
 
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import SupportedDatabase
-from migrateit.models.migration import Migration, MigrationStatus
-from migrateit.models.migration_manager import MigrationManager
+from migrateit.models import Changelog, Migration, MigrationStatus, SupportedDatabase
+from migrateit.repository import MigrationRepository
 
 # --- create_new_migration — error paths ---
 
@@ -20,7 +18,7 @@ def test_create_new_migration_invalid_name(temp_dir: Path) -> None:
         database=SupportedDatabase.POSTGRES,
         migrations=[Migration(name="0000_init.sql", initial=True, parents=())],
     )
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     with pytest.raises(ValueError, match="not a valid identifier"):
         manager.create_new_migration(name="invalid-name")
 
@@ -34,7 +32,7 @@ def test_create_new_migration_dependency_not_found(temp_dir: Path) -> None:
         database=SupportedDatabase.POSTGRES,
         migrations=[Migration(name="0000_init.sql", initial=True, parents=())],
     )
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     with pytest.raises(ValueError, match="Some dependencies"):
         manager.create_new_migration(name="test", dependencies=("9999_missing",))
 
@@ -44,7 +42,7 @@ def test_create_new_migration_initial_with_deps_raises(temp_dir: Path) -> None:
     path = temp_dir / "migrations"
     path.mkdir(parents=True, exist_ok=True)
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     fake_migration = Migration(name="0000_init.sql", initial=True)
     with (
         patch.object(manager, "exist_migration_by_name", return_value=True),
@@ -64,7 +62,7 @@ def test_get_migration_by_name_invalid_prefix() -> None:
         database=SupportedDatabase.POSTGRES,
         migrations=[Migration(name="0000_init.sql", initial=True)],
     )
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     with pytest.raises(ValueError, match="Invalid"):
         manager.get_migration_by_name("not_a_number")
 
@@ -76,7 +74,7 @@ def test_get_migration_by_name_invalid_prefix() -> None:
 def test_changelog_file_exist_migration_by_name_exact() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     assert manager.exist_migration_by_name("0001_test.sql") is True
 
 
@@ -84,7 +82,7 @@ def test_changelog_file_exist_migration_by_name_exact() -> None:
 def test_changelog_file_exist_migration_by_name_prefix() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     assert manager.exist_migration_by_name("0001_other.sql") is True
 
 
@@ -92,7 +90,7 @@ def test_changelog_file_exist_migration_by_name_prefix() -> None:
 def test_changelog_file_exist_migration_by_name_not_found() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     assert manager.exist_migration_by_name("0002_other.sql") is False
 
 
@@ -100,7 +98,7 @@ def test_changelog_file_exist_migration_by_name_not_found() -> None:
 def test_changelog_file_exist_migration_by_name_abs_path() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     assert manager.exist_migration_by_name("/some/path/0001_test.sql") is True
 
 
@@ -112,7 +110,7 @@ def test_changelog_file_get_migration_by_name() -> None:
     m1 = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     m2 = Migration(name="0002_other.sql", parents=("0001_test.sql",))
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m1, m2])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     result = manager.get_migration_by_name("0001")
     assert result.name == "0001_test.sql"
 
@@ -121,7 +119,7 @@ def test_changelog_file_get_migration_by_name() -> None:
 def test_changelog_file_get_migration_by_name_full() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     result = manager.get_migration_by_name("0001_test.sql")
     assert result.name == "0001_test.sql"
 
@@ -130,7 +128,7 @@ def test_changelog_file_get_migration_by_name_full() -> None:
 def test_changelog_file_get_migration_by_name_not_found() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     with pytest.raises(ValueError, match="not found"):
         manager.get_migration_by_name("0002_nonexistent")
 
@@ -139,7 +137,7 @@ def test_changelog_file_get_migration_by_name_not_found() -> None:
 def test_changelog_file_get_migration_by_name_abs_path() -> None:
     m = Migration(name="0001_test.sql", parents=("0000_init.sql",))
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     result = manager.get_migration_by_name("/some/path/0001_test.sql")
     assert result.name == "0001_test.sql"
 
@@ -164,9 +162,9 @@ def test_get_next_migration_path_overwrite_index(temp_dir: Path) -> None:
             Migration(name="0001_existing.sql", parents=("0000_init.sql",)),
         ],
     )
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
 
-    with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=True):
+    with patch("migrateit.repository.migration_repository.inquirer.confirm", return_value=True):
         result = manager._get_next_migration_path("new_name")
 
     assert result.name == "0002_new_name.sql"
@@ -189,9 +187,9 @@ def test_get_next_migration_path_overwrite_index_declined(temp_dir: Path) -> Non
             Migration(name="0001_existing.sql", parents=("0000_init.sql",)),
         ],
     )
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
 
-    with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=False):
+    with patch("migrateit.repository.migration_repository.inquirer.confirm", return_value=False):
         with pytest.raises(FileExistsError, match="Migration index 0002 already exists"):
             manager._get_next_migration_path("new_name")
 
@@ -320,7 +318,7 @@ def test_build_plan(
     expected: list[str],
 ) -> None:
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     target_migration = next(m for m in migrations if m.name == target) if target else None
     plan = manager.build_migration_plan(statuses, target_migration, is_rollback=is_rollback)
     assert [m.name for m in plan] == expected
@@ -377,7 +375,7 @@ def test_build_plan(
 )
 def test_find_path(migrations: list[Migration], start: str, end: str, expected: list[str]) -> None:
     cl = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
-    manager = MigrationManager(cl)
+    manager = MigrationRepository(cl)
     path = manager.find_path(start, end)
     assert path == expected
 
@@ -392,14 +390,14 @@ def test_print_list() -> None:
         Migration(name="0001_add.sql", parents=("0000_init.sql",)),
     ]
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     status_map: dict[str, MigrationStatus] = {
         "0000_init.sql": MigrationStatus.APPLIED,
         "0001_add.sql": MigrationStatus.NOT_APPLIED,
     }
 
     lines: list[str] = []
-    with patch("migrateit.models.migration_manager.write_line", lines.append):
+    with patch("migrateit.repository.migration_repository.write_line", lines.append):
         manager.print_list(status_map)
 
     assert len(lines) == 2
@@ -417,7 +415,7 @@ def test_print_dag() -> None:
         Migration(name="0002_two.sql", parents=("0000_init.sql", "0001_add.sql")),
     ]
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=migrations)
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     status_map: dict[str, MigrationStatus] = {
         "0000_init.sql": MigrationStatus.APPLIED,
         "0001_add.sql": MigrationStatus.NOT_APPLIED,
@@ -425,7 +423,7 @@ def test_print_dag() -> None:
     }
 
     lines: list[str] = []
-    with patch("migrateit.models.migration_manager.write_line", lines.append):
+    with patch("migrateit.repository.migration_repository.write_line", lines.append):
         manager.print_dag(status_map)
 
     assert len(lines) == 4
@@ -439,11 +437,11 @@ def test_print_dag() -> None:
 def test_print_dag_no_children() -> None:
     m = Migration(name="0000_init.sql", initial=True, parents=())
     changelog = Changelog(version=1, database=SupportedDatabase.POSTGRES, migrations=[m])
-    manager = MigrationManager(changelog)
+    manager = MigrationRepository(changelog)
     status_map: dict[str, MigrationStatus] = {"0000_init.sql": MigrationStatus.APPLIED}
 
     lines: list[str] = []
-    with patch("migrateit.models.migration_manager.write_line", lines.append):
+    with patch("migrateit.repository.migration_repository.write_line", lines.append):
         manager.print_dag(status_map)
 
     assert len(lines) == 1

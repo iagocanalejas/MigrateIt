@@ -1,7 +1,7 @@
 import pytest
 from sqlfluff.core import Linter, SQLParseError
 
-from migrateit.models.config import SupportedDatabase
+from migrateit.models import SupportedDatabase
 from migrateit.models.sql import ensure_semicolon, patch_sql_statement, sql_to_statements
 
 

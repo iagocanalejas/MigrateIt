@@ -2,10 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import SupportedDatabase
-from migrateit.models.migration import Migration
-from migrateit.models.repository import ChangelogRepository
+from migrateit.models import Changelog, Migration, SupportedDatabase
+from migrateit.repository import ChangelogRepository
 
 # --- ChangelogRepository.create tests ---
 

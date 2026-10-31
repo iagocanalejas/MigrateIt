@@ -5,10 +5,7 @@ import inquirer
 
 from migrateit.clients._client import SqlClient
 from migrateit.clients._lock import DatabaseLock
-from migrateit.models.migration import (
-    Migration,
-    MigrationStatus,
-)
+from migrateit.models import Migration, MigrationStatus
 from migrateit.reporters import write_line
 from migrateit.reporters.output import write_line_error
 

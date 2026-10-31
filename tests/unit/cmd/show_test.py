@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from migrateit.cmd import cmd_show
-from migrateit.models.migration import Migration, MigrationStatus
+from migrateit.models import Migration, MigrationStatus
 
 from .conftest import _mock_client
 

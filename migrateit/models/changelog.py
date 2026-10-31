@@ -5,8 +5,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from migrateit import constants as C
-from migrateit.models.config import SupportedDatabase
-from migrateit.models.migration import Migration
+
+from .config import SupportedDatabase
+from .migration import Migration
 
 
 @dataclass(kw_only=True)

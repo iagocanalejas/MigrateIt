@@ -1,5 +1,4 @@
 import os
-import sqlite3
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -9,17 +8,10 @@ import pytest
 import sqlfluff
 
 from migrateit.clients._client import SqlClient, get_client
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import MigrateItConfig, SupportedDatabase
-from migrateit.models.connection import get_connection
-from migrateit.models.migration import Migration, MigrationStatus
+from migrateit.clients._connection import get_connection
+from migrateit.models import Changelog, MigrateItConfig, Migration, MigrationStatus, SupportedDatabase
 from tests.unit.clients.conftest import _client_with_mocked_connection
-from tests.unit.conftest import (
-    INITIAL_MIGRATION,
-    MIGRATION_NAME,
-    TEST_MIGRATIONS_TABLE,
-    _create_migration_file,
-)
+from tests.unit.conftest import INITIAL_MIGRATION, MIGRATION_NAME, TEST_MIGRATIONS_TABLE, _create_migration_file
 
 # --- _q — identifier quoting ---
 
@@ -48,6 +40,7 @@ def test_q_invalid_name(name: str, quote_char: str) -> None:
         pytest.param(SupportedDatabase.MYSQL, "mysql.connector.connect", id="mysql"),
         pytest.param(SupportedDatabase.MARIADB, "mysql.connector.connect", id="mariadb"),
         pytest.param(SupportedDatabase.ORACLE, "oracledb.connect", id="oracle"),
+        pytest.param(SupportedDatabase.SQLITE, "sqlite3.connect", id="sqlite"),
     ],
 )
 def test_get_connection(database: SupportedDatabase, driver: str) -> None:
@@ -89,12 +82,12 @@ def test_get_connection_oracle_connection_string() -> None:
 def test_get_connection_sqlite() -> None:
     from migrateit.clients.sqlite import SqliteClient
 
-    # With SQLITE we can create a real connection
-    f = Path(SqliteClient.get_connection_params()["file_name"])
-    result = get_connection(SupportedDatabase.SQLITE)
-    assert isinstance(result, sqlite3.Connection)
-    result.close()
-    f.unlink()
+    with (
+        patch("migrateit.clients.sqlite.sqlite3.connect") as mock_connect,
+    ):
+        SqliteClient.get_connection()
+        assert mock_connect.call_args[0][0] == "migrateit.db"
+        mock_connect.assert_called_once()
 
 
 @pytest.mark.unit
@@ -107,59 +100,77 @@ def test_get_connection_invalid_database() -> None:
 def test_get_environment_url_from_db_url_psql() -> None:
     from migrateit.clients.psql import PsqlClient
 
-    with patch.dict(os.environ, {"DB_URL": "postgresql://user:pass@host:5432/mydb"}):
-        url = PsqlClient.get_connection_params()["conninfo"]
-        assert url == "postgresql://user:pass@host:5432/mydb"
+    with (
+        patch.dict(os.environ, {"DB_URL": "postgresql://user:pass@host:5432/mydb"}),
+        patch("migrateit.clients.psql.psycopg.connect") as mock_connect,
+    ):
+        PsqlClient.get_connection()
+        assert mock_connect.call_args.kwargs["conninfo"] == "postgresql://user:pass@host:5432/mydb"
+        mock_connect.assert_called_once()
 
 
 @pytest.mark.unit
 def test_get_environment_url_from_db_url_mysql() -> None:
     from migrateit.clients.mysql import MySqlClient
 
-    with patch.dict(os.environ, {"DB_URL": "mysql://user:pass@host:3306/mydb"}):
-        url = MySqlClient.get_connection_params()["connection_string"]
-        assert url == "mysql://user:pass@host:3306/mydb"
+    with (
+        patch.dict(os.environ, {"DB_URL": "mysql://user:pass@host:3306/mydb"}),
+        patch("migrateit.clients.mysql.mysql.connector.connect") as mock_connect,
+    ):
+        MySqlClient.get_connection()
+        assert mock_connect.call_args.kwargs["connection_string"] == "mysql://user:pass@host:3306/mydb"
+        mock_connect.assert_called_once()
 
 
 @pytest.mark.unit
 def test_get_environment_url_from_db_url_sqlite() -> None:
     from migrateit.clients.sqlite import SqliteClient
 
-    with patch.dict(os.environ, {"DB_URL": "sqlite:///mydb"}):
-        url = SqliteClient.get_connection_params()["url"]
-        assert url == "sqlite:///mydb"
+    with (
+        patch.dict(os.environ, {"DB_URL": "sqlite:///mydb"}),
+        patch("migrateit.clients.sqlite.sqlite3.connect") as mock_connect,
+    ):
+        SqliteClient.get_connection()
+        assert mock_connect.call_args.args[0] == "mydb"
+        mock_connect.assert_called_once()
 
 
 @pytest.mark.unit
 def test_get_environment_url_from_db_url_oracle() -> None:
     from migrateit.clients.oracle import OracleClient
 
-    with patch.dict(os.environ, {"DB_URL": "oracle+oracledb://user:pass@host:1521/service"}):
-        params = OracleClient.get_connection_params()
-        assert params["dsn"] == "oracle+oracledb://user:pass@host:1521/service"
+    with (
+        patch.dict(os.environ, {"DB_URL": "oracle+oracledb://user:pass@host:1521/service"}),
+        patch("migrateit.clients.oracle.oracledb.connect") as mock_connect,
+    ):
+        OracleClient.get_connection()
+        assert mock_connect.call_args.kwargs["dsn"] == "oracle+oracledb://user:pass@host:1521/service"
+        mock_connect.assert_called_once()
 
 
 @pytest.mark.unit
 def test_get_environment_params_from_env_vars_oracle() -> None:
     from migrateit.clients.oracle import OracleClient
 
-    with patch.dict(
-        os.environ,
-        {
-            "DB_HOST": "oraclehost",
-            "DB_PORT": "1522",
-            "DB_USER": "oracleuser",
-            "DB_PASS": "oraclepass",
-            "DB_NAME": "oracleservice",
-        },
-        clear=True,
+    params = {
+        "DB_HOST": "oraclehost",
+        "DB_PORT": "1522",
+        "DB_USER": "oracleuser",
+        "DB_PASS": "oraclepass",
+        "DB_NAME": "oracleservice",
+    }
+    with (
+        patch.dict(os.environ, params, clear=True),
+        patch("migrateit.clients.oracle.oracledb.connect") as mock_connect,
     ):
-        params = OracleClient.get_connection_params()
-        assert params["host"] == "oraclehost"
-        assert params["port"] == 1522
-        assert params["user"] == "oracleuser"
-        assert params["password"] == "oraclepass"
-        assert params["service_name"] == "oracleservice"
+        OracleClient.get_connection()
+        kwargs = mock_connect.call_args.kwargs
+        assert kwargs["host"] == "oraclehost"
+        assert kwargs["port"] == 1522
+        assert kwargs["user"] == "oracleuser"
+        assert kwargs["password"] == "oraclepass"
+        assert kwargs["service_name"] == "oracleservice"
+        mock_connect.assert_called_once()
 
 
 @pytest.mark.unit

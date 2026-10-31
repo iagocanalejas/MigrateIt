@@ -8,9 +8,7 @@ import pytest
 
 from migrateit.clients._client import SqlClient, get_client
 from migrateit.clients._lock import DatabaseLock, _DBTableLocker, _MySqlLocker, _PsqlLocker
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import MigrateItConfig, SupportedDatabase
-from migrateit.models.migration import Migration
+from migrateit.models import Changelog, MigrateItConfig, Migration, SupportedDatabase
 from tests.unit.conftest import INITIAL_MIGRATION, TEST_MIGRATIONS_TABLE, connection
 
 

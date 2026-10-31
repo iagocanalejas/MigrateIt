@@ -1,12 +1,10 @@
 from typing import Any
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.migration import (
-    MigrationStatus,
-)
-from migrateit.models.repository import ChangelogRepository
+from migrateit.models import MigrationStatus
 from migrateit.reporters import write_line
 from migrateit.reporters.output import write_line_error
+from migrateit.repository import ChangelogRepository
 
 
 def cmd_drop(client: SqlClient[Any], name: str, preserve: bool = False) -> int:

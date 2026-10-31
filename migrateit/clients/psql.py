@@ -2,32 +2,31 @@ import os
 import re
 from collections import defaultdict
 from functools import partial
-from typing import TYPE_CHECKING, Any, override
+from typing import Any, override
+
+import psycopg
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.clients._protocol import ExportItem
 
-if TYPE_CHECKING:
-    import psycopg  # noqa: F401
-
 
 class PsqlClient(SqlClient["psycopg.Connection"]):
     @override
     @classmethod
-    def get_connection_params(cls) -> dict[str, Any]:
+    def get_connection(cls) -> psycopg.Connection:
         db_url = os.getenv(cls.VARNAME_DB_URL)
         if db_url:
-            return {"conninfo": db_url}
-
-        return {
-            "host": os.getenv(cls.VARNAME_DB_HOST, "localhost"),
-            "port": int(os.getenv(cls.VARNAME_DB_PORT, "5432")),
-            "user": os.getenv(cls.VARNAME_DB_USER, "postgres"),
-            "password": os.getenv(cls.VARNAME_DB_PASS, ""),
-            "dbname": os.getenv(cls.VARNAME_DB_NAME, "migrateit"),
-            "connect_timeout": int(os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, C.DEFAULT_TIMEOUT_SECONDS)),
-        }
+            return psycopg.connect(conninfo=db_url, autocommit=False)
+        return psycopg.connect(
+            host=os.getenv(cls.VARNAME_DB_HOST, "localhost"),
+            port=int(os.getenv(cls.VARNAME_DB_PORT, "5432")),
+            user=os.getenv(cls.VARNAME_DB_USER, "postgres"),
+            password=os.getenv(cls.VARNAME_DB_PASS, ""),
+            dbname=os.getenv(cls.VARNAME_DB_NAME, "migrateit"),
+            connect_timeout=int(os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, C.DEFAULT_TIMEOUT_SECONDS)),
+            autocommit=False,
+        )
 
     @override
     @classmethod

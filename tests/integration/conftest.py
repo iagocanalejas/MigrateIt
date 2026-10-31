@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from migrateit.models.config import SupportedDatabase
+from migrateit.models import SupportedDatabase
 
 
 @pytest.fixture(

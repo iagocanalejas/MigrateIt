@@ -4,11 +4,11 @@ from datetime import datetime
 import migrateit.constants as C
 from migrateit import cmd as commands
 from migrateit.clients._client import get_client
-from migrateit.models.config import MigrateItConfig, SupportedDatabase
-from migrateit.models.connection import get_connection
-from migrateit.models.repository import ChangelogRepository
+from migrateit.clients._connection import get_connection
+from migrateit.models import MigrateItConfig, SupportedDatabase
 from migrateit.reporters import FatalError, error_handler, logging_handler, print_logo
 from migrateit.reporters.logs import logger
+from migrateit.repository import ChangelogRepository
 
 
 def main() -> int:

@@ -1,6 +1,4 @@
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import SupportedDatabase
-from migrateit.models.migration import Migration
+from migrateit.models import Changelog, Migration, SupportedDatabase
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 

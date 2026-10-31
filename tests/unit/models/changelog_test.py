@@ -3,9 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import SupportedDatabase
-from migrateit.models.migration import Migration
+from migrateit.models import Changelog, Migration, SupportedDatabase
 
 # --- changelog.root tests ---
 

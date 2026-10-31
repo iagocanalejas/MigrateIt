@@ -3,7 +3,7 @@ import re
 import sys
 from typing import IO, Any
 
-from migrateit.models.migration import MigrationStatus
+from migrateit.models import MigrationStatus
 
 from ._utils import GREEN, NORMAL, RED
 

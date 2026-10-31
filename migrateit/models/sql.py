@@ -2,7 +2,7 @@ import re
 
 from sqlfluff.core import Linter, SQLBaseError
 
-from migrateit.models.config import SupportedDatabase
+from .config import SupportedDatabase
 
 linter = Linter(dialect="ansi")
 WHITESPACE_RE = re.compile(r"\s+")

@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.migration import Migration, MigrationStatus
+from migrateit.models import Migration, MigrationStatus
 from tests.unit.clients.conftest import _migration_is_applied, _table_exists
 from tests.unit.conftest import (
     INITIAL_MIGRATION,

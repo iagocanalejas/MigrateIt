@@ -3,10 +3,10 @@ from typing import Any
 import inquirer
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.migration import Migration
-from migrateit.models.repository import ChangelogRepository
+from migrateit.models import Migration
 from migrateit.reporters import write_line
 from migrateit.reporters.output import write_line_error
+from migrateit.repository import ChangelogRepository
 
 
 def cmd_add(

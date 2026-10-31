@@ -3,8 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from migrateit.clients.mysql import MySqlClient, _process_pk_unique, _process_routines
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import MigrateItConfig, SupportedDatabase
+from migrateit.models import Changelog, MigrateItConfig, SupportedDatabase
 
 
 def _make_mock_client() -> MySqlClient:

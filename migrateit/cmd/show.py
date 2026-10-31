@@ -2,9 +2,7 @@ from collections import Counter
 from typing import Any
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.migration import (
-    MigrationStatus,
-)
+from migrateit.models import MigrationStatus
 from migrateit.reporters import STATUS_COLORS, pretty_print_sql_error, write_line
 
 

@@ -6,8 +6,8 @@ import pytest
 
 from migrateit.cmd import cmd_new
 from migrateit.cmd.new import _validate_editor
-from migrateit.models.migration import Migration
-from migrateit.models.repository import ChangelogRepository
+from migrateit.models import Migration
+from migrateit.repository import ChangelogRepository
 
 from .conftest import _mock_client
 
@@ -49,7 +49,7 @@ def test_cmd_new_with_existing_migration(temp_dir: Path) -> None:
     path = Migration.migrations_dir / "0001_test_migration.sql"
     path.write_text("Hello, world!\n")
 
-    with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=False):
+    with patch("migrateit.repository.migration_repository.inquirer.confirm", return_value=False):
         with pytest.raises(FileExistsError, match="already exists"):
             cmd_new(client=mock_client, name="test_migration", no_edit=True)
 
@@ -62,7 +62,7 @@ def test_cmd_new_overwrite_migration(temp_dir: Path) -> None:
     path = Migration.migrations_dir / "0001_test_migration.sql"
     path.write_text("Hello, world!\n")
 
-    with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=True):
+    with patch("migrateit.repository.migration_repository.inquirer.confirm", return_value=True):
         cmd_new(client=mock_client, name="test_migration", no_edit=True)
 
     assert (Migration.migrations_dir / "0001_test_migration.sql").exists()
@@ -77,7 +77,7 @@ def test_cmd_new_with_existing_migration_overwrite(temp_dir: Path) -> None:
     path = Migration.migrations_dir / "0001_test.sql"
     path.write_text("Hello, world!\n")
 
-    with patch("migrateit.models.migration_manager.inquirer.confirm", return_value=True):
+    with patch("migrateit.repository.migration_repository.inquirer.confirm", return_value=True):
         cmd_new(client=mock_client, name="test_migration", no_edit=True)
 
     assert not (Migration.migrations_dir / "0001_test.sql").exists()

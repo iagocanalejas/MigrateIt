@@ -5,7 +5,7 @@ import pytest
 
 from migrateit.cmd import cmd_init
 from migrateit.constants import ROLLBACK_SPLIT_TAG
-from migrateit.models.config import SupportedDatabase
+from migrateit.models import SupportedDatabase
 from tests.unit.conftest import INITIAL_MIGRATION
 
 

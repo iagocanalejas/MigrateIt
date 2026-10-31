@@ -1,6 +1,8 @@
 import importlib
 from typing import TYPE_CHECKING, Any
 
+from migrateit.models import SupportedDatabase
+
 driver_configs = [
     ("sqlite3", "Error"),
     ("mysql.connector", "Error"),
@@ -38,3 +40,23 @@ else:
     type _MySqlConnection = Any
     type _OracleConnection = Any
     type Connection = Any
+
+
+def get_connection(database: SupportedDatabase) -> Connection:
+    if database is SupportedDatabase.POSTGRES:
+        from migrateit.clients.psql import PsqlClient
+
+        return PsqlClient.get_connection()
+    if database is SupportedDatabase.SQLITE:
+        from migrateit.clients.sqlite import SqliteClient
+
+        return SqliteClient.get_connection()
+    if database is SupportedDatabase.MYSQL or database is SupportedDatabase.MARIADB:
+        from migrateit.clients.mysql import MySqlClient
+
+        return MySqlClient.get_connection()
+    if database is SupportedDatabase.ORACLE:
+        from migrateit.clients.oracle import OracleClient
+
+        return OracleClient.get_connection()
+    raise NotImplementedError(f"Database {database} is not supported")

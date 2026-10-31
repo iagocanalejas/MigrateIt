@@ -4,9 +4,7 @@ from typing import Any
 import pytest
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import SupportedDatabase
-from migrateit.models.migration import Migration, MigrationStatus, create_migration_directory
+from migrateit.models import Changelog, Migration, MigrationStatus, SupportedDatabase, create_migration_directory
 from tests.unit.clients.conftest import _client_with_mocked_connection
 from tests.unit.conftest import INITIAL_MIGRATION, MIGRATION_NAME, TEST_MIGRATIONS_TABLE, _create_migration_file
 

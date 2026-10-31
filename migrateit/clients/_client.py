@@ -7,15 +7,20 @@ from typing import Any, override
 from sqlfluff.core import Linter, SQLBaseError
 
 from migrateit import constants as C
+from migrateit.clients._connection import Connection, DatabaseError
 from migrateit.clients._protocol import SqlClientProtocol, SqlConnectionProtocol
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import MigrateItConfig, SupportedDatabase
-from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
-from migrateit.models.migration_manager import MigrationManager
+from migrateit.models import (
+    Changelog,
+    MigrateItConfig,
+    Migration,
+    MigrationStatus,
+    SupportedDatabase,
+    get_migration_header,
+)
 from migrateit.models.sql import patch_sql_statement, sql_to_statements
-from migrateit.models.types import Connection, DatabaseError
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
+from migrateit.repository import MigrationRepository
 
 
 class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
@@ -48,8 +53,8 @@ class SqlClient[T: Connection](ABC, SqlClientProtocol, SqlConnectionProtocol):
         return self.config.changelog.database
 
     @property
-    def migrations(self) -> MigrationManager:
-        return MigrationManager(self.config.changelog)
+    def migrations(self) -> MigrationRepository:
+        return MigrationRepository(self.config.changelog)
 
     @functools.cached_property
     def _linter(self) -> Linter:

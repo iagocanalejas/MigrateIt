@@ -1,15 +1,11 @@
 from typing import Any
 
 from migrateit.clients._client import SqlClient
-from migrateit.models.migration import (
-    MigrationStatus,
-    retrieve_migration_sqls,
-    write_into_migration_file,
-)
-from migrateit.models.repository import ChangelogRepository
+from migrateit.models import MigrationStatus, retrieve_migration_sqls, write_into_migration_file
 from migrateit.reporters import write_line
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line_error
+from migrateit.repository import ChangelogRepository
 
 
 def cmd_squash(

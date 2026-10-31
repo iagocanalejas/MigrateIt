@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from migrateit.models.config import SupportedDatabase
-from migrateit.models.repository import ChangelogRepository
+from migrateit.models import SupportedDatabase
+from migrateit.repository import ChangelogRepository
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 

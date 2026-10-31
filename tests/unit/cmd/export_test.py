@@ -5,7 +5,7 @@ import pytest
 
 from migrateit.clients._client import SqlClient
 from migrateit.cmd import cmd_export
-from migrateit.models.migration import Migration
+from migrateit.models import Migration
 from tests.unit.cmd.conftest import _mock_client
 
 

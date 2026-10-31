@@ -6,14 +6,13 @@ from pathlib import Path
 import inquirer
 
 from migrateit import constants as C
-from migrateit.models.changelog import Changelog
-from migrateit.models.migration import Migration, MigrationStatus, get_migration_header
+from migrateit.models import Changelog, Migration, MigrationStatus, get_migration_header
 from migrateit.reporters import STATUS_COLORS
 from migrateit.reporters.logs import logger
 from migrateit.reporters.output import write_line
 
 
-class MigrationManager:
+class MigrationRepository:
     def __init__(self, changelog: Changelog) -> None:
         self._changelog = changelog
 
@@ -163,7 +162,7 @@ class MigrationManager:
     def print_dag(self, status_map: dict[str, MigrationStatus]) -> None:
         migration_tree = self._changelog.migrations_tree
         first_migration = next(iter(migration_tree))
-        MigrationManager._print_dag_rec(first_migration, migration_tree, status_map)
+        MigrationRepository._print_dag_rec(first_migration, migration_tree, status_map)
 
     @staticmethod
     def _print_dag_rec(
@@ -186,7 +185,7 @@ class MigrationManager:
         seen.add(name)
 
         for child in children.get(name, []):
-            MigrationManager._print_dag_rec(child.name, children, status_map, level + 1, seen)
+            MigrationRepository._print_dag_rec(child.name, children, status_map, level + 1, seen)
 
     def _get_next_migration_path(self, name: str) -> Path:
         migration_index = f"{len(self.migrations):04d}"

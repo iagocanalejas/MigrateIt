@@ -5,7 +5,7 @@ import pytest
 from tests.unit.conftest import MIGRATION_NAME
 
 from migrateit.constants import ROLLBACK_SPLIT_TAG
-from migrateit.models.migration import (
+from migrateit.models import (
     Migration,
     create_migration_directory,
     retrieve_migration_sqls,

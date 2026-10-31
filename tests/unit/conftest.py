@@ -4,16 +4,15 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient, get_client
-from migrateit.clients.mysql import MySqlClient
 from migrateit.cmd import cmd_init, cmd_run
-from migrateit.models.config import MigrateItConfig, SupportedDatabase
-from migrateit.models.migration import Migration
-from migrateit.models.repository import ChangelogRepository
+from migrateit.models import MigrateItConfig, Migration, SupportedDatabase
+from migrateit.repository import ChangelogRepository
 
 INITIAL_MIGRATION = "0000_migrateit.sql"
 MIGRATION_NAME = "0001_test_table.sql"
@@ -21,22 +20,14 @@ TEST_MIGRATIONS_TABLE = "migrations"
 TEST_TABLE = "test_entity"
 
 
-def _get_mysql_port(database: SupportedDatabase) -> int:
-    if database is SupportedDatabase.MARIADB:
-        return int(os.getenv("DB_PORT_MARIADB", "3306"))
-    return int(os.getenv("DB_PORT_MYSQL", "3317"))
-
-
 @contextmanager
 def connection(database_type: SupportedDatabase) -> Generator[Any]:
     C.MIGRATEIT_MIGRATIONS_TABLE = TEST_MIGRATIONS_TABLE
     match database_type:
         case SupportedDatabase.POSTGRES:
-            import psycopg
-
             from migrateit.clients.psql import PsqlClient
 
-            pg_conn: psycopg.Connection = psycopg.connect(**PsqlClient.get_connection_params())
+            pg_conn = PsqlClient.get_connection()
             try:
                 yield pg_conn
             finally:
@@ -53,43 +44,32 @@ def connection(database_type: SupportedDatabase) -> Generator[Any]:
                 pg_conn.close()
 
         case SupportedDatabase.MYSQL | SupportedDatabase.MARIADB:
-            import mysql.connector
+            from migrateit.clients.mysql import MySqlClient
 
             # Override the host port so the fixture can target MySQL (3317) or
             # MariaDB (3306) running in docker-compose independently.
-            params = MySqlClient.get_connection_params()
-            params["port"] = _get_mysql_port(database_type)
-            db_name = params["database"].lstrip("/")
-            mysql_conn = mysql.connector.connect(**params)
-            try:
-                yield mysql_conn
-            finally:
+            port = "3306" if database_type is SupportedDatabase.MARIADB else "3317"
+            with patch.dict(os.environ, {"DB_PORT": port}):
+                db_name = os.getenv(SqlClient.VARNAME_DB_NAME, "migrateit")
+                mysql_conn = MySqlClient.get_connection()
                 try:
-                    mysql_conn.rollback()
-                except Exception:  # pragma: no cover[safety]
-                    pass
+                    yield mysql_conn
+                finally:
+                    try:
+                        mysql_conn.rollback()
+                    except Exception:  # pragma: no cover[safety]
+                        pass
 
-                with mysql_conn.cursor() as cursor:
-                    cursor.execute(f"DROP DATABASE IF EXISTS `{db_name}`;")
-                    cursor.execute(f"CREATE DATABASE `{db_name}`;")
-                mysql_conn.commit()
-                mysql_conn.close()
+                    with mysql_conn.cursor() as cursor:
+                        cursor.execute(f"DROP DATABASE IF EXISTS `{db_name}`;")
+                        cursor.execute(f"CREATE DATABASE `{db_name}`;")
+                    mysql_conn.commit()
+                    mysql_conn.close()
 
         case SupportedDatabase.ORACLE:
-            import oracledb
-
             from migrateit.clients.oracle import OracleClient
 
-            params = OracleClient.get_connection_params()
-            conn_kwargs = {
-                "user": params["user"],
-                "password": params["password"],
-                "host": params.get("host", "localhost"),
-                "port": params.get("port", 1521),
-                "service_name": params.get("service_name"),
-                "sid": params.get("sid"),
-            }
-            oracle_conn = oracledb.connect(**conn_kwargs)
+            oracle_conn = OracleClient.get_connection()
             try:
                 yield oracle_conn
             finally:

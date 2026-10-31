@@ -10,8 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from migrateit import constants as C
-from migrateit.models.changelog import Changelog
-from migrateit.models.migration import Migration
+from migrateit.models import Changelog, Migration
 
 
 @pytest.hookimpl(tryfirst=True)

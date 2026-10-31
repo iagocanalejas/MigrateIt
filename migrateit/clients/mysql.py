@@ -1,33 +1,33 @@
 import os
 from collections import defaultdict
 from functools import partial
-from typing import TYPE_CHECKING, Any, override
+from typing import Any, override
+
+import mysql.connector
+from mysql.connector.abstracts import MySQLConnectionAbstract
+from mysql.connector.pooling import PooledMySQLConnection
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.clients._protocol import ExportItem
 
-if TYPE_CHECKING:
-    from mysql.connector.abstracts import MySQLConnectionAbstract  # noqa: F401
-    from mysql.connector.pooling import PooledMySQLConnection  # noqa: F401
-
 
 class MySqlClient(SqlClient["MySQLConnectionAbstract | PooledMySQLConnection"]):
     @override
     @classmethod
-    def get_connection_params(cls) -> dict[str, Any]:
+    def get_connection(cls) -> MySQLConnectionAbstract | PooledMySQLConnection:
         db_url = os.getenv(cls.VARNAME_DB_URL)
         if db_url:
-            return {"connection_string": db_url}
-
-        return {
-            "host": os.getenv(cls.VARNAME_DB_HOST, "localhost"),
-            "port": int(os.getenv(cls.VARNAME_DB_PORT, "3306")),
-            "user": os.getenv(cls.VARNAME_DB_USER, "root"),
-            "password": os.getenv(cls.VARNAME_DB_PASS, ""),
-            "database": os.getenv(cls.VARNAME_DB_NAME, "migrateit"),
-            "connection_timeout": int(os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, C.DEFAULT_TIMEOUT_SECONDS)),
-        }
+            return mysql.connector.connect(connection_string=db_url, autocommit=False)
+        return mysql.connector.connect(
+            host=os.getenv(cls.VARNAME_DB_HOST, "localhost"),
+            port=int(os.getenv(cls.VARNAME_DB_PORT, "3306")),
+            user=os.getenv(cls.VARNAME_DB_USER, "root"),
+            password=os.getenv(cls.VARNAME_DB_PASS, ""),
+            database=os.getenv(cls.VARNAME_DB_NAME, "migrateit"),
+            connection_timeout=int(os.getenv(cls.VARNAME_DB_TIMEOUT_SECONDS, C.DEFAULT_TIMEOUT_SECONDS)),
+            autocommit=False,
+        )
 
     @override
     @classmethod

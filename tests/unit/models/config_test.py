@@ -2,8 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from migrateit.models.changelog import Changelog
-from migrateit.models.config import MigrateItConfig, SupportedDatabase
+from migrateit.models import Changelog, MigrateItConfig, SupportedDatabase
 
 
 @pytest.mark.unit

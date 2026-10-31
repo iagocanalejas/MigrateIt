@@ -2,15 +2,13 @@ import os
 import re
 from collections import defaultdict
 from functools import partial
-from typing import TYPE_CHECKING, Any, override
+from typing import Any, override
+
+import oracledb
 
 from migrateit import constants as C
 from migrateit.clients._client import SqlClient
 from migrateit.clients._protocol import ExportItem
-
-if TYPE_CHECKING:
-    import oracledb  # noqa: F401
-
 
 _PLSQL_PATTERN = re.compile(
     r"\b(CREATE\s+(OR\s+REPLACE\s+)?(TRIGGER|PROCEDURE|FUNCTION))\b|"
@@ -29,19 +27,19 @@ class OracleClient(SqlClient["oracledb.Connection"]):
 
     @override
     @classmethod
-    def get_connection_params(cls) -> dict[str, Any]:
+    def get_connection(cls) -> oracledb.Connection:
         db_url = os.getenv(cls.VARNAME_DB_URL)
         if db_url:
-            return {"dsn": db_url}
-
-        return {
-            "host": os.getenv(cls.VARNAME_DB_HOST, "localhost"),
-            "port": int(os.getenv(cls.VARNAME_DB_PORT, "1521")),
-            "user": os.getenv(cls.VARNAME_DB_USER, "oracle"),
-            "password": os.getenv(cls.VARNAME_DB_PASS, ""),
-            "service_name": os.getenv(cls.VARNAME_DB_NAME, "migrateit"),
-            "sid": os.getenv(cls.VARNAME_DB_SID),
-        }
+            # TODO: Oracle DNS requires user and password
+            return oracledb.connect(dsn=db_url, autocommit=False)
+        return oracledb.connect(
+            host=os.getenv(cls.VARNAME_DB_HOST, "localhost"),
+            port=int(os.getenv(cls.VARNAME_DB_PORT, "1521")),
+            user=os.getenv(cls.VARNAME_DB_USER, "oracle"),
+            password=os.getenv(cls.VARNAME_DB_PASS, ""),
+            service_name=os.getenv(cls.VARNAME_DB_NAME, "migrateit"),
+            sid=os.getenv(cls.VARNAME_DB_SID),
+        )
 
     @override
     @classmethod
