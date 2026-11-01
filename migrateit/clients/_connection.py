@@ -1,7 +1,9 @@
 import importlib
+import sys
 from typing import TYPE_CHECKING, Any
 
 from migrateit.models import SupportedDatabase
+from migrateit.reporters.output import write_line_error
 
 driver_configs = [
     ("sqlite3", "Error"),
@@ -44,19 +46,43 @@ else:
 
 def get_connection(database: SupportedDatabase) -> Connection:
     if database is SupportedDatabase.POSTGRES:
+        import psycopg
+
         from migrateit.clients.psql import PsqlClient
 
-        return PsqlClient.get_connection()
+        try:
+            return PsqlClient.get_connection()
+        except psycopg.Error as e:
+            write_line_error(f"Error connecting to PostgreSQL: {e}")
+            sys.exit(1)
     if database is SupportedDatabase.SQLITE:
+        import sqlite3
+
         from migrateit.clients.sqlite import SqliteClient
 
-        return SqliteClient.get_connection()
+        try:
+            return SqliteClient.get_connection()
+        except sqlite3.Error as e:
+            write_line_error(f"Error connecting to SQLite: {e}")
+            sys.exit(1)
     if database is SupportedDatabase.MYSQL or database is SupportedDatabase.MARIADB:
+        import mysql.connector
+
         from migrateit.clients.mysql import MySqlClient
 
-        return MySqlClient.get_connection()
+        try:
+            return MySqlClient.get_connection()
+        except mysql.connector.Error as e:
+            write_line_error(f"Error connecting to MySQL/MariaDB: {e}")
+            sys.exit(1)
     if database is SupportedDatabase.ORACLE:
+        import oracledb
+
         from migrateit.clients.oracle import OracleClient
 
-        return OracleClient.get_connection()
+        try:
+            return OracleClient.get_connection()
+        except oracledb.Error as e:
+            write_line_error(f"Error connecting to Oracle: {e}")
+            sys.exit(1)
     raise NotImplementedError(f"Database {database} is not supported")

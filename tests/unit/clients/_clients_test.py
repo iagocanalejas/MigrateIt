@@ -1,9 +1,13 @@
 import os
+import sqlite3
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import mysql.connector
+import oracledb
+import psycopg
 import pytest
 import sqlfluff
 
@@ -50,6 +54,24 @@ def test_get_connection(database: SupportedDatabase, driver: str) -> None:
         result = get_connection(database)
         assert result == mock_conn
         mock_connect.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "database,driver,error_class",
+    [
+        pytest.param(SupportedDatabase.POSTGRES, "psycopg.connect", psycopg.Error, id="postgres"),
+        pytest.param(SupportedDatabase.MYSQL, "mysql.connector.connect", mysql.connector.Error, id="mysql"),
+        pytest.param(SupportedDatabase.MARIADB, "mysql.connector.connect", mysql.connector.Error, id="mariadb"),
+        pytest.param(SupportedDatabase.ORACLE, "oracledb.connect", oracledb.Error, id="oracle"),
+        pytest.param(SupportedDatabase.SQLITE, "sqlite3.connect", sqlite3.Error, id="sqlite"),
+    ],
+)
+def test_get_connection_error(database: SupportedDatabase, driver: str, error_class: type[Exception]) -> None:
+    with patch(driver) as mock_connect:
+        mock_connect.side_effect = error_class("Connection failed")
+        with pytest.raises(SystemExit):
+            get_connection(database)
 
 
 @pytest.mark.unit
